@@ -3,15 +3,48 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Upload, File, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, File, CheckCircle2, AlertCircle, ChevronsUpDown, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { Textarea } from "@/components/ui/textarea";
+
+const countryCodes = [
+  { code: "+1", country: "United States/Canada" },
+  { code: "+44", country: "United Kingdom" },
+  { code: "+91", country: "India" },
+  { code: "+86", country: "China" },
+  { code: "+81", country: "Japan" },
+  { code: "+49", country: "Germany" },
+  { code: "+33", country: "France" },
+  { code: "+39", country: "Italy" },
+  { code: "+34", country: "Spain" },
+  { code: "+61", country: "Australia" },
+  { code: "+55", country: "Brazil" },
+  { code: "+52", country: "Mexico" },
+  { code: "+7", country: "Russia" },
+  { code: "+82", country: "South Korea" },
+  { code: "+971", country: "UAE" },
+  { code: "+966", country: "Saudi Arabia" },
+  { code: "+27", country: "South Africa" },
+  { code: "+20", country: "Egypt" },
+  { code: "+234", country: "Nigeria" },
+  { code: "+254", country: "Kenya" },
+].sort((a, b) => a.country.localeCompare(b.country));
 
 export const PartUploadForm = () => {
+  const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
+  const [countryCode, setCountryCode] = useState("+1");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [shippingAddress, setShippingAddress] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [drawingFile, setDrawingFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,10 +93,10 @@ export const PartUploadForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!file || !email) {
+    if (!file || !email || !name || !phoneNumber || !shippingAddress) {
       toast({
         title: "Missing information",
-        description: "Please provide both email and file",
+        description: "Please fill in all required fields",
         variant: "destructive",
       });
       return;
@@ -117,6 +150,11 @@ export const PartUploadForm = () => {
         'send-quotation-request',
         {
           body: {
+            name,
+            company,
+            email,
+            phone: `${countryCode} ${phoneNumber}`,
+            shippingAddress,
             fileName: file.name,
             filePath: filePath,
             userEmail: email,
@@ -136,7 +174,12 @@ export const PartUploadForm = () => {
       });
 
       // Reset form
+      setName("");
+      setCompany("");
       setEmail("");
+      setCountryCode("+1");
+      setPhoneNumber("");
+      setShippingAddress("");
       setFile(null);
       setDrawingFile(null);
       const fileInput = document.getElementById('file-upload') as HTMLInputElement;
@@ -167,14 +210,107 @@ export const PartUploadForm = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Full Name *</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="John Doe"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="company">Company Name</Label>
+              <Input
+                id="company"
+                type="text"
+                placeholder="Your Company"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+              />
+            </div>
+          </div>
+
           <div className="space-y-2">
-            <Label htmlFor="email">Your Email Address</Label>
+            <Label htmlFor="email">Email Address *</Label>
             <Input
               id="email"
               type="email"
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone Number *</Label>
+            <div className="flex gap-2">
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-[140px] justify-between"
+                  >
+                    {countryCode}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Search country..." />
+                    <CommandList>
+                      <CommandEmpty>No country found.</CommandEmpty>
+                      <CommandGroup>
+                        {countryCodes.map((item) => (
+                          <CommandItem
+                            key={item.code}
+                            value={`${item.country} ${item.code}`}
+                            onSelect={() => {
+                              setCountryCode(item.code);
+                              setOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                countryCode === item.code ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {item.code} - {item.country}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="1234567890"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                className="flex-1"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="address">Shipping Address *</Label>
+            <Textarea
+              id="address"
+              placeholder="Enter your full shipping address"
+              value={shippingAddress}
+              onChange={(e) => setShippingAddress(e.target.value)}
+              rows={3}
               required
             />
           </div>

@@ -10,9 +10,16 @@ const corsHeaders = {
 };
 
 interface QuotationRequest {
+  name: string;
+  company?: string;
+  email: string;
+  phone: string;
+  shippingAddress: string;
   fileName: string;
   filePath: string;
   userEmail: string;
+  drawingFileName?: string;
+  drawingFilePath?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -21,9 +28,20 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { fileName, filePath, userEmail }: QuotationRequest = await req.json();
+    const { 
+      name, 
+      company, 
+      email, 
+      phone, 
+      shippingAddress, 
+      fileName, 
+      filePath, 
+      userEmail,
+      drawingFileName,
+      drawingFilePath 
+    }: QuotationRequest = await req.json();
 
-    console.log("Processing quotation request:", { fileName, filePath, userEmail });
+    console.log("Processing quotation request:", { name, company, email, phone, fileName });
 
     // Download the file from Supabase Storage using service role key
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
@@ -47,25 +65,59 @@ const handler = async (req: Request): Promise<Response> => {
     const buffer = new Uint8Array(arrayBuffer);
     const base64File = btoa(String.fromCharCode(...buffer));
 
-    // Send email with attachment
+    // Download drawing file if provided
+    const attachments: Array<{ filename: string; content: string }> = [
+      {
+        filename: fileName,
+        content: base64File,
+      },
+    ];
+
+    if (drawingFilePath && drawingFileName) {
+      const drawingDownloadUrl = `${supabaseUrl}/storage/v1/object/part-files/${drawingFilePath}`;
+      
+      const drawingResponse = await fetch(drawingDownloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${serviceRoleKey}`,
+        },
+      });
+
+      if (drawingResponse.ok) {
+        const drawingArrayBuffer = await drawingResponse.arrayBuffer();
+        const drawingBuffer = new Uint8Array(drawingArrayBuffer);
+        const base64Drawing = btoa(String.fromCharCode(...drawingBuffer));
+        
+        attachments.push({
+          filename: drawingFileName,
+          content: base64Drawing,
+        });
+      }
+    }
+
+    // Send email with attachments
     const emailResponse = await resend.emails.send({
       from: "Vectis Manufacturing <onboarding@resend.dev>",
       to: ["bashirmarj@gmail.com"],
       subject: "New Part Quotation Request",
       html: `
         <h1>New Part Quotation Request</h1>
-        <p><strong>Customer Email:</strong> ${userEmail}</p>
-        <p><strong>File Name:</strong> ${fileName}</p>
-        <p>Please review the attached STEP file and provide a quotation.</p>
+        <h2>Customer Information</h2>
+        <p><strong>Name:</strong> ${name}</p>
+        ${company ? `<p><strong>Company:</strong> ${company}</p>` : ''}
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${phone}</p>
+        <p><strong>Shipping Address:</strong></p>
+        <p style="white-space: pre-line;">${shippingAddress}</p>
+        
+        <h2>Files</h2>
+        <p><strong>CAD File:</strong> ${fileName}</p>
+        ${drawingFileName ? `<p><strong>Drawing File:</strong> ${drawingFileName}</p>` : ''}
+        
+        <p>Please review the attached files and provide a quotation.</p>
         <br>
         <p>Best regards,<br>Vectis Manufacturing System</p>
       `,
-      attachments: [
-        {
-          filename: fileName,
-          content: base64File,
-        },
-      ],
+      attachments,
     });
 
     console.log("Email sent successfully:", emailResponse);
