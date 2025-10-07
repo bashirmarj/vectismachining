@@ -388,7 +388,7 @@ const handler = async (req: Request): Promise<Response> => {
                       <div class="section-title">Submitted Files</div>
                       <div style="margin-bottom: 10px; color: #666666;"><strong>CAD Files (${files.length}):</strong></div>
                       <ul class="file-list">
-                        ${files.map(f => `<li class="file-item"><span class="file-name">${f.name}</span><span class="file-quantity">Qty: ${f.quantity}</span></li>`).join('')}
+                        ${files.map(f => `<li class="file-item"><div class="file-name">${f.name}</div><div class="file-quantity">Qty: ${f.quantity}</div></li>`).join('')}
                       </ul>
                       ${drawingFiles && drawingFiles.length > 0 ? `<div style="margin-top: 20px; margin-bottom: 10px; color: #666666;"><strong>Drawing Files (${drawingFiles.length}):</strong></div><ul class="file-list">${drawingFiles.map(f => `<li class="file-item"><span class="file-name">${f.name}</span></li>`).join('')}</ul>` : ''}
                     </div>
