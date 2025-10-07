@@ -294,8 +294,8 @@ const handler = async (req: Request): Promise<Response> => {
                   .value { color: #555555; }
                   .file-list { list-style: none; padding: 0; margin: 15px 0; }
                   .file-item { background-color: #f8f9fa; padding: 12px 15px; margin: 8px 0; border-radius: 6px; border-left: 3px solid #4caf50; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-                  .file-name { font-weight: 600; color: #1a1a2e; flex: 1; }
-                  .file-quantity { background-color: #4caf50; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+                  .file-name { font-weight: 600; color: #1a1a2e; flex: 1; text-align: left; }
+                  .file-quantity { background-color: #4caf50; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; margin-left: auto; flex-shrink: 0; }
                   .highlight-box { background: linear-gradient(135deg, #f8f9fa 0%, #e8f5e9 100%); padding: 20px; border-radius: 8px; border: 1px solid #4caf50; margin: 20px 0; }
                   .footer { background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0; }
                   .footer-text { color: #666666; font-size: 14px; margin: 5px 0; }
