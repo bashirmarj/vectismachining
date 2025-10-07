@@ -12,7 +12,8 @@ import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 
 const countryCodes = [
-  { code: "+1", country: "United States/Canada" },
+  { code: "+1", country: "Canada" },
+  { code: "+1", country: "United States" },
   { code: "+44", country: "United Kingdom" },
   { code: "+91", country: "India" },
   { code: "+86", country: "China" },
