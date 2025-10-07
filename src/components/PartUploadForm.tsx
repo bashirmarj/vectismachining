@@ -168,9 +168,28 @@ export const PartUploadForm = () => {
       return;
     }
 
+    // Check total file size (Resend has 40MB limit for attachments)
+    const totalSize = files.reduce((sum, f) => sum + f.file.size, 0) + 
+                      drawingFiles.reduce((sum, f) => sum + f.size, 0);
+    const totalSizeMB = totalSize / 1024 / 1024;
+    
+    console.log(`Total file size: ${totalSizeMB.toFixed(2)} MB`);
+    
+    if (totalSizeMB > 35) {
+      toast({
+        title: "Files too large",
+        description: `Total file size (${totalSizeMB.toFixed(1)}MB) exceeds the 35MB limit. Please reduce file sizes or upload fewer files.`,
+        variant: "destructive",
+        duration: 8000,
+      });
+      return;
+    }
+
     setUploading(true);
 
     try {
+      console.log('Converting files to base64...', files.length, 'CAD files,', drawingFiles.length, 'drawing files');
+      
       // Convert files to base64 for sending to edge function
       const filePromises = files.map(async (fileWithQty) => {
         const arrayBuffer = await fileWithQty.file.arrayBuffer();
@@ -196,6 +215,7 @@ export const PartUploadForm = () => {
       const uploadedFiles = await Promise.all(filePromises);
       const uploadedDrawingFiles = await Promise.all(drawingFilePromises);
 
+      console.log('Files converted. Calling edge function...');
       console.log('Sending quotation request with', uploadedFiles.length, 'files');
 
       // Call edge function with timeout
@@ -580,7 +600,10 @@ export const PartUploadForm = () => {
 
           <Button type="submit" size="lg" className="w-full" disabled={uploading || isRateLimited}>
             {uploading ? (
-              <>Submitting Request...</>
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
+                Uploading {files.length + drawingFiles.length} file(s)...
+              </div>
             ) : isRateLimited ? (
               <>⏱️ Please wait {formatTimeRemaining()}</>
             ) : (

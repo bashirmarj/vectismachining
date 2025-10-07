@@ -131,6 +131,31 @@ const handler = async (req: Request): Promise<Response> => {
       drawingFilesCount: drawingFiles?.length || 0
     });
 
+    // Check total attachment size (Resend limit is 40MB)
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0) + 
+                     (drawingFiles?.reduce((sum, f) => sum + f.size, 0) || 0);
+    const totalSizeMB = totalSize / 1024 / 1024;
+    
+    console.log(`Total attachment size: ${totalSizeMB.toFixed(2)} MB`);
+    
+    if (totalSizeMB > 35) {
+      console.error('Total attachment size exceeds limit:', totalSizeMB);
+      return new Response(
+        JSON.stringify({
+          error: 'file_size_exceeded',
+          message: 'Total file size exceeds 35MB limit',
+          totalSizeMB
+        }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
     // Files are already base64 encoded from the client
     const attachments: Array<{ filename: string; content: string }> = [];
 
