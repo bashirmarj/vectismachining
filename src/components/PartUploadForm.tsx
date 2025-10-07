@@ -196,80 +196,101 @@ export const PartUploadForm = () => {
       const uploadedFiles = await Promise.all(filePromises);
       const uploadedDrawingFiles = await Promise.all(drawingFilePromises);
 
-      // Call edge function to handle everything
-      const response = await supabase.functions.invoke(
-        'send-quotation-request',
-        {
-          body: {
-            name,
-            company,
-            email,
-            phone: `${countryCode} ${phoneNumber}`,
-            shippingAddress,
-            message,
-            files: uploadedFiles,
-            drawingFiles: uploadedDrawingFiles,
-          },
-        }
-      );
+      console.log('Sending quotation request with', uploadedFiles.length, 'files');
 
-      // Check for rate limit error (429 status)
-      if (response.error) {
-        // Try to parse the error data
-        const errorData = response.data;
-        if (errorData && errorData.error === 'rate_limit_exceeded') {
-          const remainingSeconds = errorData.remainingSeconds || 600;
-          
-          setRateLimitRemaining(remainingSeconds);
-          setIsRateLimited(true);
+      // Call edge function with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
-          const minutes = Math.floor(remainingSeconds / 60);
-          const seconds = remainingSeconds % 60;
+      try {
+        const response = await supabase.functions.invoke(
+          'send-quotation-request',
+          {
+            body: {
+              name,
+              company,
+              email,
+              phone: `${countryCode} ${phoneNumber}`,
+              shippingAddress,
+              message,
+              files: uploadedFiles,
+              drawingFiles: uploadedDrawingFiles,
+            },
+          }
+        );
+
+        clearTimeout(timeoutId);
+
+        console.log('Response received:', response);
+
+        // Check for rate limit error (429 status)
+        if (response.error) {
+          console.error('Response error:', response.error);
           
-          toast({
-            title: "⏱️ Rate Limit Exceeded",
-            description: `Please wait ${minutes} minute${minutes !== 1 ? 's' : ''} ${seconds} second${seconds !== 1 ? 's' : ''} before submitting another request.`,
-            variant: "destructive",
-            duration: 10000,
-          });
-          
-          setUploading(false);
-          return;
+          // Try to parse the error data
+          const errorData = response.data;
+          if (errorData && errorData.error === 'rate_limit_exceeded') {
+            const remainingSeconds = errorData.remainingSeconds || 600;
+            
+            setRateLimitRemaining(remainingSeconds);
+            setIsRateLimited(true);
+
+            const minutes = Math.floor(remainingSeconds / 60);
+            const seconds = remainingSeconds % 60;
+            
+            toast({
+              title: "⏱️ Rate Limit Exceeded",
+              description: `Please wait ${minutes} minute${minutes !== 1 ? 's' : ''} ${seconds} second${seconds !== 1 ? 's' : ''} before submitting another request.`,
+              variant: "destructive",
+              duration: 10000,
+            });
+            
+            setUploading(false);
+            return;
+          }
+          throw response.error;
         }
-        throw response.error;
+
+        const quoteNumber = response.data?.quoteNumber;
+
+        toast({
+          title: "✅ Success!",
+          description: quoteNumber 
+            ? `Your quotation request has been submitted with reference number: ${quoteNumber}. We'll contact you soon.`
+            : "Your quotation request has been submitted. We'll contact you soon.",
+          duration: 8000,
+        });
+
+        // Reset form
+        setName("");
+        setCompany("");
+        setEmail("");
+        setCountryCode("+1");
+        setPhoneNumber("");
+        setShippingAddress("");
+        setMessage("");
+        setFiles([]);
+        setDrawingFiles([]);
+        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+        const drawingInput = document.getElementById('drawing-upload') as HTMLInputElement;
+        if (drawingInput) drawingInput.value = '';
+
+      } catch (abortError) {
+        clearTimeout(timeoutId);
+        if (abortError.name === 'AbortError') {
+          throw new Error('Request timeout - files may be too large. Please try with smaller files or contact support.');
+        }
+        throw abortError;
       }
-
-      const quoteNumber = response.data?.quoteNumber;
-
-      toast({
-        title: "✅ Success!",
-        description: quoteNumber 
-          ? `Your quotation request has been submitted with reference number: ${quoteNumber}. We'll contact you soon.`
-          : "Your quotation request has been submitted. We'll contact you soon.",
-        duration: 8000,
-      });
-
-      // Reset form
-      setName("");
-      setCompany("");
-      setEmail("");
-      setCountryCode("+1");
-      setPhoneNumber("");
-      setShippingAddress("");
-      setMessage("");
-      setFiles([]);
-      setDrawingFiles([]);
-      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-      if (fileInput) fileInput.value = '';
-      const drawingInput = document.getElementById('drawing-upload') as HTMLInputElement;
-      if (drawingInput) drawingInput.value = '';
 
     } catch (error: any) {
       console.error('Upload error:', error);
       toast({
         title: "Upload failed",
-        description: error.message || "Failed to submit quotation request",
+        description: error.message || "Failed to submit quotation request. Please try again.",
         variant: "destructive",
+        duration: 8000,
       });
     } finally {
       setUploading(false);
