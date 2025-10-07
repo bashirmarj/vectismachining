@@ -24,7 +24,6 @@ const Capabilities = () => {
       title: "CAD/CAM Engineering",
       description: "Sophisticated design and programming capabilities for optimal manufacturing efficiency",
       specs: [
-        "3D modeling and simulation",
         "DFM analysis and optimization",
         "Reverse engineering services",
         "Toolpath optimization",
