@@ -1,19 +1,66 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Phone } from "lucide-react";
+import { Menu, X, Phone, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  NavigationMenu,
+  NavigationMenuContent,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuList,
+  NavigationMenuTrigger,
+} from "@/components/ui/navigation-menu";
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
 
   const navItems = [
-    { name: "Home", path: "/" },
-    { name: "About", path: "/about" },
-    { name: "Services", path: "/services" },
-    { name: "Capabilities", path: "/capabilities" },
-    { name: "Projects", path: "/projects" },
-    { name: "Contact", path: "/contact" },
+    { 
+      name: "Home", 
+      path: "/",
+    },
+    { 
+      name: "About", 
+      path: "/about",
+      subItems: [
+        { name: "Our Story", path: "/about#story" },
+        { name: "Team", path: "/about#team" },
+        { name: "Quality Standards", path: "/about#quality" },
+      ]
+    },
+    { 
+      name: "Services", 
+      path: "/services",
+      subItems: [
+        { name: "Custom Manufacturing", path: "/services#custom-manufacturing" },
+        { name: "Prototype Development", path: "/services#prototype" },
+        { name: "Custom Part Manufacturing", path: "/services#custom-parts" },
+        { name: "Prototyping Services", path: "/services#prototyping" },
+        { name: "Turnkey Solutions", path: "/services#turnkey" },
+      ]
+    },
+    { 
+      name: "Capabilities", 
+      path: "/capabilities",
+      subItems: [
+        { name: "CNC Machining", path: "/capabilities#cnc" },
+        { name: "Precision Engineering", path: "/capabilities#precision" },
+        { name: "Quality Control", path: "/capabilities#quality" },
+      ]
+    },
+    { 
+      name: "Projects", 
+      path: "/projects",
+      subItems: [
+        { name: "Case Studies", path: "/projects#case-studies" },
+        { name: "Portfolio", path: "/projects#portfolio" },
+      ]
+    },
+    { 
+      name: "Contact", 
+      path: "/contact",
+    },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -31,21 +78,52 @@ const Navigation = () => {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
-                  isActive(item.path)
-                    ? "text-primary bg-primary/10"
-                    : "text-primary-foreground hover:text-primary hover:bg-primary/5"
-                }`}
-              >
-                {item.name}
-              </Link>
-            ))}
-          </div>
+          <NavigationMenu className="hidden md:flex">
+            <NavigationMenuList>
+              {navItems.map((item) => (
+                <NavigationMenuItem key={item.path}>
+                  {item.subItems ? (
+                    <>
+                      <NavigationMenuTrigger className={`${
+                        isActive(item.path)
+                          ? "text-primary bg-primary/10"
+                          : "text-primary-foreground hover:text-primary hover:bg-primary/5"
+                      }`}>
+                        {item.name}
+                      </NavigationMenuTrigger>
+                      <NavigationMenuContent>
+                        <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px] bg-popover">
+                          {item.subItems.map((subItem) => (
+                            <li key={subItem.path}>
+                              <NavigationMenuLink asChild>
+                                <Link
+                                  to={subItem.path}
+                                  className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                                >
+                                  <div className="text-sm font-medium leading-none">{subItem.name}</div>
+                                </Link>
+                              </NavigationMenuLink>
+                            </li>
+                          ))}
+                        </ul>
+                      </NavigationMenuContent>
+                    </>
+                  ) : (
+                    <Link
+                      to={item.path}
+                      className={`inline-flex h-9 w-max items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/5 hover:text-primary focus:bg-primary/5 focus:text-primary focus:outline-none disabled:pointer-events-none disabled:opacity-50 ${
+                        isActive(item.path)
+                          ? "text-primary bg-primary/10"
+                          : "text-primary-foreground"
+                      }`}
+                    >
+                      {item.name}
+                    </Link>
+                  )}
+                </NavigationMenuItem>
+              ))}
+            </NavigationMenuList>
+          </NavigationMenu>
 
           {/* CTA Buttons */}
           <div className="hidden md:flex items-center space-x-4">
@@ -73,18 +151,33 @@ const Navigation = () => {
           <div className="md:hidden py-4 border-t border-border">
             <div className="flex flex-col space-y-2">
               {navItems.map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setIsOpen(false)}
-                  className={`px-4 py-3 rounded-md text-sm font-semibold transition-colors ${
-                    isActive(item.path)
-                      ? "text-primary bg-primary/10"
-                      : "text-primary-foreground hover:text-primary hover:bg-primary/5"
-                  }`}
-                >
-                  {item.name}
-                </Link>
+                <div key={item.path}>
+                  <Link
+                    to={item.path}
+                    onClick={() => setIsOpen(false)}
+                    className={`flex items-center justify-between px-4 py-3 rounded-md text-sm font-semibold transition-colors ${
+                      isActive(item.path)
+                        ? "text-primary bg-primary/10"
+                        : "text-primary-foreground hover:text-primary hover:bg-primary/5"
+                    }`}
+                  >
+                    {item.name}
+                  </Link>
+                  {item.subItems && (
+                    <div className="ml-4 mt-2 space-y-2">
+                      {item.subItems.map((subItem) => (
+                        <Link
+                          key={subItem.path}
+                          to={subItem.path}
+                          onClick={() => setIsOpen(false)}
+                          className="block px-4 py-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          {subItem.name}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
               <div className="pt-4 px-4 space-y-3">
                 <a href="tel:+1234567890" className="flex items-center space-x-2 text-primary-foreground">

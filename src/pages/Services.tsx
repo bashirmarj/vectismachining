@@ -51,6 +51,32 @@ const Services = () => {
       ],
     },
     {
+      icon: Cog,
+      title: "Custom Part Manufacturing",
+      description: "Specialized manufacturing of custom parts with precision engineering and quality control for your unique applications.",
+      image: customPartsImg,
+      features: [
+        "Custom part design and fabrication",
+        "Advanced CNC machining",
+        "Quality inspection and testing",
+        "Small to large batch production",
+        "Material certification available",
+      ],
+    },
+    {
+      icon: Wrench,
+      title: "Prototyping Services",
+      description: "Rapid prototyping solutions to bring your concepts to life quickly and efficiently for testing and validation.",
+      image: prototypeImg,
+      features: [
+        "Fast turnaround prototyping",
+        "Multiple material options",
+        "Functional prototype testing",
+        "Design optimization support",
+        "Cost-effective iterations",
+      ],
+    },
+    {
       icon: TrendingUp,
       title: "Turnkey Solutions",
       description: "End-to-end manufacturing partnerships covering the entire product lifecycle from design to delivery.",
