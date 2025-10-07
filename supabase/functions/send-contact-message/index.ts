@@ -36,7 +36,7 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Extract client IP address
+    // Extract client IP address (rate limiting disabled for now)
     const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || 
                      req.headers.get('x-real-ip') || 
                      'unknown';
@@ -46,90 +46,57 @@ const handler = async (req: Request): Promise<Response> => {
     // Hash the IP for privacy
     const ipHash = await hashIP(clientIp);
 
-    // Check rate limit (5 minutes for contact form)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    
-    const { data: recentSubmissions, error: checkError } = await supabase
-      .from('contact_submissions')
-      .select('submitted_at')
-      .eq('ip_hash', ipHash)
-      .gte('submitted_at', fiveMinutesAgo)
-      .order('submitted_at', { ascending: false })
-      .limit(1);
-
-    if (checkError) {
-      console.error('Error checking rate limit:', checkError);
-      throw new Error('Failed to check rate limit');
-    }
-
-    if (recentSubmissions && recentSubmissions.length > 0) {
-      const lastSubmission = new Date(recentSubmissions[0].submitted_at);
-      const now = new Date();
-      const timeDiff = 5 * 60 * 1000 - (now.getTime() - lastSubmission.getTime());
-      const remainingSeconds = Math.ceil(timeDiff / 1000);
-      const remainingMinutes = Math.floor(remainingSeconds / 60);
-
-      console.log('Rate limit exceeded. Remaining time:', remainingSeconds, 'seconds');
-
-      return new Response(
-        JSON.stringify({
-          error: 'rate_limit_exceeded',
-          message: 'Please wait before submitting another message',
-          remainingSeconds,
-          remainingMinutes,
-          nextAvailableTime: new Date(lastSubmission.getTime() + 5 * 60 * 1000).toISOString()
-        }),
-        {
-          status: 429,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        }
-      );
-    }
-
     // Parse request body
     const { name, email, phone, message }: ContactRequest = await req.json();
 
     console.log('Processing contact form from:', email);
 
-    // Send email using Resend
+    // Send email using Resend with improved design
     const emailHtml = `
       <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #f4f4f4; padding: 20px; border-radius: 5px; }
-            .content { padding: 20px 0; }
-            .field { margin-bottom: 15px; }
-            .label { font-weight: bold; color: #555; }
-            .value { margin-top: 5px; }
+            body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+            .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 40px 30px; text-align: center; }
+            .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: 600; }
+            .content { padding: 40px 30px; }
+            .section { margin-bottom: 30px; }
+            .section-title { color: #1a1a2e; font-size: 18px; font-weight: 600; margin-bottom: 15px; padding-bottom: 8px; border-bottom: 2px solid #0f3460; }
+            .info-row { margin: 12px 0; line-height: 1.6; color: #333333; }
+            .label { font-weight: 600; color: #1a1a2e; display: inline-block; min-width: 100px; }
+            .value { color: #555555; }
+            .message-box { background-color: #f8f9fa; padding: 15px; border-radius: 6px; white-space: pre-line; color: #555555; line-height: 1.6; margin-top: 10px; }
+            .footer { background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0; }
+            .footer-text { color: #666666; font-size: 14px; margin: 5px 0; }
           </style>
         </head>
         <body>
           <div class="container">
             <div class="header">
-              <h2>New Contact Form Submission</h2>
+              <h1>📧 New Contact Message</h1>
             </div>
+            
             <div class="content">
-              <div class="field">
-                <div class="label">Name:</div>
-                <div class="value">${name}</div>
+              <div class="section">
+                <div class="section-title">Contact Information</div>
+                <div class="info-row"><span class="label">Name:</span> <span class="value">${name}</span></div>
+                <div class="info-row"><span class="label">Email:</span> <span class="value">${email}</span></div>
+                ${phone ? `<div class="info-row"><span class="label">Phone:</span> <span class="value">${phone}</span></div>` : ''}
               </div>
-              <div class="field">
-                <div class="label">Email:</div>
-                <div class="value">${email}</div>
+              
+              <div class="section">
+                <div class="section-title">Message</div>
+                <div class="message-box">${message}</div>
               </div>
-              ${phone ? `
-              <div class="field">
-                <div class="label">Phone:</div>
-                <div class="value">${phone}</div>
-              </div>
-              ` : ''}
-              <div class="field">
-                <div class="label">Message:</div>
-                <div class="value">${message.replace(/\n/g, '<br>')}</div>
-              </div>
+            </div>
+            
+            <div class="footer">
+              <div class="footer-text"><strong>Vectis Manufacturing</strong></div>
+              <div class="footer-text">Your Partner in Precision Manufacturing</div>
             </div>
           </div>
         </body>
@@ -137,9 +104,9 @@ const handler = async (req: Request): Promise<Response> => {
     `;
 
     const { error: sendError } = await resend.emails.send({
-      from: 'Contact Form <onboarding@resend.dev>',
-      to: ['your-email@example.com'], // Replace with your business email
-      subject: `New Contact Form Submission from ${name}`,
+      from: 'Vectis Manufacturing <onboarding@resend.dev>',
+      to: ['bashirmarj@gmail.com'],
+      subject: `New Contact Message from ${name}`,
       html: emailHtml,
       replyTo: email,
     });
