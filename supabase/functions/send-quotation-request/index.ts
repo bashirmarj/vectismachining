@@ -237,81 +237,91 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send both emails in parallel for better performance
-    const [emailResponse, customerEmailResponse] = await Promise.all([
-      // Admin email with attachments
-      resend.emails.send({
-        from: "Vectis Manufacturing <onboarding@resend.dev>",
-        to: ["bashirmarj@gmail.com"],
-        subject: `New Part Quotation Request - ${submission.quote_number}`,
-        html: `
-          <h1>New Part Quotation Request</h1>
-          <h2>Quote Number: ${submission.quote_number}</h2>
-          <h2>Customer Information</h2>
-          <p><strong>Name:</strong> ${name}</p>
-          ${company ? `<p><strong>Company:</strong> ${company}</p>` : ''}
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Phone:</strong> ${phone}</p>
-          <p><strong>Shipping Address:</strong></p>
-          <p style="white-space: pre-line;">${shippingAddress}</p>
-          
-          <h2>Order Details</h2>
-          <p><strong>Total Parts Quantity:</strong> ${totalQuantity}</p>
-          ${message ? `<p><strong>Additional Instructions:</strong></p><p style="white-space: pre-line;">${message}</p>` : ''}
-          
-          <h2>Files Attached</h2>
-          <p><strong>CAD Files (${files.length}):</strong></p>
-          <ul>${cadFilesList}</ul>
-          ${drawingFilesList ? `<p><strong>Drawing Files (${drawingFiles?.length || 0}):</strong></p><ul>${drawingFilesList}</ul>` : ''}
-          
-          <p>Please review the attached files and provide a quotation.</p>
-          <br>
-          <p>Best regards,<br>Vectis Manufacturing System</p>
-        `,
-        attachments,
-      }),
-      // Customer confirmation email (without attachments)
-      resend.emails.send({
-        from: "Vectis Manufacturing <onboarding@resend.dev>",
-        to: [email],
-        subject: `Quotation Request Received - ${submission.quote_number}`,
-        html: `
-          <h1>Thank you for your quotation request!</h1>
-          <p>Dear ${name},</p>
-          <p>We have successfully received your quotation request. Our team will review your requirements and get back to you as soon as possible.</p>
-          
-          <h2>Your Quote Number: ${submission.quote_number}</h2>
-          <p>Please save this number for your records. You can reference it when contacting us about your quote.</p>
-          
-          <h2>Order Summary</h2>
-          ${company ? `<p><strong>Company:</strong> ${company}</p>` : ''}
-          <p><strong>Phone:</strong> ${phone}</p>
-          <p><strong>Shipping Address:</strong></p>
-          <p style="white-space: pre-line;">${shippingAddress}</p>
-          <p><strong>Total Parts Quantity:</strong> ${totalQuantity}</p>
-          ${message ? `<p><strong>Your Message:</strong></p><p style="white-space: pre-line;">${message}</p>` : ''}
-          
-          <h2>Submitted Files</h2>
-          <p><strong>CAD Files (${files.length}):</strong></p>
-          <ul>${files.map(f => `<li>${f.name} - Quantity: ${f.quantity}</li>`).join('')}</ul>
-          ${drawingFiles && drawingFiles.length > 0 ? `<p><strong>Drawing Files (${drawingFiles.length}):</strong></p><ul>${drawingFiles.map(f => `<li>${f.name}</li>`).join('')}</ul>` : ''}
-          
-          <p>We will contact you within 24-48 hours with a detailed quotation.</p>
-          <p>If you have any questions, please don't hesitate to contact us.</p>
-          
-          <br>
-          <p>Best regards,<br><strong>Vectis Manufacturing</strong><br>Your Partner in Precision Manufacturing</p>
-        `,
-      })
-    ]);
+    // Send emails in the background to not block the response
+    const sendEmails = async () => {
+      try {
+        const [emailResponse, customerEmailResponse] = await Promise.all([
+          // Admin email with attachments
+          resend.emails.send({
+            from: "Vectis Manufacturing <onboarding@resend.dev>",
+            to: ["bashirmarj@gmail.com"],
+            subject: `New Part Quotation Request - ${submission.quote_number}`,
+            html: `
+              <h1>New Part Quotation Request</h1>
+              <h2>Quote Number: ${submission.quote_number}</h2>
+              <h2>Customer Information</h2>
+              <p><strong>Name:</strong> ${name}</p>
+              ${company ? `<p><strong>Company:</strong> ${company}</p>` : ''}
+              <p><strong>Email:</strong> ${email}</p>
+              <p><strong>Phone:</strong> ${phone}</p>
+              <p><strong>Shipping Address:</strong></p>
+              <p style="white-space: pre-line;">${shippingAddress}</p>
+              
+              <h2>Order Details</h2>
+              <p><strong>Total Parts Quantity:</strong> ${totalQuantity}</p>
+              ${message ? `<p><strong>Additional Instructions:</strong></p><p style="white-space: pre-line;">${message}</p>` : ''}
+              
+              <h2>Files Attached</h2>
+              <p><strong>CAD Files (${files.length}):</strong></p>
+              <ul>${cadFilesList}</ul>
+              ${drawingFilesList ? `<p><strong>Drawing Files (${drawingFiles?.length || 0}):</strong></p><ul>${drawingFilesList}</ul>` : ''}
+              
+              <p>Please review the attached files and provide a quotation.</p>
+              <br>
+              <p>Best regards,<br>Vectis Manufacturing System</p>
+            `,
+            attachments,
+          }),
+          // Customer confirmation email (without attachments)
+          resend.emails.send({
+            from: "Vectis Manufacturing <onboarding@resend.dev>",
+            to: [email],
+            subject: `Quotation Request Received - ${submission.quote_number}`,
+            html: `
+              <h1>Thank you for your quotation request!</h1>
+              <p>Dear ${name},</p>
+              <p>We have successfully received your quotation request. Our team will review your requirements and get back to you as soon as possible.</p>
+              
+              <h2>Your Quote Number: ${submission.quote_number}</h2>
+              <p>Please save this number for your records. You can reference it when contacting us about your quote.</p>
+              
+              <h2>Order Summary</h2>
+              ${company ? `<p><strong>Company:</strong> ${company}</p>` : ''}
+              <p><strong>Phone:</strong> ${phone}</p>
+              <p><strong>Shipping Address:</strong></p>
+              <p style="white-space: pre-line;">${shippingAddress}</p>
+              <p><strong>Total Parts Quantity:</strong> ${totalQuantity}</p>
+              ${message ? `<p><strong>Your Message:</strong></p><p style="white-space: pre-line;">${message}</p>` : ''}
+              
+              <h2>Submitted Files</h2>
+              <p><strong>CAD Files (${files.length}):</strong></p>
+              <ul>${files.map(f => `<li>${f.name} - Quantity: ${f.quantity}</li>`).join('')}</ul>
+              ${drawingFiles && drawingFiles.length > 0 ? `<p><strong>Drawing Files (${drawingFiles.length}):</strong></p><ul>${drawingFiles.map(f => `<li>${f.name}</li>`).join('')}</ul>` : ''}
+              
+              <p>We will contact you within 24-48 hours with a detailed quotation.</p>
+              <p>If you have any questions, please don't hesitate to contact us.</p>
+              
+              <br>
+              <p>Best regards,<br><strong>Vectis Manufacturing</strong><br>Your Partner in Precision Manufacturing</p>
+            `,
+          })
+        ]);
 
-    console.log("Admin email sent:", emailResponse);
-    console.log("Customer email sent:", customerEmailResponse);
+        console.log("Admin email sent:", emailResponse);
+        console.log("Customer email sent:", customerEmailResponse);
+      } catch (emailError) {
+        console.error("Error sending emails in background:", emailError);
+      }
+    };
+
+    // Start background email task (non-blocking)
+    (globalThis as any).EdgeRuntime?.waitUntil(sendEmails());
+
+    // Return immediate response without waiting for emails
 
     return new Response(JSON.stringify({ 
       success: true, 
-      quoteNumber: submission.quote_number,
-      emailResponse 
+      quoteNumber: submission.quote_number
     }), {
       status: 200,
       headers: {
