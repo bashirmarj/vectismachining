@@ -92,13 +92,13 @@ const Navigation = () => {
                         {item.name}
                       </NavigationMenuTrigger>
                       <NavigationMenuContent>
-                        <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px] bg-card border border-border shadow-lg z-50">
+                        <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px] bg-accent border border-border shadow-lg z-50">
                           {item.subItems.map((subItem) => (
                             <li key={subItem.path}>
                               <NavigationMenuLink asChild>
                                 <Link
                                   to={subItem.path}
-                                  className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors text-card-foreground hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground"
+                                  className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors text-accent-foreground hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary"
                                 >
                                   <div className="text-sm font-medium leading-none">{subItem.name}</div>
                                 </Link>
