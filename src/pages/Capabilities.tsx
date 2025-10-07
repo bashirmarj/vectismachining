@@ -145,7 +145,7 @@ const Capabilities = () => {
             {technologies.map((tech, index) => (
               <div
                 key={index}
-                className="bg-background rounded-lg p-6 font-semibold text-center hover:bg-primary hover:text-primary-foreground transition-colors border-2 border-border"
+                className="bg-background rounded-lg p-6 font-semibold flex items-center justify-center text-center hover:bg-primary hover:text-primary-foreground transition-colors border-2 border-border min-h-[100px]"
               >
                 {tech}
               </div>
