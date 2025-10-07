@@ -119,6 +119,20 @@ export const PartUploadForm = () => {
     setDrawingFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Helper function to convert ArrayBuffer to base64 in chunks to avoid call stack overflow
+  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 8192;
+    let binary = '';
+    
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    
+    return btoa(binary);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -137,7 +151,7 @@ export const PartUploadForm = () => {
       // Convert files to base64 for sending to edge function
       const filePromises = files.map(async (fileWithQty) => {
         const arrayBuffer = await fileWithQty.file.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const base64 = arrayBufferToBase64(arrayBuffer);
         return {
           name: fileWithQty.file.name,
           content: base64,
@@ -148,7 +162,7 @@ export const PartUploadForm = () => {
 
       const drawingFilePromises = drawingFiles.map(async (file) => {
         const arrayBuffer = await file.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const base64 = arrayBufferToBase64(arrayBuffer);
         return {
           name: file.name,
           content: base64,
