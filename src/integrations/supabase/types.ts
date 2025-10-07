@@ -65,26 +65,180 @@ export type Database = {
       quotation_submissions: {
         Row: {
           created_at: string
+          customer_company: string | null
+          customer_message: string | null
+          customer_name: string | null
+          customer_phone: string | null
           email: string
           id: string
           ip_hash: string
+          quote_number: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          shipping_address: string | null
+          status: Database["public"]["Enums"]["quotation_status"]
           submitted_at: string
         }
         Insert: {
           created_at?: string
+          customer_company?: string | null
+          customer_message?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
           email: string
           id?: string
           ip_hash: string
+          quote_number?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          shipping_address?: string | null
+          status?: Database["public"]["Enums"]["quotation_status"]
           submitted_at?: string
         }
         Update: {
           created_at?: string
+          customer_company?: string | null
+          customer_message?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
           email?: string
           id?: string
           ip_hash?: string
+          quote_number?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          shipping_address?: string | null
+          status?: Database["public"]["Enums"]["quotation_status"]
           submitted_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "quotation_submissions_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quote_line_items: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_path: string
+          id: string
+          lead_time_days: number | null
+          notes: string | null
+          quantity: number
+          quotation_id: string
+          unit_price: number | null
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_path: string
+          id?: string
+          lead_time_days?: number | null
+          notes?: string | null
+          quantity?: number
+          quotation_id: string
+          unit_price?: number | null
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          id?: string
+          lead_time_days?: number | null
+          notes?: string | null
+          quantity?: number
+          quotation_id?: string
+          unit_price?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_line_items_quotation_id_fkey"
+            columns: ["quotation_id"]
+            isOneToOne: false
+            referencedRelation: "quotation_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quotes: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          created_by: string
+          currency: string
+          estimated_lead_time_days: number | null
+          id: string
+          notes: string | null
+          quotation_id: string
+          quote_number: string
+          rejected_at: string | null
+          sent_at: string | null
+          shipping_cost: number
+          subtotal: number
+          tax_amount: number
+          tax_rate: number
+          total_amount: number
+          valid_until: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          created_by: string
+          currency?: string
+          estimated_lead_time_days?: number | null
+          id?: string
+          notes?: string | null
+          quotation_id: string
+          quote_number: string
+          rejected_at?: string | null
+          sent_at?: string | null
+          shipping_cost?: number
+          subtotal?: number
+          tax_amount?: number
+          tax_rate?: number
+          total_amount?: number
+          valid_until?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          created_by?: string
+          currency?: string
+          estimated_lead_time_days?: number | null
+          id?: string
+          notes?: string | null
+          quotation_id?: string
+          quote_number?: string
+          rejected_at?: string | null
+          sent_at?: string | null
+          shipping_cost?: number
+          subtotal?: number
+          tax_amount?: number
+          tax_rate?: number
+          total_amount?: number
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_quotation_id_fkey"
+            columns: ["quotation_id"]
+            isOneToOne: true
+            referencedRelation: "quotation_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -136,6 +290,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      generate_quote_number: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -146,6 +304,13 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      quotation_status:
+        | "pending"
+        | "reviewing"
+        | "quoted"
+        | "accepted"
+        | "rejected"
+        | "expired"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -274,6 +439,14 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      quotation_status: [
+        "pending",
+        "reviewing",
+        "quoted",
+        "accepted",
+        "rejected",
+        "expired",
+      ],
     },
   },
 } as const

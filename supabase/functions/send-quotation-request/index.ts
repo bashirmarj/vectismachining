@@ -32,6 +32,13 @@ interface QuotationRequest {
   drawingFiles?: FileInfo[];
 }
 
+interface StorageFileInfo {
+  name: string;
+  path: string;
+  size: number;
+  quantity: number;
+}
+
 // Helper function to hash IP address for privacy
 async function hashIP(ip: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -191,17 +198,50 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Email sent successfully:", emailResponse);
 
-    // Record this submission to enforce rate limiting
-    const { error: insertError } = await supabase
+    // Record the submission with full customer details
+    const { data: submission, error: insertError } = await supabase
       .from('quotation_submissions')
       .insert({
-        ip_hash: ipHash,
         email: email,
-        submitted_at: new Date().toISOString()
-      });
+        customer_name: name,
+        customer_company: company || null,
+        customer_phone: phone,
+        shipping_address: shippingAddress,
+        customer_message: message || null,
+        ip_hash: ipHash,
+      })
+      .select()
+      .single();
 
-    if (insertError) {
-      console.error("Error recording submission:", insertError);
+    if (insertError || !submission) {
+      console.error('Error recording submission:', insertError);
+    } else {
+      // Store file metadata in quote_line_items
+      const lineItems = [
+        ...files.map(file => ({
+          quotation_id: submission.id,
+          file_name: file.name,
+          file_path: `${submission.id}/cad/${file.name}`,
+          quantity: file.quantity,
+        })),
+        ...(drawingFiles || []).map(file => ({
+          quotation_id: submission.id,
+          file_name: file.name,
+          file_path: `${submission.id}/drawings/${file.name}`,
+          quantity: 1,
+        }))
+      ];
+
+      if (lineItems.length > 0) {
+        const { error: lineItemsError } = await supabase
+          .from('quote_line_items')
+          .insert(lineItems);
+
+        if (lineItemsError) {
+          console.error('Error storing line items:', lineItemsError);
+          // Don't throw - this is not critical for the submission
+        }
+      }
     }
 
     return new Response(JSON.stringify({ success: true, emailResponse }), {

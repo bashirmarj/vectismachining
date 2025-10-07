@@ -6,12 +6,20 @@ import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, Search } from 'lucide-react';
+import { StatusBadge } from '@/components/admin/StatusBadge';
 
 interface QuotationSubmission {
   id: string;
   email: string;
+  customer_name: string;
+  customer_company: string | null;
+  status: string;
+  quote_number: string;
   submitted_at: string;
   created_at: string;
 }
@@ -21,8 +29,11 @@ const Admin = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [submissions, setSubmissions] = useState<QuotationSubmission[]>([]);
+  const [filteredSubmissions, setFilteredSubmissions] = useState<QuotationSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   useEffect(() => {
     const checkAdminAndFetchData = async () => {
@@ -67,6 +78,7 @@ const Admin = () => {
         });
       } else {
         setSubmissions(data || []);
+        setFilteredSubmissions(data || []);
       }
 
       setLoading(false);
@@ -74,6 +86,28 @@ const Admin = () => {
 
     checkAdminAndFetchData();
   }, [user, authLoading, navigate, toast]);
+
+  useEffect(() => {
+    let filtered = submissions;
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(s => s.status === statusFilter);
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(s =>
+        s.customer_name.toLowerCase().includes(query) ||
+        s.email.toLowerCase().includes(query) ||
+        s.quote_number.toLowerCase().includes(query) ||
+        (s.customer_company && s.customer_company.toLowerCase().includes(query))
+      );
+    }
+
+    setFilteredSubmissions(filtered);
+  }, [submissions, searchQuery, statusFilter]);
 
   if (authLoading || loading) {
     return (
@@ -97,23 +131,71 @@ const Admin = () => {
             <CardDescription>View all quotation requests</CardDescription>
           </CardHeader>
           <CardContent>
+            {/* Filters */}
+            <div className="flex gap-4 mb-6">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name, email, quote number, or company..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="reviewing">Reviewing</SelectItem>
+                  <SelectItem value="quoted">Quoted</SelectItem>
+                  <SelectItem value="accepted">Accepted</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {submissions.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No submissions yet.</p>
+            ) : filteredSubmissions.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No submissions match your filters.</p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Quote #</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Company</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Submitted At</TableHead>
-                    <TableHead>ID</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Submitted</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {submissions.map((submission) => (
+                  {filteredSubmissions.map((submission) => (
                     <TableRow key={submission.id}>
+                      <TableCell className="font-mono font-medium">{submission.quote_number}</TableCell>
+                      <TableCell>{submission.customer_name}</TableCell>
+                      <TableCell>{submission.customer_company || '-'}</TableCell>
                       <TableCell>{submission.email}</TableCell>
-                      <TableCell>{new Date(submission.submitted_at).toLocaleString()}</TableCell>
-                      <TableCell className="font-mono text-xs">{submission.id}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={submission.status as any} />
+                      </TableCell>
+                      <TableCell>{new Date(submission.submitted_at).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/admin/quotations/${submission.id}`)}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
