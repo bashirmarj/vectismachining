@@ -9,17 +9,22 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+interface FileInfo {
+  name: string;
+  path: string;
+  size: number;
+}
+
 interface QuotationRequest {
   name: string;
   company?: string;
   email: string;
   phone: string;
   shippingAddress: string;
-  fileName: string;
-  filePath: string;
-  userEmail: string;
-  drawingFileName?: string;
-  drawingFilePath?: string;
+  quantity: number;
+  message?: string;
+  files: FileInfo[];
+  drawingFiles?: FileInfo[];
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -33,66 +38,88 @@ const handler = async (req: Request): Promise<Response> => {
       company, 
       email, 
       phone, 
-      shippingAddress, 
-      fileName, 
-      filePath, 
-      userEmail,
-      drawingFileName,
-      drawingFilePath 
+      shippingAddress,
+      quantity,
+      message,
+      files,
+      drawingFiles
     }: QuotationRequest = await req.json();
 
-    console.log("Processing quotation request:", { name, company, email, phone, fileName });
+    console.log("Processing quotation request:", { 
+      name, 
+      company, 
+      email, 
+      phone, 
+      quantity,
+      filesCount: files.length,
+      drawingFilesCount: drawingFiles?.length || 0
+    });
 
-    // Download the file from Supabase Storage using service role key
+    // Download the files from Supabase Storage using service role key
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     
-    const downloadUrl = `${supabaseUrl}/storage/v1/object/part-files/${filePath}`;
-    
-    const fileResponse = await fetch(downloadUrl, {
-      headers: {
-        'Authorization': `Bearer ${serviceRoleKey}`,
-      },
-    });
+    const attachments: Array<{ filename: string; content: string }> = [];
 
-    if (!fileResponse.ok) {
-      console.error("Error downloading file:", await fileResponse.text());
-      throw new Error(`Failed to download file: ${fileResponse.statusText}`);
-    }
-
-    // Convert file to base64
-    const arrayBuffer = await fileResponse.arrayBuffer();
-    const buffer = new Uint8Array(arrayBuffer);
-    const base64File = btoa(String.fromCharCode(...buffer));
-
-    // Download drawing file if provided
-    const attachments: Array<{ filename: string; content: string }> = [
-      {
-        filename: fileName,
-        content: base64File,
-      },
-    ];
-
-    if (drawingFilePath && drawingFileName) {
-      const drawingDownloadUrl = `${supabaseUrl}/storage/v1/object/part-files/${drawingFilePath}`;
+    // Download all CAD files
+    for (const file of files) {
+      const downloadUrl = `${supabaseUrl}/storage/v1/object/part-files/${file.path}`;
       
-      const drawingResponse = await fetch(drawingDownloadUrl, {
+      const fileResponse = await fetch(downloadUrl, {
         headers: {
           'Authorization': `Bearer ${serviceRoleKey}`,
         },
       });
 
-      if (drawingResponse.ok) {
-        const drawingArrayBuffer = await drawingResponse.arrayBuffer();
-        const drawingBuffer = new Uint8Array(drawingArrayBuffer);
-        const base64Drawing = btoa(String.fromCharCode(...drawingBuffer));
+      if (!fileResponse.ok) {
+        console.error(`Error downloading file ${file.name}:`, await fileResponse.text());
+        throw new Error(`Failed to download file ${file.name}: ${fileResponse.statusText}`);
+      }
+
+      const arrayBuffer = await fileResponse.arrayBuffer();
+      const buffer = new Uint8Array(arrayBuffer);
+      const base64File = btoa(String.fromCharCode(...buffer));
+      
+      attachments.push({
+        filename: file.name,
+        content: base64File,
+      });
+    }
+
+    // Download all drawing files if provided
+    if (drawingFiles && drawingFiles.length > 0) {
+      for (const drawingFile of drawingFiles) {
+        const drawingDownloadUrl = `${supabaseUrl}/storage/v1/object/part-files/${drawingFile.path}`;
         
-        attachments.push({
-          filename: drawingFileName,
-          content: base64Drawing,
+        const drawingResponse = await fetch(drawingDownloadUrl, {
+          headers: {
+            'Authorization': `Bearer ${serviceRoleKey}`,
+          },
         });
+
+        if (drawingResponse.ok) {
+          const drawingArrayBuffer = await drawingResponse.arrayBuffer();
+          const drawingBuffer = new Uint8Array(drawingArrayBuffer);
+          const base64Drawing = btoa(String.fromCharCode(...drawingBuffer));
+          
+          attachments.push({
+            filename: drawingFile.name,
+            content: base64Drawing,
+          });
+        }
       }
     }
+
+    // Build file lists for email
+    const cadFilesList = files.map((f, i) => 
+      `<li>${f.name} (${(f.size / 1024 / 1024).toFixed(2)} MB)</li>`
+    ).join('');
+
+    const drawingFilesList = drawingFiles && drawingFiles.length > 0
+      ? drawingFiles.map((f, i) => 
+          `<li>${f.name} (${(f.size / 1024 / 1024).toFixed(2)} MB)</li>`
+        ).join('')
+      : null;
 
     // Send email with attachments
     const emailResponse = await resend.emails.send({
@@ -109,9 +136,14 @@ const handler = async (req: Request): Promise<Response> => {
         <p><strong>Shipping Address:</strong></p>
         <p style="white-space: pre-line;">${shippingAddress}</p>
         
-        <h2>Files</h2>
-        <p><strong>CAD File:</strong> ${fileName}</p>
-        ${drawingFileName ? `<p><strong>Drawing File:</strong> ${drawingFileName}</p>` : ''}
+        <h2>Order Details</h2>
+        <p><strong>Quantity:</strong> ${quantity}</p>
+        ${message ? `<p><strong>Additional Instructions:</strong></p><p style="white-space: pre-line;">${message}</p>` : ''}
+        
+        <h2>Files Attached</h2>
+        <p><strong>CAD Files (${files.length}):</strong></p>
+        <ul>${cadFilesList}</ul>
+        ${drawingFilesList ? `<p><strong>Drawing Files (${drawingFiles?.length || 0}):</strong></p><ul>${drawingFilesList}</ul>` : ''}
         
         <p>Please review the attached files and provide a quotation.</p>
         <br>

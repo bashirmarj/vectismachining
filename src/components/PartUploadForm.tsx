@@ -41,16 +41,17 @@ export const PartUploadForm = () => {
   const [countryCode, setCountryCode] = useState("+1");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [shippingAddress, setShippingAddress] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [drawingFile, setDrawingFile] = useState<File | null>(null);
+  const [quantity, setQuantity] = useState("1");
+  const [message, setMessage] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [drawingFiles, setDrawingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      const fileName = selectedFile.name.toLowerCase();
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length > 0) {
       const validExtensions = [
         '.step', '.stp', '.iges', '.igs', '.stl', '.obj',
         '.sldprt', '.sldasm', '.slddrw',
@@ -59,44 +60,60 @@ export const PartUploadForm = () => {
         '.x_t', '.x_b', '.prt', '.asm'
       ];
       
-      const isValid = validExtensions.some(ext => fileName.endsWith(ext));
-      
-      if (isValid) {
-        setFile(selectedFile);
-      } else {
+      const invalidFiles = selectedFiles.filter(file => {
+        const fileName = file.name.toLowerCase();
+        return !validExtensions.some(ext => fileName.endsWith(ext));
+      });
+
+      if (invalidFiles.length > 0) {
         toast({
           title: "Invalid file type",
-          description: "Please upload a supported CAD file format",
+          description: `${invalidFiles.length} file(s) have unsupported formats`,
           variant: "destructive",
         });
+        return;
       }
+      
+      setFiles(prev => [...prev, ...selectedFiles]);
     }
   };
 
   const handleDrawingFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      // Check if it's a DWG or DXF file
-      const fileName = selectedFile.name.toLowerCase();
-      if (fileName.endsWith('.dwg') || fileName.endsWith('.dxf')) {
-        setDrawingFile(selectedFile);
-      } else {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length > 0) {
+      const invalidFiles = selectedFiles.filter(file => {
+        const fileName = file.name.toLowerCase();
+        return !fileName.endsWith('.dwg') && !fileName.endsWith('.dxf');
+      });
+
+      if (invalidFiles.length > 0) {
         toast({
           title: "Invalid file type",
-          description: "Please upload a drawing file (.dwg or .dxf)",
+          description: `${invalidFiles.length} file(s) must be DWG or DXF format`,
           variant: "destructive",
         });
+        return;
       }
+      
+      setDrawingFiles(prev => [...prev, ...selectedFiles]);
     }
+  };
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeDrawingFile = (index: number) => {
+    setDrawingFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!file || !email || !name || !phoneNumber || !shippingAddress) {
+    if (files.length === 0 || !email || !name || !phoneNumber || !shippingAddress || !quantity) {
       toast({
         title: "Missing information",
-        description: "Please fill in all required fields",
+        description: "Please fill in all required fields and upload at least one CAD file",
         variant: "destructive",
       });
       return;
@@ -118,23 +135,32 @@ export const PartUploadForm = () => {
         return;
       }
 
-      // Upload STEP file to Supabase Storage
-      const fileName = `${Date.now()}-${file.name}`;
-      const filePath = `${user.id}/${fileName}`;
+      // Upload all CAD files to Supabase Storage
+      const uploadedFiles = [];
+      for (const file of files) {
+        const fileName = `${Date.now()}-${file.name}`;
+        const filePath = `${user.id}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('part-files')
-        .upload(filePath, file);
+        const { error: uploadError } = await supabase.storage
+          .from('part-files')
+          .upload(filePath, file);
 
-      if (uploadError) {
-        throw uploadError;
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        uploadedFiles.push({
+          name: file.name,
+          path: filePath,
+          size: file.size
+        });
       }
 
-      // Upload drawing file if provided
-      let drawingFilePath = null;
-      if (drawingFile) {
+      // Upload all drawing files if provided
+      const uploadedDrawingFiles = [];
+      for (const drawingFile of drawingFiles) {
         const drawingFileName = `${Date.now()}-${drawingFile.name}`;
-        drawingFilePath = `${user.id}/${drawingFileName}`;
+        const drawingFilePath = `${user.id}/${drawingFileName}`;
 
         const { error: drawingUploadError } = await supabase.storage
           .from('part-files')
@@ -143,6 +169,12 @@ export const PartUploadForm = () => {
         if (drawingUploadError) {
           throw drawingUploadError;
         }
+
+        uploadedDrawingFiles.push({
+          name: drawingFile.name,
+          path: drawingFilePath,
+          size: drawingFile.size
+        });
       }
 
       // Call edge function to send email
@@ -155,11 +187,10 @@ export const PartUploadForm = () => {
             email,
             phone: `${countryCode} ${phoneNumber}`,
             shippingAddress,
-            fileName: file.name,
-            filePath: filePath,
-            userEmail: email,
-            drawingFileName: drawingFile?.name,
-            drawingFilePath: drawingFilePath,
+            quantity: parseInt(quantity),
+            message,
+            files: uploadedFiles,
+            drawingFiles: uploadedDrawingFiles,
           },
         }
       );
@@ -180,8 +211,10 @@ export const PartUploadForm = () => {
       setCountryCode("+1");
       setPhoneNumber("");
       setShippingAddress("");
-      setFile(null);
-      setDrawingFile(null);
+      setQuantity("1");
+      setMessage("");
+      setFiles([]);
+      setDrawingFiles([]);
       const fileInput = document.getElementById('file-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
       const drawingInput = document.getElementById('drawing-upload') as HTMLInputElement;
@@ -300,7 +333,33 @@ export const PartUploadForm = () => {
                 className="flex-1"
                 required
               />
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="quantity">Quantity *</Label>
+              <Input
+                id="quantity"
+                type="number"
+                min="1"
+                placeholder="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                required
+              />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="message">Additional Instructions (Optional)</Label>
+            <Textarea
+              id="message"
+              placeholder="Any special requirements or instructions for your parts..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={3}
+            />
+          </div>
           </div>
 
           <div className="space-y-2">
@@ -315,12 +374,14 @@ export const PartUploadForm = () => {
             />
           </div>
 
+
           <div className="space-y-2">
-            <Label htmlFor="file-upload">CAD File (Multiple formats supported)</Label>
+            <Label htmlFor="file-upload">CAD Files * (Multiple files supported)</Label>
             <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
               <input
                 id="file-upload"
                 type="file"
+                multiple
                 accept=".step,.stp,.iges,.igs,.stl,.obj,.sldprt,.sldasm,.slddrw,.ipt,.iam,.idw,.catpart,.catproduct,.x_t,.x_b,.prt,.asm"
                 onChange={handleFileChange}
                 className="hidden"
@@ -329,16 +390,37 @@ export const PartUploadForm = () => {
                 htmlFor="file-upload"
                 className="cursor-pointer flex flex-col items-center"
               >
-                {file ? (
-                  <div className="flex items-center gap-3 text-primary">
-                    <File className="h-8 w-8" />
-                    <div className="text-left">
-                      <p className="font-medium">{file.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(file.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
+                {files.length > 0 ? (
+                  <div className="w-full space-y-2">
+                    {files.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between gap-3 p-2 bg-primary/5 rounded">
+                        <div className="flex items-center gap-3">
+                          <File className="h-6 w-6 text-primary flex-shrink-0" />
+                          <div className="text-left">
+                            <p className="font-medium text-sm">{file.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(file.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            removeFile(index);
+                          }}
+                          className="h-8 w-8 p-0"
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-center gap-2 text-primary pt-2">
+                      <Upload className="h-5 w-5" />
+                      <span className="text-sm">Click to add more files</span>
                     </div>
-                    <CheckCircle2 className="h-6 w-6" />
                   </div>
                 ) : (
                   <>
@@ -356,11 +438,12 @@ export const PartUploadForm = () => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="drawing-upload">Drawing File (Optional - .dwg or .dxf)</Label>
+            <Label htmlFor="drawing-upload">Drawing Files (Optional - Multiple files supported)</Label>
             <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
               <input
                 id="drawing-upload"
                 type="file"
+                multiple
                 accept=".dwg,.dxf"
                 onChange={handleDrawingFileChange}
                 className="hidden"
@@ -369,16 +452,37 @@ export const PartUploadForm = () => {
                 htmlFor="drawing-upload"
                 className="cursor-pointer flex flex-col items-center"
               >
-                {drawingFile ? (
-                  <div className="flex items-center gap-3 text-primary">
-                    <File className="h-8 w-8" />
-                    <div className="text-left">
-                      <p className="font-medium">{drawingFile.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(drawingFile.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
+                {drawingFiles.length > 0 ? (
+                  <div className="w-full space-y-2">
+                    {drawingFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between gap-3 p-2 bg-primary/5 rounded">
+                        <div className="flex items-center gap-3">
+                          <File className="h-6 w-6 text-primary flex-shrink-0" />
+                          <div className="text-left">
+                            <p className="font-medium text-sm">{file.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(file.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            removeDrawingFile(index);
+                          }}
+                          className="h-8 w-8 p-0"
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-center gap-2 text-primary pt-2">
+                      <Upload className="h-5 w-5" />
+                      <span className="text-sm">Click to add more drawing files</span>
                     </div>
-                    <CheckCircle2 className="h-6 w-6" />
                   </div>
                 ) : (
                   <>
