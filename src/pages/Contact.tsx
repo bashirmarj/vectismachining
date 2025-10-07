@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Mail, Phone, MapPin, Clock } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
@@ -7,28 +7,79 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const Contact = () => {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
-    company: "",
-    subject: "",
     message: "",
   });
+  const [loading, setLoading] = useState(false);
+  const [rateLimitRemaining, setRateLimitRemaining] = useState<number | null>(null);
+  const [isRateLimited, setIsRateLimited] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (rateLimitRemaining !== null && rateLimitRemaining > 0) {
+      interval = setInterval(() => {
+        setRateLimitRemaining((prev) => {
+          if (prev === null || prev <= 1) {
+            setIsRateLimited(false);
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [rateLimitRemaining]);
+
+  const formatTimeRemaining = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}m ${secs}s`;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Thank you for your message! We'll get back to you within 24 hours.");
-    setFormData({
-      name: "",
-      email: "",
-      phone: "",
-      company: "",
-      subject: "",
-      message: "",
-    });
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.functions.invoke('send-contact-message', {
+        body: formData,
+      });
+
+      if (error) {
+        if (error.message.includes('rate_limit_exceeded')) {
+          const errorData = JSON.parse(error.message);
+          setRateLimitRemaining(errorData.remainingSeconds);
+          setIsRateLimited(true);
+          toast.error(
+            `Please wait ${formatTimeRemaining(errorData.remainingSeconds)} before submitting another message.`,
+            { duration: 5000 }
+          );
+        } else {
+          toast.error("Failed to send message. Please try again.");
+        }
+      } else {
+        toast.success("Thank you for your message! We'll get back to you within 24 hours.");
+        setFormData({
+          name: "",
+          email: "",
+          phone: "",
+          message: "",
+        });
+      }
+    } catch (error: any) {
+      console.error('Contact form error:', error);
+      toast.error("An error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -85,7 +136,14 @@ const Contact = () => {
             <div className="lg:col-span-2">
               <Card className="border-2">
                 <CardContent className="p-8">
-                  <h2 className="text-3xl font-bold mb-6">Request a Quote</h2>
+                  <h2 className="text-3xl font-bold mb-6">Send Us a Message</h2>
+                  {isRateLimited && rateLimitRemaining && (
+                    <div className="mb-6 p-4 bg-destructive/10 border border-destructive rounded-lg">
+                      <p className="text-destructive font-semibold">
+                        ⏱️ Please wait {formatTimeRemaining(rateLimitRemaining)} before submitting another message.
+                      </p>
+                    </div>
+                  )}
                   <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid md:grid-cols-2 gap-6">
                       <div>
@@ -117,51 +175,23 @@ const Contact = () => {
                       </div>
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div>
-                        <label htmlFor="phone" className="block text-sm font-semibold mb-2">
-                          Phone
-                        </label>
-                        <Input
-                          id="phone"
-                          name="phone"
-                          type="tel"
-                          value={formData.phone}
-                          onChange={handleChange}
-                          placeholder="(123) 456-7890"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="company" className="block text-sm font-semibold mb-2">
-                          Company
-                        </label>
-                        <Input
-                          id="company"
-                          name="company"
-                          value={formData.company}
-                          onChange={handleChange}
-                          placeholder="Company Name"
-                        />
-                      </div>
-                    </div>
-
                     <div>
-                      <label htmlFor="subject" className="block text-sm font-semibold mb-2">
-                        Subject *
+                      <label htmlFor="phone" className="block text-sm font-semibold mb-2">
+                        Phone
                       </label>
                       <Input
-                        id="subject"
-                        name="subject"
-                        value={formData.subject}
+                        id="phone"
+                        name="phone"
+                        type="tel"
+                        value={formData.phone}
                         onChange={handleChange}
-                        required
-                        placeholder="Project inquiry"
+                        placeholder="(123) 456-7890"
                       />
                     </div>
 
                     <div>
                       <label htmlFor="message" className="block text-sm font-semibold mb-2">
-                        Project Details *
+                        Message *
                       </label>
                       <Textarea
                         id="message"
@@ -170,12 +200,17 @@ const Contact = () => {
                         onChange={handleChange}
                         required
                         rows={6}
-                        placeholder="Please provide details about your project including quantity, materials, timeline, and any specific requirements..."
+                        placeholder="Please provide details about your inquiry..."
                       />
                     </div>
 
-                    <Button type="submit" size="lg" className="w-full md:w-auto">
-                      Send Message
+                    <Button 
+                      type="submit" 
+                      size="lg" 
+                      className="w-full md:w-auto"
+                      disabled={loading || isRateLimited}
+                    >
+                      {loading ? 'Sending...' : isRateLimited && rateLimitRemaining ? `Please wait ${formatTimeRemaining(rateLimitRemaining)}` : 'Send Message'}
                     </Button>
                   </form>
                 </CardContent>
