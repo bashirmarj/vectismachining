@@ -84,10 +84,10 @@ const Navigation = () => {
                 <NavigationMenuItem key={item.path}>
                   {item.subItems ? (
                     <>
-                      <NavigationMenuTrigger className={`${
+                      <NavigationMenuTrigger className={`!bg-transparent ${
                         isActive(item.path)
-                          ? "text-primary bg-primary/10"
-                          : "text-primary-foreground hover:text-primary hover:bg-primary/5"
+                          ? "text-primary !bg-primary/10"
+                          : "text-accent-foreground hover:text-primary hover:!bg-primary/5"
                       }`}>
                         {item.name}
                       </NavigationMenuTrigger>
