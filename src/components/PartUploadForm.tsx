@@ -17,14 +17,23 @@ export const PartUploadForm = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      // Check if it's a STEP file
       const fileName = selectedFile.name.toLowerCase();
-      if (fileName.endsWith('.step') || fileName.endsWith('.stp')) {
+      const validExtensions = [
+        '.step', '.stp', '.iges', '.igs', '.stl', '.obj',
+        '.sldprt', '.sldasm', '.slddrw',
+        '.ipt', '.iam', '.idw',
+        '.catpart', '.catproduct',
+        '.x_t', '.x_b', '.prt', '.asm'
+      ];
+      
+      const isValid = validExtensions.some(ext => fileName.endsWith(ext));
+      
+      if (isValid) {
         setFile(selectedFile);
       } else {
         toast({
           title: "Invalid file type",
-          description: "Please upload a STEP file (.step or .stp)",
+          description: "Please upload a supported CAD file format",
           variant: "destructive",
         });
       }
@@ -153,7 +162,7 @@ export const PartUploadForm = () => {
           <div className="mb-6">
           <h3 className="text-2xl font-bold mb-2">Request a Quotation</h3>
           <p className="text-muted-foreground">
-            Upload your STEP file and optionally include a drawing file (DWG/DXF) for a detailed manufacturing quote.
+            Upload your CAD file in any major format (STEP, SolidWorks, Inventor, CATIA, etc.) and optionally include a drawing file (DWG/DXF) for a detailed manufacturing quote.
           </p>
         </div>
 
@@ -171,12 +180,12 @@ export const PartUploadForm = () => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="file-upload">STEP File (.step or .stp)</Label>
+            <Label htmlFor="file-upload">CAD File (Multiple formats supported)</Label>
             <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
               <input
                 id="file-upload"
                 type="file"
-                accept=".step,.stp"
+                accept=".step,.stp,.iges,.igs,.stl,.obj,.sldprt,.sldasm,.slddrw,.ipt,.iam,.idw,.catpart,.catproduct,.x_t,.x_b,.prt,.asm"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -202,7 +211,7 @@ export const PartUploadForm = () => {
                       Click to upload or drag and drop
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      STEP files only (.step or .stp)
+                      STEP, IGES, STL, SolidWorks, Inventor, CATIA, and more
                     </p>
                   </>
                 )}
