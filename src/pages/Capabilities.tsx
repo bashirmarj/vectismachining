@@ -49,6 +49,7 @@ const Capabilities = () => {
         "Stainless steel (304, 316)",
         "Tool steel (D2, A2, O1)",
         "Cold rolled steel (CRS)",
+        "Hot rolled steel (HRS)",
         "Brass and copper",
         "Engineering plastics",
       ],
