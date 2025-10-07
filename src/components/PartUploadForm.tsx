@@ -34,6 +34,11 @@ const countryCodes = [
   { code: "+254", country: "Kenya" },
 ].sort((a, b) => a.country.localeCompare(b.country));
 
+interface FileWithQuantity {
+  file: File;
+  quantity: number;
+}
+
 export const PartUploadForm = () => {
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
@@ -41,9 +46,8 @@ export const PartUploadForm = () => {
   const [countryCode, setCountryCode] = useState("+1");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [shippingAddress, setShippingAddress] = useState("");
-  const [quantity, setQuantity] = useState("1");
   const [message, setMessage] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<FileWithQuantity[]>([]);
   const [drawingFiles, setDrawingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -74,7 +78,8 @@ export const PartUploadForm = () => {
         return;
       }
       
-      setFiles(prev => [...prev, ...selectedFiles]);
+      const filesWithQuantity = selectedFiles.map(file => ({ file, quantity: 1 }));
+      setFiles(prev => [...prev, ...filesWithQuantity]);
     }
   };
 
@@ -103,6 +108,12 @@ export const PartUploadForm = () => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const updateFileQuantity = (index: number, quantity: number) => {
+    setFiles(prev => prev.map((item, i) => 
+      i === index ? { ...item, quantity: Math.max(1, quantity) } : item
+    ));
+  };
+
   const removeDrawingFile = (index: number) => {
     setDrawingFiles(prev => prev.filter((_, i) => i !== index));
   };
@@ -110,7 +121,7 @@ export const PartUploadForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (files.length === 0 || !email || !name || !phoneNumber || !shippingAddress || !quantity) {
+    if (files.length === 0 || !email || !name || !phoneNumber || !shippingAddress) {
       toast({
         title: "Missing information",
         description: "Please fill in all required fields and upload at least one CAD file",
@@ -137,22 +148,23 @@ export const PartUploadForm = () => {
 
       // Upload all CAD files to Supabase Storage
       const uploadedFiles = [];
-      for (const file of files) {
-        const fileName = `${Date.now()}-${file.name}`;
+      for (const fileWithQty of files) {
+        const fileName = `${Date.now()}-${fileWithQty.file.name}`;
         const filePath = `${user.id}/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
           .from('part-files')
-          .upload(filePath, file);
+          .upload(filePath, fileWithQty.file);
 
         if (uploadError) {
           throw uploadError;
         }
 
         uploadedFiles.push({
-          name: file.name,
+          name: fileWithQty.file.name,
           path: filePath,
-          size: file.size
+          size: fileWithQty.file.size,
+          quantity: fileWithQty.quantity
         });
       }
 
@@ -187,7 +199,6 @@ export const PartUploadForm = () => {
             email,
             phone: `${countryCode} ${phoneNumber}`,
             shippingAddress,
-            quantity: parseInt(quantity),
             message,
             files: uploadedFiles,
             drawingFiles: uploadedDrawingFiles,
@@ -211,7 +222,6 @@ export const PartUploadForm = () => {
       setCountryCode("+1");
       setPhoneNumber("");
       setShippingAddress("");
-      setQuantity("1");
       setMessage("");
       setFiles([]);
       setDrawingFiles([]);
@@ -335,20 +345,6 @@ export const PartUploadForm = () => {
               />
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="quantity">Quantity *</Label>
-              <Input
-                id="quantity"
-                type="number"
-                min="1"
-                placeholder="1"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                required
-              />
-            </div>
-          </div>
 
           <div className="space-y-2">
             <Label htmlFor="message">Additional Instructions (Optional)</Label>
@@ -392,29 +388,42 @@ export const PartUploadForm = () => {
               >
                 {files.length > 0 ? (
                   <div className="w-full space-y-2">
-                    {files.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between gap-3 p-2 bg-primary/5 rounded">
-                        <div className="flex items-center gap-3">
+                    {files.map((fileWithQty, index) => (
+                      <div key={index} className="flex items-center justify-between gap-3 p-3 bg-primary/5 rounded">
+                        <div className="flex items-center gap-3 flex-1">
                           <File className="h-6 w-6 text-primary flex-shrink-0" />
-                          <div className="text-left">
-                            <p className="font-medium text-sm">{file.name}</p>
+                          <div className="text-left flex-1">
+                            <p className="font-medium text-sm">{fileWithQty.file.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {(file.size / 1024 / 1024).toFixed(2)} MB
+                              {(fileWithQty.file.size / 1024 / 1024).toFixed(2)} MB
                             </p>
                           </div>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            removeFile(index);
-                          }}
-                          className="h-8 w-8 p-0"
-                        >
-                          ×
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor={`qty-${index}`} className="text-xs whitespace-nowrap">Qty:</Label>
+                            <Input
+                              id={`qty-${index}`}
+                              type="number"
+                              min="1"
+                              value={fileWithQty.quantity}
+                              onChange={(e) => updateFileQuantity(index, parseInt(e.target.value) || 1)}
+                              className="w-20 h-8"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              removeFile(index);
+                            }}
+                            className="h-8 w-8 p-0"
+                          >
+                            ×
+                          </Button>
+                        </div>
                       </div>
                     ))}
                     <div className="flex items-center justify-center gap-2 text-primary pt-2">

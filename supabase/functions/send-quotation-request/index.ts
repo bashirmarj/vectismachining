@@ -13,6 +13,7 @@ interface FileInfo {
   name: string;
   path: string;
   size: number;
+  quantity: number;
 }
 
 interface QuotationRequest {
@@ -21,7 +22,6 @@ interface QuotationRequest {
   email: string;
   phone: string;
   shippingAddress: string;
-  quantity: number;
   message?: string;
   files: FileInfo[];
   drawingFiles?: FileInfo[];
@@ -39,7 +39,6 @@ const handler = async (req: Request): Promise<Response> => {
       email, 
       phone, 
       shippingAddress,
-      quantity,
       message,
       files,
       drawingFiles
@@ -50,7 +49,6 @@ const handler = async (req: Request): Promise<Response> => {
       company, 
       email, 
       phone, 
-      quantity,
       filesCount: files.length,
       drawingFilesCount: drawingFiles?.length || 0
     });
@@ -112,8 +110,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Build file lists for email
     const cadFilesList = files.map((f, i) => 
-      `<li>${f.name} (${(f.size / 1024 / 1024).toFixed(2)} MB)</li>`
+      `<li>${f.name} - Quantity: ${f.quantity} (${(f.size / 1024 / 1024).toFixed(2)} MB)</li>`
     ).join('');
+
+    const totalQuantity = files.reduce((sum, f) => sum + f.quantity, 0);
 
     const drawingFilesList = drawingFiles && drawingFiles.length > 0
       ? drawingFiles.map((f, i) => 
@@ -137,7 +137,7 @@ const handler = async (req: Request): Promise<Response> => {
         <p style="white-space: pre-line;">${shippingAddress}</p>
         
         <h2>Order Details</h2>
-        <p><strong>Quantity:</strong> ${quantity}</p>
+        <p><strong>Total Parts Quantity:</strong> ${totalQuantity}</p>
         ${message ? `<p><strong>Additional Instructions:</strong></p><p style="white-space: pre-line;">${message}</p>` : ''}
         
         <h2>Files Attached</h2>
