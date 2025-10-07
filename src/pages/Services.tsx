@@ -8,6 +8,7 @@ import customPartsImg from "@/assets/custom-parts.jpg";
 import prototypeImg from "@/assets/prototype-design.jpg";
 import turnkeyImg from "@/assets/turnkey-solutions.jpg";
 import capabilitiesImg from "@/assets/capabilities-bg.jpg";
+import { PartUploadForm } from "@/components/PartUploadForm";
 
 const Services = () => {
   const services = [
@@ -48,20 +49,9 @@ const Services = () => {
         "Tight tolerance production",
         "Material versatility",
         "Assembly and integration services",
+        "Upload STEP files for instant quotation",
       ],
-    },
-    {
-      icon: Cog,
-      title: "Custom Part Manufacturing",
-      description: "Specialized manufacturing of custom parts with precision engineering and quality control for your unique applications.",
-      image: customPartsImg,
-      features: [
-        "Custom part design and fabrication",
-        "Advanced CNC machining",
-        "Quality inspection and testing",
-        "Small to large batch production",
-        "Material certification available",
-      ],
+      showUploadForm: true,
     },
     {
       icon: Wrench,
@@ -119,38 +109,46 @@ const Services = () => {
             const isEven = index % 2 === 0;
             
             return (
-              <div key={index} className={`grid md:grid-cols-2 gap-12 items-center ${!isEven ? 'md:flex-row-reverse' : ''}`}>
-                <div className={isEven ? 'md:order-1' : 'md:order-2'}>
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-14 h-14 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Icon className="h-7 w-7 text-primary-foreground" />
-                    </div>
-                    <h2 className="text-3xl font-bold">{service.title}</h2>
-                  </div>
-                  <p className="text-lg text-muted-foreground mb-6 leading-relaxed">
-                    {service.description}
-                  </p>
-                  <div className="space-y-3 mb-6">
-                    {service.features.map((feature, idx) => (
-                      <div key={idx} className="flex items-start gap-3">
-                        <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                        <span className="text-muted-foreground">{feature}</span>
+              <div key={index} id={service.title.toLowerCase().replace(/\s+/g, '-')} className="space-y-8">
+                <div className={`grid md:grid-cols-2 gap-12 items-center ${!isEven ? 'md:flex-row-reverse' : ''}`}>
+                  <div className={isEven ? 'md:order-1' : 'md:order-2'}>
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-14 h-14 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Icon className="h-7 w-7 text-primary-foreground" />
                       </div>
-                    ))}
+                      <h2 className="text-3xl font-bold">{service.title}</h2>
+                    </div>
+                    <p className="text-lg text-muted-foreground mb-6 leading-relaxed">
+                      {service.description}
+                    </p>
+                    <div className="space-y-3 mb-6">
+                      {service.features.map((feature, idx) => (
+                        <div key={idx} className="flex items-start gap-3">
+                          <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                          <span className="text-muted-foreground">{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <Button asChild>
+                      <Link to="/contact">
+                        Request a Quote <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
                   </div>
-                  <Button asChild>
-                    <Link to="/contact">
-                      Request a Quote <ArrowRight className="ml-2 h-4 w-4" />
-                    </Link>
-                  </Button>
+                  <div className={isEven ? 'md:order-2' : 'md:order-1'}>
+                    <img
+                      src={service.image}
+                      alt={service.title}
+                      className="rounded-lg shadow-2xl w-full"
+                    />
+                  </div>
                 </div>
-                <div className={isEven ? 'md:order-2' : 'md:order-1'}>
-                  <img
-                    src={service.image}
-                    alt={service.title}
-                    className="rounded-lg shadow-2xl w-full"
-                  />
-                </div>
+                
+                {service.showUploadForm && (
+                  <div className="mt-12">
+                    <PartUploadForm />
+                  </div>
+                )}
               </div>
             );
           })}
