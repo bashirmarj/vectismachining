@@ -3,15 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Upload, File, CheckCircle2, AlertCircle, ChevronsUpDown, Check, Eye } from "lucide-react";
+import { Upload, File, CheckCircle2, AlertCircle, ChevronsUpDown, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
-import { ModelViewerDialog } from "@/components/3d-viewer/ModelViewerDialog";
-import { canPreview, createObjectURL, revokeObjectURL } from "@/lib/3d-utils";
 
 const countryCodes = [
   { code: "+1", country: "Canada" },
@@ -40,7 +38,6 @@ const countryCodes = [
 interface FileWithQuantity {
   file: File;
   quantity: number;
-  previewUrl?: string;
 }
 
 export const PartUploadForm = () => {
@@ -57,8 +54,6 @@ export const PartUploadForm = () => {
   const [open, setOpen] = useState(false);
   const [rateLimitRemaining, setRateLimitRemaining] = useState<number | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<{ url: string; name: string; size: number } | null>(null);
   const { toast } = useToast();
 
   // Load rate limit state from localStorage on mount
@@ -126,10 +121,7 @@ export const PartUploadForm = () => {
         return;
       }
       
-      const filesWithQuantity = selectedFiles.map(file => {
-        const previewUrl = canPreview(file.name) ? createObjectURL(file) : undefined;
-        return { file, quantity: 1, previewUrl };
-      });
+      const filesWithQuantity = selectedFiles.map(file => ({ file, quantity: 1 }));
       setFiles(prev => [...prev, ...filesWithQuantity]);
     }
   };
@@ -156,32 +148,8 @@ export const PartUploadForm = () => {
   };
 
   const removeFile = (index: number) => {
-    const file = files[index];
-    if (file.previewUrl) {
-      revokeObjectURL(file.previewUrl);
-    }
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
-
-  const openViewer = (fileWithQty: FileWithQuantity) => {
-    if (fileWithQty.previewUrl) {
-      setSelectedFile({
-        url: fileWithQty.previewUrl,
-        name: fileWithQty.file.name,
-        size: fileWithQty.file.size,
-      });
-      setViewerOpen(true);
-    }
-  };
-
-  // Cleanup preview URLs on unmount
-  useEffect(() => {
-    return () => {
-      files.forEach(f => {
-        if (f.previewUrl) revokeObjectURL(f.previewUrl);
-      });
-    };
-  }, []);
 
   const updateFileQuantity = (index: number, quantity: number) => {
     setFiles(prev => prev.map((item, i) => 
@@ -546,21 +514,6 @@ export const PartUploadForm = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {fileWithQty.previewUrl && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                openViewer(fileWithQty);
-                              }}
-                              className="h-8 gap-1"
-                            >
-                              <Eye className="h-3 w-3" />
-                              <span className="text-xs">View 3D</span>
-                            </Button>
-                          )}
                           <div className="flex items-center gap-2">
                             <Label htmlFor={`qty-${index}`} className="text-xs whitespace-nowrap">Qty:</Label>
                             <Input
@@ -686,16 +639,6 @@ export const PartUploadForm = () => {
           </Button>
         </form>
       </CardContent>
-
-      {selectedFile && (
-        <ModelViewerDialog
-          open={viewerOpen}
-          onOpenChange={setViewerOpen}
-          fileUrl={selectedFile.url}
-          fileName={selectedFile.name}
-          fileSize={selectedFile.size}
-        />
-      )}
     </Card>
   );
 };
