@@ -254,16 +254,17 @@ export const PartUploadForm = () => {
       );
 
       console.log('Response received:', response);
+      console.log('Response error:', response.error);
+      console.log('Response data:', response.data);
 
-      // Check for rate limit error (429 status)
-      if (response.error) {
-        console.error('Response error:', response.error);
-        
-        // Try to parse the error data
-        const errorData = response.data;
-        
-        if (errorData && errorData.error === 'rate_limit_exceeded') {
-          const remainingSeconds = errorData.remainingSeconds || 300;
+      // When Supabase functions return non-200 status, error details are in response.data
+      const responseData = response.data;
+      const hasError = response.error || (responseData && responseData.error);
+      
+      if (hasError) {
+        // Check for rate limit error
+        if (responseData && responseData.error === 'rate_limit_exceeded') {
+          const remainingSeconds = responseData.remainingSeconds || 300;
           
           // Store in localStorage for persistence
           const expiry = Date.now() + (remainingSeconds * 1000);
@@ -289,10 +290,11 @@ export const PartUploadForm = () => {
           return;
         }
         
-        if (errorData && errorData.error === 'file_size_exceeded') {
+        // Check for file size error
+        if (responseData && responseData.error === 'file_size_exceeded') {
           toast({
             title: "Files too large",
-            description: `Total file size (${errorData.totalSizeMB?.toFixed(1)}MB) exceeds the limit. Please reduce file sizes.`,
+            description: `Total file size (${responseData.totalSizeMB?.toFixed(1)}MB) exceeds the limit. Please reduce file sizes.`,
             variant: "destructive",
             duration: 8000,
           });
@@ -300,7 +302,8 @@ export const PartUploadForm = () => {
           return;
         }
         
-        throw response.error;
+        // Generic error
+        throw new Error(responseData?.message || response.error?.message || 'Unknown error occurred');
       }
 
       const quoteNumber = response.data?.quoteNumber;
