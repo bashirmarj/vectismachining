@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Settings, Cpu, Award, Shield, ArrowRight } from "lucide-react";
+import { Settings, PenTool, Award, Shield, ArrowRight } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ const Capabilities = () => {
       ],
     },
     {
-      icon: Cpu,
+      icon: PenTool,
       title: "CAD/CAM Engineering",
       description: "Sophisticated design and programming capabilities for optimal manufacturing efficiency",
       specs: [
