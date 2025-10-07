@@ -187,12 +187,12 @@ const Capabilities = () => {
                 <h3 className="text-xl font-bold mb-4">Metals</h3>
                 <ul className="space-y-2">
                   {[
-                    "Aluminum (6061, 7075, etc.)",
-                    "Stainless Steel (304, 316, etc.)",
-                    "Titanium",
-                    "Brass & Copper",
-                    "Tool Steel",
-                    "Carbon Steel",
+                    "Aluminum alloys (6061, 7075)",
+                    "Stainless steel (304, 316)",
+                    "Tool steel (D2, A2, O1)",
+                    "Cold rolled steel (CRS)",
+                    "Hot rolled steel (HRS)",
+                    "Brass and copper",
                   ].map((material, idx) => (
                     <li key={idx} className="flex items-center gap-2 text-muted-foreground">
                       <div className="w-2 h-2 bg-primary rounded-full"></div>
