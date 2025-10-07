@@ -237,7 +237,7 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send email with attachments (now that we have the quote number)
+    // Send email to admin with attachments
     const emailResponse = await resend.emails.send({
       from: "Vectis Manufacturing <onboarding@resend.dev>",
       to: ["bashirmarj@gmail.com"],
@@ -269,7 +269,43 @@ const handler = async (req: Request): Promise<Response> => {
       attachments,
     });
 
-    console.log("Email sent successfully:", emailResponse);
+    console.log("Admin email sent successfully:", emailResponse);
+
+    // Send confirmation email to customer (without attachments)
+    const customerEmailResponse = await resend.emails.send({
+      from: "Vectis Manufacturing <onboarding@resend.dev>",
+      to: [email],
+      subject: `Quotation Request Received - ${submission.quote_number}`,
+      html: `
+        <h1>Thank you for your quotation request!</h1>
+        <p>Dear ${name},</p>
+        <p>We have successfully received your quotation request. Our team will review your requirements and get back to you as soon as possible.</p>
+        
+        <h2>Your Quote Number: ${submission.quote_number}</h2>
+        <p>Please save this number for your records. You can reference it when contacting us about your quote.</p>
+        
+        <h2>Order Summary</h2>
+        ${company ? `<p><strong>Company:</strong> ${company}</p>` : ''}
+        <p><strong>Phone:</strong> ${phone}</p>
+        <p><strong>Shipping Address:</strong></p>
+        <p style="white-space: pre-line;">${shippingAddress}</p>
+        <p><strong>Total Parts Quantity:</strong> ${totalQuantity}</p>
+        ${message ? `<p><strong>Your Message:</strong></p><p style="white-space: pre-line;">${message}</p>` : ''}
+        
+        <h2>Submitted Files</h2>
+        <p><strong>CAD Files (${files.length}):</strong></p>
+        <ul>${files.map(f => `<li>${f.name} - Quantity: ${f.quantity}</li>`).join('')}</ul>
+        ${drawingFiles && drawingFiles.length > 0 ? `<p><strong>Drawing Files (${drawingFiles.length}):</strong></p><ul>${drawingFiles.map(f => `<li>${f.name}</li>`).join('')}</ul>` : ''}
+        
+        <p>We will contact you within 24-48 hours with a detailed quotation.</p>
+        <p>If you have any questions, please don't hesitate to contact us.</p>
+        
+        <br>
+        <p>Best regards,<br><strong>Vectis Manufacturing</strong><br>Your Partner in Precision Manufacturing</p>
+      `,
+    });
+
+    console.log("Customer confirmation email sent successfully:", customerEmailResponse);
 
     return new Response(JSON.stringify({ 
       success: true, 
