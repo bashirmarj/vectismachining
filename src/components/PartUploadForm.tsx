@@ -239,9 +239,14 @@ export const PartUploadForm = () => {
         throw response.error;
       }
 
+      const quoteNumber = response.data?.quoteNumber;
+
       toast({
-        title: "Success!",
-        description: "Your quotation request has been submitted. We'll contact you soon.",
+        title: "✅ Success!",
+        description: quoteNumber 
+          ? `Your quotation request has been submitted with reference number: ${quoteNumber}. We'll contact you soon.`
+          : "Your quotation request has been submitted. We'll contact you soon.",
+        duration: 8000,
       });
 
       // Reset form

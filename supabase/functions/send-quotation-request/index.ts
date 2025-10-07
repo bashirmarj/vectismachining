@@ -165,13 +165,61 @@ const handler = async (req: Request): Promise<Response> => {
         ).join('')
       : null;
 
-    // Send email with attachments
+    // Record the submission with full customer details FIRST
+    const { data: submission, error: insertError } = await supabase
+      .from('quotation_submissions')
+      .insert({
+        email: email,
+        customer_name: name,
+        customer_company: company || null,
+        customer_phone: phone,
+        shipping_address: shippingAddress,
+        customer_message: message || null,
+        ip_hash: ipHash,
+      })
+      .select()
+      .single();
+
+    if (insertError || !submission) {
+      console.error('Error recording submission:', insertError);
+      throw new Error('Failed to create quotation record');
+    }
+
+    // Store file metadata in quote_line_items
+    const lineItems = [
+      ...files.map(file => ({
+        quotation_id: submission.id,
+        file_name: file.name,
+        file_path: `${submission.id}/cad/${file.name}`,
+        quantity: file.quantity,
+      })),
+      ...(drawingFiles || []).map(file => ({
+        quotation_id: submission.id,
+        file_name: file.name,
+        file_path: `${submission.id}/drawings/${file.name}`,
+        quantity: 1,
+      }))
+    ];
+
+    if (lineItems.length > 0) {
+      const { error: lineItemsError } = await supabase
+        .from('quote_line_items')
+        .insert(lineItems);
+
+      if (lineItemsError) {
+        console.error('Error storing line items:', lineItemsError);
+        // Don't throw - this is not critical for the submission
+      }
+    }
+
+    // Send email with attachments (now that we have the quote number)
     const emailResponse = await resend.emails.send({
       from: "Vectis Manufacturing <onboarding@resend.dev>",
       to: ["bashirmarj@gmail.com"],
-      subject: "New Part Quotation Request",
+      subject: `New Part Quotation Request - ${submission.quote_number}`,
       html: `
         <h1>New Part Quotation Request</h1>
+        <h2>Quote Number: ${submission.quote_number}</h2>
         <h2>Customer Information</h2>
         <p><strong>Name:</strong> ${name}</p>
         ${company ? `<p><strong>Company:</strong> ${company}</p>` : ''}
@@ -198,53 +246,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Email sent successfully:", emailResponse);
 
-    // Record the submission with full customer details
-    const { data: submission, error: insertError } = await supabase
-      .from('quotation_submissions')
-      .insert({
-        email: email,
-        customer_name: name,
-        customer_company: company || null,
-        customer_phone: phone,
-        shipping_address: shippingAddress,
-        customer_message: message || null,
-        ip_hash: ipHash,
-      })
-      .select()
-      .single();
-
-    if (insertError || !submission) {
-      console.error('Error recording submission:', insertError);
-    } else {
-      // Store file metadata in quote_line_items
-      const lineItems = [
-        ...files.map(file => ({
-          quotation_id: submission.id,
-          file_name: file.name,
-          file_path: `${submission.id}/cad/${file.name}`,
-          quantity: file.quantity,
-        })),
-        ...(drawingFiles || []).map(file => ({
-          quotation_id: submission.id,
-          file_name: file.name,
-          file_path: `${submission.id}/drawings/${file.name}`,
-          quantity: 1,
-        }))
-      ];
-
-      if (lineItems.length > 0) {
-        const { error: lineItemsError } = await supabase
-          .from('quote_line_items')
-          .insert(lineItems);
-
-        if (lineItemsError) {
-          console.error('Error storing line items:', lineItemsError);
-          // Don't throw - this is not critical for the submission
-        }
-      }
-    }
-
-    return new Response(JSON.stringify({ success: true, emailResponse }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      quoteNumber: submission.quote_number,
+      emailResponse 
+    }), {
       status: 200,
       headers: {
         "Content-Type": "application/json",
