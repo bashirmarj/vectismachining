@@ -11,7 +11,7 @@ const corsHeaders = {
 
 interface FileInfo {
   name: string;
-  path: string;
+  content: string;
   size: number;
   quantity: number;
 }
@@ -53,58 +53,24 @@ const handler = async (req: Request): Promise<Response> => {
       drawingFilesCount: drawingFiles?.length || 0
     });
 
-    // Download the files from Supabase Storage using service role key
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    
+    // Files are already base64 encoded from the client
     const attachments: Array<{ filename: string; content: string }> = [];
 
-    // Download all CAD files
+    // Add CAD files to attachments
     for (const file of files) {
-      const downloadUrl = `${supabaseUrl}/storage/v1/object/part-files/${file.path}`;
-      
-      const fileResponse = await fetch(downloadUrl, {
-        headers: {
-          'Authorization': `Bearer ${serviceRoleKey}`,
-        },
-      });
-
-      if (!fileResponse.ok) {
-        console.error(`Error downloading file ${file.name}:`, await fileResponse.text());
-        throw new Error(`Failed to download file ${file.name}: ${fileResponse.statusText}`);
-      }
-
-      const arrayBuffer = await fileResponse.arrayBuffer();
-      const buffer = new Uint8Array(arrayBuffer);
-      const base64File = btoa(String.fromCharCode(...buffer));
-      
       attachments.push({
         filename: file.name,
-        content: base64File,
+        content: file.content,
       });
     }
 
-    // Download all drawing files if provided
+    // Add drawing files if provided
     if (drawingFiles && drawingFiles.length > 0) {
       for (const drawingFile of drawingFiles) {
-        const drawingDownloadUrl = `${supabaseUrl}/storage/v1/object/part-files/${drawingFile.path}`;
-        
-        const drawingResponse = await fetch(drawingDownloadUrl, {
-          headers: {
-            'Authorization': `Bearer ${serviceRoleKey}`,
-          },
+        attachments.push({
+          filename: drawingFile.name,
+          content: drawingFile.content,
         });
-
-        if (drawingResponse.ok) {
-          const drawingArrayBuffer = await drawingResponse.arrayBuffer();
-          const drawingBuffer = new Uint8Array(drawingArrayBuffer);
-          const base64Drawing = btoa(String.fromCharCode(...drawingBuffer));
-          
-          attachments.push({
-            filename: drawingFile.name,
-            content: base64Drawing,
-          });
-        }
       }
     }
 

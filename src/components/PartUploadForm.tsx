@@ -133,63 +133,32 @@ export const PartUploadForm = () => {
     setUploading(true);
 
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        toast({
-          title: "Authentication required",
-          description: "Please sign in to upload files",
-          variant: "destructive",
-        });
-        setUploading(false);
-        return;
-      }
-
-      // Upload all CAD files to Supabase Storage
-      const uploadedFiles = [];
-      for (const fileWithQty of files) {
-        const fileName = `${Date.now()}-${fileWithQty.file.name}`;
-        const filePath = `${user.id}/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('part-files')
-          .upload(filePath, fileWithQty.file);
-
-        if (uploadError) {
-          throw uploadError;
-        }
-
-        uploadedFiles.push({
+      // Convert files to base64 for sending to edge function
+      const filePromises = files.map(async (fileWithQty) => {
+        const arrayBuffer = await fileWithQty.file.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        return {
           name: fileWithQty.file.name,
-          path: filePath,
+          content: base64,
           size: fileWithQty.file.size,
           quantity: fileWithQty.quantity
-        });
-      }
+        };
+      });
 
-      // Upload all drawing files if provided
-      const uploadedDrawingFiles = [];
-      for (const drawingFile of drawingFiles) {
-        const drawingFileName = `${Date.now()}-${drawingFile.name}`;
-        const drawingFilePath = `${user.id}/${drawingFileName}`;
+      const drawingFilePromises = drawingFiles.map(async (file) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        return {
+          name: file.name,
+          content: base64,
+          size: file.size
+        };
+      });
 
-        const { error: drawingUploadError } = await supabase.storage
-          .from('part-files')
-          .upload(drawingFilePath, drawingFile);
+      const uploadedFiles = await Promise.all(filePromises);
+      const uploadedDrawingFiles = await Promise.all(drawingFilePromises);
 
-        if (drawingUploadError) {
-          throw drawingUploadError;
-        }
-
-        uploadedDrawingFiles.push({
-          name: drawingFile.name,
-          path: drawingFilePath,
-          size: drawingFile.size
-        });
-      }
-
-      // Call edge function to send email
+      // Call edge function to handle everything
       const { error: functionError } = await supabase.functions.invoke(
         'send-quotation-request',
         {
