@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { Resend } from "npm:resend@2.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { Resend } from "https://esm.sh/resend@4.0.0";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 const supabase = createClient(
@@ -141,7 +141,7 @@ const handler = async (req: Request): Promise<Response> => {
       to: ['your-email@example.com'], // Replace with your business email
       subject: `New Contact Form Submission from ${name}`,
       html: emailHtml,
-      reply_to: email,
+      replyTo: email,
     });
 
     if (sendError) {
