@@ -12,13 +12,6 @@ import capabilitiesImg from "@/assets/capabilities-bg.jpg";
 const Services = () => {
   const services = [
     {
-      icon: Cog,
-      title: "Custom Manufacturing Projects",
-      description: "Complete manufacturing solutions tailored to your specific requirements, from initial concept through final production.",
-      image: capabilitiesImg,
-      link: "/services/custom-manufacturing",
-    },
-    {
       icon: Wrench,
       title: "Prototype Design & Development",
       description: "Transform your ideas into functional prototypes with our rapid prototyping capabilities and engineering expertise.",

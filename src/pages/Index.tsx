@@ -12,12 +12,6 @@ import turnkeyImg from "@/assets/turnkey-solutions.jpg";
 const Index = () => {
   const services = [
     {
-      icon: Cog,
-      title: "Custom Manufacturing",
-      description: "Precision manufacturing projects tailored to your exact specifications and requirements.",
-      image: customPartsImg,
-    },
-    {
       icon: Wrench,
       title: "Prototype Design",
       description: "Transform your concepts into functional prototypes with our expert engineering team.",
@@ -110,7 +104,7 @@ const Index = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {services.map((service, index) => {
               const Icon = service.icon;
               return (

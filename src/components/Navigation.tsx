@@ -26,9 +26,6 @@ const Navigation = () => {
     name: "Services",
     path: "/services",
     subItems: [{
-      name: "Custom Manufacturing",
-      path: "/services/custom-manufacturing"
-    }, {
       name: "Prototype Design",
       path: "/services/prototype-design"
     }, {
