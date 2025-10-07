@@ -33,11 +33,11 @@ const Navigation = () => {
       name: "Services", 
       path: "/services",
       subItems: [
-        { name: "Custom Manufacturing", path: "/services#custom-manufacturing" },
-        { name: "Prototype Development", path: "/services#prototype" },
-        { name: "Custom Part Manufacturing", path: "/services#custom-parts" },
-        { name: "Prototyping Services", path: "/services#prototyping" },
-        { name: "Turnkey Solutions", path: "/services#turnkey" },
+        { name: "Custom Manufacturing", path: "/services/custom-manufacturing" },
+        { name: "Prototype Design", path: "/services/prototype-design" },
+        { name: "Custom Parts & Assemblies", path: "/services/custom-parts" },
+        { name: "Prototyping Services", path: "/services/prototyping" },
+        { name: "Turnkey Solutions", path: "/services/turnkey-solutions" },
       ]
     },
     { 

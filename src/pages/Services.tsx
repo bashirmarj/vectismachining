@@ -1,14 +1,13 @@
 import { Link } from "react-router-dom";
-import { Cog, Wrench, Package, TrendingUp, ArrowRight, CheckCircle } from "lucide-react";
+import { Cog, Wrench, Package, TrendingUp, ArrowRight } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import customPartsImg from "@/assets/custom-parts.jpg";
 import prototypeImg from "@/assets/prototype-design.jpg";
 import turnkeyImg from "@/assets/turnkey-solutions.jpg";
 import capabilitiesImg from "@/assets/capabilities-bg.jpg";
-import { PartUploadForm } from "@/components/PartUploadForm";
 
 const Services = () => {
   const services = [
@@ -17,67 +16,35 @@ const Services = () => {
       title: "Custom Manufacturing Projects",
       description: "Complete manufacturing solutions tailored to your specific requirements, from initial concept through final production.",
       image: capabilitiesImg,
-      features: [
-        "Project planning and consultation",
-        "Design for manufacturability review",
-        "Quality assurance throughout production",
-        "On-time delivery guarantee",
-        "Full project documentation",
-      ],
+      link: "/services/custom-manufacturing",
     },
     {
       icon: Wrench,
       title: "Prototype Design & Development",
       description: "Transform your ideas into functional prototypes with our rapid prototyping capabilities and engineering expertise.",
       image: prototypeImg,
-      features: [
-        "3D CAD modeling and design",
-        "Rapid prototyping services",
-        "Design iteration support",
-        "Material selection guidance",
-        "Testing and validation",
-      ],
+      link: "/services/prototype-design",
     },
     {
       icon: Package,
       title: "Custom Parts & Assemblies",
       description: "Precision-manufactured components and assemblies engineered to meet your exact specifications and quality standards.",
       image: customPartsImg,
-      features: [
-        "CNC machining capabilities",
-        "Multi-axis manufacturing",
-        "Tight tolerance production",
-        "Material versatility",
-        "Assembly and integration services",
-        "Upload STEP files for instant quotation",
-      ],
-      showUploadForm: true,
+      link: "/services/custom-parts",
     },
     {
       icon: Wrench,
       title: "Prototyping Services",
       description: "Rapid prototyping solutions to bring your concepts to life quickly and efficiently for testing and validation.",
       image: prototypeImg,
-      features: [
-        "Fast turnaround prototyping",
-        "Multiple material options",
-        "Functional prototype testing",
-        "Design optimization support",
-        "Cost-effective iterations",
-      ],
+      link: "/services/prototyping",
     },
     {
       icon: TrendingUp,
       title: "Turnkey Solutions",
       description: "End-to-end manufacturing partnerships covering the entire product lifecycle from design to delivery.",
       image: turnkeyImg,
-      features: [
-        "Complete lifecycle management",
-        "Supply chain coordination",
-        "Quality control systems",
-        "Logistics and delivery",
-        "Post-delivery support",
-      ],
+      link: "/services/turnkey-solutions",
     },
   ];
 
@@ -101,57 +68,44 @@ const Services = () => {
         </div>
       </section>
 
-      {/* Services Detail */}
+      {/* Services Grid */}
       <section className="section-spacing bg-background">
-        <div className="container-custom space-y-20">
-          {services.map((service, index) => {
-            const Icon = service.icon;
-            const isEven = index % 2 === 0;
-            
-            return (
-              <div key={index} id={service.title.toLowerCase().replace(/\s+/g, '-')} className="space-y-8">
-                <div className={`grid md:grid-cols-2 gap-12 items-center ${!isEven ? 'md:flex-row-reverse' : ''}`}>
-                  <div className={isEven ? 'md:order-1' : 'md:order-2'}>
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="w-14 h-14 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
-                        <Icon className="h-7 w-7 text-primary-foreground" />
-                      </div>
-                      <h2 className="text-3xl font-bold">{service.title}</h2>
-                    </div>
-                    <p className="text-lg text-muted-foreground mb-6 leading-relaxed">
-                      {service.description}
-                    </p>
-                    <div className="space-y-3 mb-6">
-                      {service.features.map((feature, idx) => (
-                        <div key={idx} className="flex items-start gap-3">
-                          <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                          <span className="text-muted-foreground">{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <Button asChild>
-                      <Link to="/contact">
-                        Request a Quote <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </div>
-                  <div className={isEven ? 'md:order-2' : 'md:order-1'}>
+        <div className="container-custom">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {services.map((service, index) => {
+              const Icon = service.icon;
+              
+              return (
+                <Card key={index} className="overflow-hidden hover:shadow-xl transition-shadow">
+                  <div className="relative h-48 overflow-hidden">
                     <img
                       src={service.image}
                       alt={service.title}
-                      className="rounded-lg shadow-2xl w-full"
+                      className="w-full h-full object-cover"
                     />
                   </div>
-                </div>
-                
-                {service.showUploadForm && (
-                  <div className="mt-12">
-                    <PartUploadForm />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  <CardHeader>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Icon className="h-6 w-6 text-primary-foreground" />
+                      </div>
+                      <CardTitle className="text-xl">{service.title}</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground mb-6">
+                      {service.description}
+                    </p>
+                    <Button asChild className="w-full">
+                      <Link to={service.link}>
+                        Learn More <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         </div>
       </section>
 
