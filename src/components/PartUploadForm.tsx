@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,7 +52,30 @@ export const PartUploadForm = () => {
   const [drawingFiles, setDrawingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [rateLimitRemaining, setRateLimitRemaining] = useState<number | null>(null);
+  const [isRateLimited, setIsRateLimited] = useState(false);
   const { toast } = useToast();
+
+  // Countdown timer for rate limit
+  useEffect(() => {
+    if (rateLimitRemaining === null || rateLimitRemaining <= 0) {
+      setIsRateLimited(false);
+      setRateLimitRemaining(null);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setRateLimitRemaining(prev => {
+        if (prev === null || prev <= 1) {
+          setIsRateLimited(false);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [rateLimitRemaining]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
@@ -174,7 +197,7 @@ export const PartUploadForm = () => {
       const uploadedDrawingFiles = await Promise.all(drawingFilePromises);
 
       // Call edge function to handle everything
-      const { error: functionError } = await supabase.functions.invoke(
+      const response = await supabase.functions.invoke(
         'send-quotation-request',
         {
           body: {
@@ -190,8 +213,30 @@ export const PartUploadForm = () => {
         }
       );
 
-      if (functionError) {
-        throw functionError;
+      // Check for rate limit error (429 status)
+      if (response.error) {
+        // Try to parse the error data
+        const errorData = response.data;
+        if (errorData && errorData.error === 'rate_limit_exceeded') {
+          const remainingSeconds = errorData.remainingSeconds || 600;
+          
+          setRateLimitRemaining(remainingSeconds);
+          setIsRateLimited(true);
+
+          const minutes = Math.floor(remainingSeconds / 60);
+          const seconds = remainingSeconds % 60;
+          
+          toast({
+            title: "⏱️ Rate Limit Exceeded",
+            description: `Please wait ${minutes} minute${minutes !== 1 ? 's' : ''} ${seconds} second${seconds !== 1 ? 's' : ''} before submitting another request.`,
+            variant: "destructive",
+            duration: 10000,
+          });
+          
+          setUploading(false);
+          return;
+        }
+        throw response.error;
       }
 
       toast({
@@ -226,6 +271,13 @@ export const PartUploadForm = () => {
     }
   };
 
+  const formatTimeRemaining = () => {
+    if (!rateLimitRemaining) return '';
+    const minutes = Math.floor(rateLimitRemaining / 60);
+    const seconds = rateLimitRemaining % 60;
+    return `${minutes}m ${seconds}s`;
+  };
+
   return (
     <Card className="max-w-2xl mx-auto">
       <CardContent className="p-6">
@@ -235,6 +287,14 @@ export const PartUploadForm = () => {
             Upload your CAD file in any major format (STEP, SolidWorks, Inventor, CATIA, etc.) and optionally include a drawing file (DWG/DXF) for a detailed manufacturing quote.
           </p>
         </div>
+
+        {isRateLimited && rateLimitRemaining && (
+          <div className="mb-4 p-4 bg-destructive/10 border border-destructive rounded-lg">
+            <p className="text-sm font-medium text-destructive">
+              ⏱️ Please wait {formatTimeRemaining()} before submitting another request.
+            </p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid md:grid-cols-2 gap-4">
@@ -492,9 +552,11 @@ export const PartUploadForm = () => {
             </div>
           </div>
 
-          <Button type="submit" size="lg" className="w-full" disabled={uploading}>
+          <Button type="submit" size="lg" className="w-full" disabled={uploading || isRateLimited}>
             {uploading ? (
               <>Submitting Request...</>
+            ) : isRateLimited ? (
+              <>⏱️ Please wait {formatTimeRemaining()}</>
             ) : (
               <>
                 <Upload className="mr-2 h-4 w-4" />

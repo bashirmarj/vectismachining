@@ -1,7 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,12 +32,78 @@ interface QuotationRequest {
   drawingFiles?: FileInfo[];
 }
 
+// Helper function to hash IP address for privacy
+async function hashIP(ip: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(ip);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Extract IP address from request
+    const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || 
+                     req.headers.get('x-real-ip') || 
+                     'unknown';
+    
+    const ipHash = await hashIP(clientIP);
+    
+    console.log("Checking rate limit for IP:", { ipHash });
+
+    // Check for recent submissions from this IP (within 10 minutes)
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    
+    const { data: recentSubmissions, error: checkError } = await supabase
+      .from('quotation_submissions')
+      .select('submitted_at')
+      .eq('ip_hash', ipHash)
+      .gte('submitted_at', tenMinutesAgo)
+      .order('submitted_at', { ascending: false })
+      .limit(1);
+
+    if (checkError) {
+      console.error("Error checking rate limit:", checkError);
+    }
+
+    if (recentSubmissions && recentSubmissions.length > 0) {
+      const lastSubmission = new Date(recentSubmissions[0].submitted_at);
+      const nextAvailable = new Date(lastSubmission.getTime() + 10 * 60 * 1000);
+      const remainingMs = nextAvailable.getTime() - Date.now();
+      const remainingSeconds = Math.ceil(remainingMs / 1000);
+      const remainingMinutes = Math.floor(remainingSeconds / 60);
+      const remainingSecondsDisplay = remainingSeconds % 60;
+
+      console.log("Rate limit exceeded:", { 
+        lastSubmission, 
+        nextAvailable, 
+        remainingSeconds 
+      });
+
+      return new Response(
+        JSON.stringify({
+          error: 'rate_limit_exceeded',
+          message: 'Please wait before submitting another request',
+          remainingSeconds,
+          remainingMinutes,
+          remainingSecondsDisplay,
+          nextAvailableTime: nextAvailable.toISOString()
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
     const { 
       name, 
       company, 
@@ -119,6 +190,19 @@ const handler = async (req: Request): Promise<Response> => {
     });
 
     console.log("Email sent successfully:", emailResponse);
+
+    // Record this submission to enforce rate limiting
+    const { error: insertError } = await supabase
+      .from('quotation_submissions')
+      .insert({
+        ip_hash: ipHash,
+        email: email,
+        submitted_at: new Date().toISOString()
+      });
+
+    if (insertError) {
+      console.error("Error recording submission:", insertError);
+    }
 
     return new Response(JSON.stringify({ success: true, emailResponse }), {
       status: 200,

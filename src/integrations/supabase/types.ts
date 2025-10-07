@@ -38,6 +38,30 @@ export type Database = {
         }
         Relationships: []
       }
+      quotation_submissions: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          ip_hash: string
+          submitted_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          ip_hash: string
+          submitted_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          ip_hash?: string
+          submitted_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
