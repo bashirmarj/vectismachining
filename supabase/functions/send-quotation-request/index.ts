@@ -54,62 +54,12 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Extract IP address from request
+    // Extract IP address from request for logging (rate limiting disabled)
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || 
                      req.headers.get('x-real-ip') || 
                      'unknown';
     
     const ipHash = await hashIP(clientIP);
-    
-    console.log("Checking rate limit for IP:", { ipHash });
-
-    // Check for recent submissions from this IP (within 5 minutes)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    
-    const { data: recentSubmissions, error: checkError } = await supabase
-      .from('quotation_submissions')
-      .select('submitted_at')
-      .eq('ip_hash', ipHash)
-      .gte('submitted_at', fiveMinutesAgo)
-      .order('submitted_at', { ascending: false })
-      .limit(1);
-
-    if (checkError) {
-      console.error("Error checking rate limit:", checkError);
-    }
-
-    if (recentSubmissions && recentSubmissions.length > 0) {
-      const lastSubmission = new Date(recentSubmissions[0].submitted_at);
-      const nextAvailable = new Date(lastSubmission.getTime() + 5 * 60 * 1000);
-      const remainingMs = nextAvailable.getTime() - Date.now();
-      const remainingSeconds = Math.ceil(remainingMs / 1000);
-      const remainingMinutes = Math.floor(remainingSeconds / 60);
-      const remainingSecondsDisplay = remainingSeconds % 60;
-
-      console.log("Rate limit exceeded:", { 
-        lastSubmission, 
-        nextAvailable, 
-        remainingSeconds 
-      });
-
-      return new Response(
-        JSON.stringify({
-          error: 'rate_limit_exceeded',
-          message: 'Please wait before submitting another request',
-          remainingSeconds,
-          remainingMinutes,
-          remainingSecondsDisplay,
-          nextAvailableTime: nextAvailable.toISOString()
-        }),
-        {
-          status: 429,
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders,
-          },
-        }
-      );
-    }
 
     const { 
       name, 
