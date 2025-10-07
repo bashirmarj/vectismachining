@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Settings, Cpu, Gauge, Shield, ArrowRight } from "lucide-react";
+import { Settings, Cpu, Award, Shield, ArrowRight } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ const Capabilities = () => {
       ],
     },
     {
-      icon: Gauge,
+      icon: Award,
       title: "Quality Assurance",
       description: "Comprehensive inspection and testing ensuring every component meets specifications",
       specs: [
