@@ -154,33 +154,6 @@ const Capabilities = () => {
         </div>
       </section>
 
-      {/* Facility Stats */}
-      <section className="section-spacing bg-background">
-        <div className="container-custom">
-          <div className="bg-accent rounded-2xl p-12 text-center">
-            <h2 className="mb-12 text-white">Our Facility</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-              <div>
-                <div className="text-4xl font-bold text-primary mb-2">40,000</div>
-                <div className="text-gray-200">Sq. Ft. Facility</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold text-primary mb-2">50+</div>
-                <div className="text-gray-200">CNC Machines</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold text-primary mb-2">24/7</div>
-                <div className="text-gray-200">Production Capability</div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold text-primary mb-2">ISO</div>
-                <div className="text-gray-200">9001 Certified</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Materials Section */}
       <section className="section-spacing bg-muted">
         <div className="container-custom">
