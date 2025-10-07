@@ -63,14 +63,14 @@ const handler = async (req: Request): Promise<Response> => {
     
     console.log("Checking rate limit for IP:", { ipHash });
 
-    // Check for recent submissions from this IP (within 10 minutes)
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    // Check for recent submissions from this IP (within 5 minutes)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     
     const { data: recentSubmissions, error: checkError } = await supabase
       .from('quotation_submissions')
       .select('submitted_at')
       .eq('ip_hash', ipHash)
-      .gte('submitted_at', tenMinutesAgo)
+      .gte('submitted_at', fiveMinutesAgo)
       .order('submitted_at', { ascending: false })
       .limit(1);
 
@@ -80,7 +80,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (recentSubmissions && recentSubmissions.length > 0) {
       const lastSubmission = new Date(recentSubmissions[0].submitted_at);
-      const nextAvailable = new Date(lastSubmission.getTime() + 10 * 60 * 1000);
+      const nextAvailable = new Date(lastSubmission.getTime() + 5 * 60 * 1000);
       const remainingMs = nextAvailable.getTime() - Date.now();
       const remainingSeconds = Math.ceil(remainingMs / 1000);
       const remainingMinutes = Math.floor(remainingSeconds / 60);

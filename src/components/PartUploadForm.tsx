@@ -56,11 +56,29 @@ export const PartUploadForm = () => {
   const [isRateLimited, setIsRateLimited] = useState(false);
   const { toast } = useToast();
 
+  // Load rate limit state from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('quotation_rate_limit');
+    if (stored) {
+      const { expiry, remainingSeconds } = JSON.parse(stored);
+      const now = Date.now();
+      
+      if (now < expiry) {
+        const actualRemaining = Math.ceil((expiry - now) / 1000);
+        setRateLimitRemaining(actualRemaining);
+        setIsRateLimited(true);
+      } else {
+        localStorage.removeItem('quotation_rate_limit');
+      }
+    }
+  }, []);
+
   // Countdown timer for rate limit
   useEffect(() => {
     if (rateLimitRemaining === null || rateLimitRemaining <= 0) {
       setIsRateLimited(false);
       setRateLimitRemaining(null);
+      localStorage.removeItem('quotation_rate_limit');
       return;
     }
 
@@ -68,6 +86,7 @@ export const PartUploadForm = () => {
       setRateLimitRemaining(prev => {
         if (prev === null || prev <= 1) {
           setIsRateLimited(false);
+          localStorage.removeItem('quotation_rate_limit');
           return null;
         }
         return prev - 1;
@@ -218,91 +237,96 @@ export const PartUploadForm = () => {
       console.log('Files converted. Calling edge function...');
       console.log('Sending quotation request with', uploadedFiles.length, 'files');
 
-      // Call edge function with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      const response = await supabase.functions.invoke(
+        'send-quotation-request',
+        {
+          body: {
+            name,
+            company,
+            email,
+            phone: `${countryCode} ${phoneNumber}`,
+            shippingAddress,
+            message,
+            files: uploadedFiles,
+            drawingFiles: uploadedDrawingFiles,
+          },
+        }
+      );
 
-      try {
-        const response = await supabase.functions.invoke(
-          'send-quotation-request',
-          {
-            body: {
-              name,
-              company,
-              email,
-              phone: `${countryCode} ${phoneNumber}`,
-              shippingAddress,
-              message,
-              files: uploadedFiles,
-              drawingFiles: uploadedDrawingFiles,
-            },
-          }
-        );
+      console.log('Response received:', response);
 
-        clearTimeout(timeoutId);
-
-        console.log('Response received:', response);
-
-        // Check for rate limit error (429 status)
-        if (response.error) {
-          console.error('Response error:', response.error);
+      // Check for rate limit error (429 status)
+      if (response.error) {
+        console.error('Response error:', response.error);
+        
+        // Try to parse the error data
+        const errorData = response.data;
+        
+        if (errorData && errorData.error === 'rate_limit_exceeded') {
+          const remainingSeconds = errorData.remainingSeconds || 300;
           
-          // Try to parse the error data
-          const errorData = response.data;
-          if (errorData && errorData.error === 'rate_limit_exceeded') {
-            const remainingSeconds = errorData.remainingSeconds || 600;
-            
-            setRateLimitRemaining(remainingSeconds);
-            setIsRateLimited(true);
+          // Store in localStorage for persistence
+          const expiry = Date.now() + (remainingSeconds * 1000);
+          localStorage.setItem('quotation_rate_limit', JSON.stringify({
+            expiry,
+            remainingSeconds
+          }));
+          
+          setRateLimitRemaining(remainingSeconds);
+          setIsRateLimited(true);
 
-            const minutes = Math.floor(remainingSeconds / 60);
-            const seconds = remainingSeconds % 60;
-            
-            toast({
-              title: "⏱️ Rate Limit Exceeded",
-              description: `Please wait ${minutes} minute${minutes !== 1 ? 's' : ''} ${seconds} second${seconds !== 1 ? 's' : ''} before submitting another request.`,
-              variant: "destructive",
-              duration: 10000,
-            });
-            
-            setUploading(false);
-            return;
-          }
-          throw response.error;
+          const minutes = Math.floor(remainingSeconds / 60);
+          const seconds = remainingSeconds % 60;
+          
+          toast({
+            title: "⏱️ Rate Limit Exceeded",
+            description: `You've recently submitted a request. Please wait ${minutes} minute${minutes !== 1 ? 's' : ''} ${seconds} second${seconds !== 1 ? 's' : ''} before submitting another.`,
+            variant: "destructive",
+            duration: 10000,
+          });
+          
+          setUploading(false);
+          return;
         }
-
-        const quoteNumber = response.data?.quoteNumber;
-
-        toast({
-          title: "✅ Success!",
-          description: quoteNumber 
-            ? `Your quotation request has been submitted with reference number: ${quoteNumber}. We'll contact you soon.`
-            : "Your quotation request has been submitted. We'll contact you soon.",
-          duration: 8000,
-        });
-
-        // Reset form
-        setName("");
-        setCompany("");
-        setEmail("");
-        setCountryCode("+1");
-        setPhoneNumber("");
-        setShippingAddress("");
-        setMessage("");
-        setFiles([]);
-        setDrawingFiles([]);
-        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-        if (fileInput) fileInput.value = '';
-        const drawingInput = document.getElementById('drawing-upload') as HTMLInputElement;
-        if (drawingInput) drawingInput.value = '';
-
-      } catch (abortError) {
-        clearTimeout(timeoutId);
-        if (abortError.name === 'AbortError') {
-          throw new Error('Request timeout - files may be too large. Please try with smaller files or contact support.');
+        
+        if (errorData && errorData.error === 'file_size_exceeded') {
+          toast({
+            title: "Files too large",
+            description: `Total file size (${errorData.totalSizeMB?.toFixed(1)}MB) exceeds the limit. Please reduce file sizes.`,
+            variant: "destructive",
+            duration: 8000,
+          });
+          setUploading(false);
+          return;
         }
-        throw abortError;
+        
+        throw response.error;
       }
+
+      const quoteNumber = response.data?.quoteNumber;
+
+      toast({
+        title: "✅ Success!",
+        description: quoteNumber 
+          ? `Your quotation request has been submitted with reference number: ${quoteNumber}. We'll contact you soon.`
+          : "Your quotation request has been submitted. We'll contact you soon.",
+        duration: 8000,
+      });
+
+      // Reset form
+      setName("");
+      setCompany("");
+      setEmail("");
+      setCountryCode("+1");
+      setPhoneNumber("");
+      setShippingAddress("");
+      setMessage("");
+      setFiles([]);
+      setDrawingFiles([]);
+      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+      const drawingInput = document.getElementById('drawing-upload') as HTMLInputElement;
+      if (drawingInput) drawingInput.value = '';
 
     } catch (error: any) {
       console.error('Upload error:', error);
