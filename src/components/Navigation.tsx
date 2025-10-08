@@ -92,9 +92,9 @@ const Navigation = () => {
                 <span className="inline-block opacity-90 scale-95">M</span>
               </span>
             </div>
-            <div className="flex flex-col leading-none">
-              <span className="text-2xl font-bold text-primary-foreground">Vectis</span>
-              <span className="text-xs font-medium text-primary-foreground/80 tracking-wider">MACHINING</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-2xl font-bold text-primary-foreground tracking-wide">VECTIS</span>
+              <span className="text-sm font-semibold text-primary-foreground/70 tracking-widest -mt-0.5">Machining</span>
             </div>
           </Link>
 
