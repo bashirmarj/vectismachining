@@ -92,7 +92,10 @@ const Navigation = () => {
                 <span className="inline-block opacity-90 scale-95">M</span>
               </span>
             </div>
-            <span className="text-2xl font-bold text-primary-foreground">VECTIS</span>
+            <div className="flex flex-col leading-none">
+              <span className="text-2xl font-bold text-primary-foreground">Vectis</span>
+              <span className="text-xs font-medium text-primary-foreground/80 tracking-wider">MACHINING</span>
+            </div>
           </Link>
 
           {/* Desktop Navigation */}
