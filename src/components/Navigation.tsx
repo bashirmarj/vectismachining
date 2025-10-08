@@ -87,7 +87,7 @@ const Navigation = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
             <div className="w-10 h-10 bg-primary rounded flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xl">V</span>
+              <span className="text-primary-foreground font-bold text-xl">VM</span>
             </div>
             <span className="text-2xl font-bold text-primary-foreground">VECTIS</span>
           </Link>
