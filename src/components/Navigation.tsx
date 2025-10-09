@@ -178,11 +178,48 @@ const Navigation = () => {
               <div className="pt-4 px-4 space-y-3">
                 <a href="tel:+1234567890" className="flex items-center space-x-2 text-primary-foreground">
                   <Phone className="h-4 w-4" />
-                  <span className="font-semibold">(123) 456-7890</span>
+                  <span className="font-semibold">437-433-6300</span>
                 </a>
-                <Button asChild className="w-full">
+                <Button asChild className="w-full" onClick={() => setIsOpen(false)}>
                   <Link to="/contact">Get Quote</Link>
                 </Button>
+                {user ? (
+                  <>
+                    <Button 
+                      variant="outline" 
+                      className="w-full" 
+                      onClick={() => {
+                        setIsOpen(false);
+                        navigate('/admin');
+                      }}
+                    >
+                      <User className="mr-2 h-4 w-4" />
+                      Admin Dashboard
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      className="w-full" 
+                      onClick={() => {
+                        setIsOpen(false);
+                        handleSignOut();
+                      }}
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Sign Out
+                    </Button>
+                  </>
+                ) : (
+                  <Button 
+                    variant="outline" 
+                    className="w-full" 
+                    onClick={() => {
+                      setIsOpen(false);
+                      navigate('/auth');
+                    }}
+                  >
+                    Sign In
+                  </Button>
+                )}
               </div>
             </div>
           </div>}
