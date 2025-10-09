@@ -43,7 +43,7 @@ const Index = () => {
       <Navigation />
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      <section className="relative min-h-[calc(100vh-80px)] md:min-h-screen flex flex-col justify-center overflow-hidden pb-32 md:pb-0">
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: `url(${heroImage})` }}
@@ -51,7 +51,7 @@ const Index = () => {
           <div className="absolute inset-0 hero-gradient opacity-90"></div>
         </div>
         
-        <div className="container-custom relative z-10 pt-20">
+        <div className="container-custom relative z-10 py-20 md:pt-20 flex-1 flex items-center">
           <div className="max-w-4xl">
             <p className="text-primary font-semibold text-lg mb-4 uppercase tracking-wide">
               Precision Manufacturing Excellence
@@ -76,15 +76,15 @@ const Index = () => {
         </div>
 
         {/* Stats Bar */}
-        <div className="absolute bottom-0 left-0 right-0 bg-accent/95 backdrop-blur-sm">
-          <div className="container-custom py-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+        <div className="relative md:absolute bottom-0 left-0 right-0 bg-accent/95 backdrop-blur-sm z-20">
+          <div className="container-custom py-6 md:py-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
               {stats.map((stat, index) => (
                 <div key={index} className="text-center">
-                  <div className="text-3xl md:text-4xl font-bold text-primary mb-1">
+                  <div className="text-2xl md:text-3xl lg:text-4xl font-bold text-primary mb-1">
                     {stat.value}
                   </div>
-                  <div className="text-sm text-muted-foreground uppercase tracking-wide">
+                  <div className="text-xs md:text-sm text-muted-foreground uppercase tracking-wide">
                     {stat.label}
                   </div>
                 </div>
@@ -95,16 +95,16 @@ const Index = () => {
       </section>
 
       {/* Services Overview */}
-      <section className="section-spacing bg-background">
-        <div className="container-custom">
-          <div className="text-center max-w-3xl mx-auto mb-16">
+      <section className="py-12 md:py-20 lg:py-24 bg-background">
+        <div className="container-custom px-4">
+          <div className="text-center max-w-3xl mx-auto mb-12 md:mb-16">
             <h2 className="mb-4">Our Core Services</h2>
             <p className="text-lg text-muted-foreground">
               Comprehensive manufacturing solutions backed by decades of engineering expertise and state-of-the-art technology.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
             {services.map((service, index) => {
               const Icon = service.icon;
               return (
@@ -140,9 +140,9 @@ const Index = () => {
       </section>
 
       {/* Why Choose Vectis */}
-      <section className="section-spacing bg-muted">
-        <div className="container-custom">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
+      <section className="py-12 md:py-20 lg:py-24 bg-muted">
+        <div className="container-custom px-4">
+          <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
             <div>
               <h2 className="mb-6">Why Choose Vectis?</h2>
               <div className="space-y-6">
@@ -198,8 +198,8 @@ const Index = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="section-spacing bg-accent text-accent-foreground">
-        <div className="container-custom text-center">
+      <section className="py-12 md:py-20 lg:py-24 bg-accent text-accent-foreground">
+        <div className="container-custom px-4 text-center">
           <h2 className="mb-4 text-white">Ready to Start Your Project?</h2>
           <p className="text-xl text-gray-200 mb-8 max-w-2xl mx-auto">
             Let's discuss how Vectis can bring your manufacturing vision to life with precision and expertise.
