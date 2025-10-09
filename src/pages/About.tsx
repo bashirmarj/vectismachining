@@ -45,6 +45,14 @@ const About = () => {
             <p className="text-xl text-gray-200 leading-relaxed">
               For over 25 years, Vectis has been at the forefront of precision manufacturing, delivering innovative solutions that drive our clients' success.
             </p>
+            
+            {/* Brand Meaning Callout */}
+            <div className="mt-8 border-l-4 border-primary bg-white/5 backdrop-blur-sm rounded-r-lg p-6 max-w-2xl">
+              <h3 className="text-sm font-semibold text-primary mb-3 tracking-wide uppercase">The Vectis Name</h3>
+              <p className="text-gray-200 italic leading-relaxed">
+                Derived from the Latin word for lever, Vectis embodies precision, strength, and intelligent design. Like a lever that multiplies force, Vectis Manufacturing transforms engineering expertise into powerful, efficient solutions that drive performance and reliability.
+              </p>
+            </div>
           </div>
         </div>
       </section>
