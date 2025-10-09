@@ -93,7 +93,7 @@ const Navigation = () => {
               </span>
             </div>
             <span className="text-2xl font-bold text-primary-foreground">
-              VECTIS <span className="text-lg font-normal text-primary-foreground/80">Machining</span>
+              VECTIS <span className="text-lg font-normal text-primary-foreground/80">Manufacturing</span>
             </span>
           </Link>
 
