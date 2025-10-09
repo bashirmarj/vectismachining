@@ -2,7 +2,7 @@ import { Target, Award, Users, TrendingUp } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
-import aboutTeamImg from "@/assets/about-team.jpg";
+import aboutManufacturingImg from "@/assets/about-manufacturing.jpg";
 import capabilitiesImg from "@/assets/capabilities-bg.jpg";
 
 const About = () => {
@@ -63,8 +63,8 @@ const About = () => {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <img
-                src={aboutTeamImg}
-                alt="Vectis team"
+                src={aboutManufacturingImg}
+                alt="Precision manufacturing equipment at Vectis facility"
                 className="rounded-lg shadow-xl"
               />
             </div>
