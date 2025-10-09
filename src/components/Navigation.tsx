@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, Phone, ChevronDown, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NavigationMenu, NavigationMenuContent, NavigationMenuItem, NavigationMenuLink, NavigationMenuList, NavigationMenuTrigger } from "@/components/ui/navigation-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +22,18 @@ const Navigation = () => {
     await signOut();
     navigate('/');
   };
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
   const navItems = [{
     name: "Home",
     path: "/"
@@ -163,65 +176,67 @@ const Navigation = () => {
         </div>
 
         {/* Mobile Menu */}
-        {isOpen && <div className="md:hidden py-4 border-t border-border">
-            <div className="flex flex-col space-y-2">
-              {navItems.map(item => <div key={item.path}>
-                  <Link to={item.path} onClick={() => setIsOpen(false)} className={`flex items-center justify-between px-4 py-3 rounded-md text-sm font-semibold transition-colors ${isActive(item.path) ? "text-primary bg-primary/10" : "text-primary-foreground hover:text-primary hover:bg-primary/5"}`}>
-                    {item.name}
-                  </Link>
-                  {item.subItems && <div className="ml-4 mt-2 space-y-2">
-                      {item.subItems.map(subItem => <Link key={subItem.path} to={subItem.path} onClick={() => setIsOpen(false)} className="block px-4 py-2 text-sm text-muted-foreground hover:text-primary transition-colors">
-                          {subItem.name}
-                        </Link>)}
-                    </div>}
-                </div>)}
-              <div className="pt-4 px-4 space-y-3">
-                <a href="tel:+1234567890" className="flex items-center space-x-2 text-primary-foreground">
-                  <Phone className="h-4 w-4" />
-                  <span className="font-semibold">437-433-6300</span>
-                </a>
-                <Button asChild className="w-full" onClick={() => setIsOpen(false)}>
-                  <Link to="/contact">Get Quote</Link>
-                </Button>
-                {user ? (
-                  <>
+        {isOpen && <div className="md:hidden border-t border-border">
+            <ScrollArea className="h-[calc(100vh-5rem)]">
+              <div className="flex flex-col space-y-2 py-4">
+                {navItems.map(item => <div key={item.path}>
+                    <Link to={item.path} onClick={() => setIsOpen(false)} className={`flex items-center justify-between px-4 py-3 rounded-md text-sm font-semibold transition-colors ${isActive(item.path) ? "text-primary bg-primary/10" : "text-primary-foreground hover:text-primary hover:bg-primary/5"}`}>
+                      {item.name}
+                    </Link>
+                    {item.subItems && <div className="ml-4 mt-2 space-y-2">
+                        {item.subItems.map(subItem => <Link key={subItem.path} to={subItem.path} onClick={() => setIsOpen(false)} className="block px-4 py-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+                            {subItem.name}
+                          </Link>)}
+                      </div>}
+                  </div>)}
+                <div className="pt-4 px-4 space-y-3">
+                  <a href="tel:+1234567890" className="flex items-center space-x-2 text-primary-foreground">
+                    <Phone className="h-4 w-4" />
+                    <span className="font-semibold">437-433-6300</span>
+                  </a>
+                  <Button asChild className="w-full" onClick={() => setIsOpen(false)}>
+                    <Link to="/contact">Get Quote</Link>
+                  </Button>
+                  {user ? (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        className="w-full" 
+                        onClick={() => {
+                          setIsOpen(false);
+                          navigate('/admin');
+                        }}
+                      >
+                        <User className="mr-2 h-4 w-4" />
+                        Admin Dashboard
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        className="w-full" 
+                        onClick={() => {
+                          setIsOpen(false);
+                          handleSignOut();
+                        }}
+                      >
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Sign Out
+                      </Button>
+                    </>
+                  ) : (
                     <Button 
                       variant="outline" 
                       className="w-full" 
                       onClick={() => {
                         setIsOpen(false);
-                        navigate('/admin');
+                        navigate('/auth');
                       }}
                     >
-                      <User className="mr-2 h-4 w-4" />
-                      Admin Dashboard
+                      Sign In
                     </Button>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full" 
-                      onClick={() => {
-                        setIsOpen(false);
-                        handleSignOut();
-                      }}
-                    >
-                      <LogOut className="mr-2 h-4 w-4" />
-                      Sign Out
-                    </Button>
-                  </>
-                ) : (
-                  <Button 
-                    variant="outline" 
-                    className="w-full" 
-                    onClick={() => {
-                      setIsOpen(false);
-                      navigate('/auth');
-                    }}
-                  >
-                    Sign In
-                  </Button>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            </ScrollArea>
           </div>}
       </div>
     </nav>;
