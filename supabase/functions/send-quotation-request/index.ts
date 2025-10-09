@@ -194,7 +194,7 @@ const handler = async (req: Request): Promise<Response> => {
           // Admin email with attachments
           resend.emails.send({
             from: "Vectis Manufacturing <onboarding@resend.dev>",
-            to: ["bashirmarj@gmail.com"],
+            to: ["belmarj@vectismanufacturing.com"],
             subject: `New Part Quotation Request - ${submission.quote_number}`,
             html: `
               <!DOCTYPE html>
