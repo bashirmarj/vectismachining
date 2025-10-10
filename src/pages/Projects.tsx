@@ -19,32 +19,11 @@ const Projects = () => {
       details: ["Material: Titanium Ti-6Al-4V", "Tolerance: ±0.0005\"", "Quantity: 5,000 units/year", "Certification: AS9100"],
     },
     {
-      title: "Medical Device Prototype",
-      category: "Medical",
-      description: "Rapid prototyping and design iteration for an innovative surgical instrument, from concept to FDA-ready prototype in 6 weeks.",
-      image: prototypeImg,
-      details: ["Timeline: 6 weeks", "Iterations: 4 design cycles", "Material: 316L Stainless Steel", "Compliance: ISO 13485"],
-    },
-    {
       title: "Industrial Automation System",
       category: "Industrial",
       description: "Complete turnkey solution for custom automated assembly system, including design, manufacturing, integration, and commissioning.",
       image: turnkeyImg,
       details: ["Scope: End-to-end solution", "Timeline: 4 months", "Components: 200+ custom parts", "Result: 40% efficiency increase"],
-    },
-    {
-      title: "Automotive Tooling & Fixtures",
-      category: "Automotive",
-      description: "Custom tooling and fixture manufacturing for high-volume automotive production line, ensuring consistent quality and reduced cycle time.",
-      image: capabilitiesImg,
-      details: ["Application: Production line", "Material: Tool Steel", "Durability: 1M+ cycles", "Delivery: On-time, on-budget"],
-    },
-    {
-      title: "Defense Equipment Components",
-      category: "Defense",
-      description: "Classified component manufacturing for defense applications requiring highest precision and security clearance protocols.",
-      image: customPartsImg,
-      details: ["Classification: Restricted", "Quality: Zero defects", "Material: Various alloys", "Certification: ITAR compliant"],
     },
     {
       title: "Energy Sector Custom Parts",
@@ -124,8 +103,8 @@ const Projects = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {["Aerospace", "Medical", "Automotive", "Defense", "Energy", "Industrial"].map((industry) => (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
+            {["Aerospace", "Energy", "Industrial"].map((industry) => (
               <div
                 key={industry}
                 className="bg-background rounded-lg p-6 text-center font-semibold hover:bg-primary hover:text-primary-foreground transition-colors border-2 border-border"
