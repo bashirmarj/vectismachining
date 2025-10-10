@@ -96,14 +96,15 @@ const Navigation = () => {
   }];
   const isActive = (path: string) => location.pathname === path;
   return <nav className="fixed top-0 left-0 right-0 z-50 bg-accent/95 backdrop-blur-sm border-b border-border">
-      <div className="container-custom">
-        <div className="flex items-center justify-between h-20">
+      <div className="container mx-auto px-6">
+        <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-3">
-            <img src={logo} alt="Vectis Manufacturing Logo" className="h-16 w-auto" />
-            <span className="text-2xl font-bold text-primary-foreground">
-              VECTIS <span className="text-lg font-normal text-primary-foreground/80">Manufacturing</span>
-            </span>
+          <Link to="/" className="flex items-center gap-3">
+            <img src={logo} alt="Vectis Manufacturing Logo" className="h-10 w-auto" />
+            <div className="flex flex-col">
+              <span className="text-xl font-bold text-primary-foreground leading-tight">VECTIS</span>
+              <span className="text-sm text-primary-foreground/80 leading-tight">Manufacturing</span>
+            </div>
           </Link>
 
           {/* Desktop Navigation */}
@@ -133,11 +134,7 @@ const Navigation = () => {
           </NavigationMenu>
 
           {/* CTA Buttons */}
-          <div className="hidden md:flex items-center space-x-4">
-            <a href="tel:+1234567890" className="flex items-center space-x-2 text-primary-foreground hover:text-primary transition-colors">
-              <Phone className="h-4 w-4" />
-              <span className="font-semibold">437-433-6300</span>
-            </a>
+          <div className="hidden md:flex items-center gap-3">
             <Button asChild>
               <Link to="/contact">Get Quote</Link>
             </Button>
@@ -186,10 +183,6 @@ const Navigation = () => {
                       </div>}
                   </div>)}
                 <div className="pt-4 px-4 space-y-3">
-                  <a href="tel:+1234567890" className="flex items-center space-x-2 text-primary-foreground">
-                    <Phone className="h-4 w-4" />
-                    <span className="font-semibold">437-433-6300</span>
-                  </a>
                   <Button asChild className="w-full" onClick={() => setIsOpen(false)}>
                     <Link to="/contact">Get Quote</Link>
                   </Button>
