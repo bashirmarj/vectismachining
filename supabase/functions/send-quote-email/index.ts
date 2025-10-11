@@ -170,7 +170,7 @@ const handler = async (req: Request): Promise<Response> => {
     console.log('Sending email to:', customerEmail);
 
     const emailResponse = await resend.emails.send({
-      from: "Manufacturing Quote <belmarj@vectismanufacturing.com>",
+      from: "Manufacturing Quote <onboarding@resend.dev>",
       to: [customerEmail],
       subject: `Your Quote ${quoteNumber} is Ready`,
       html: emailHtml,
