@@ -193,7 +193,7 @@ const handler = async (req: Request): Promise<Response> => {
         const [emailResponse, customerEmailResponse] = await Promise.all([
           // Admin email with attachments
           resend.emails.send({
-            from: "Vectis Manufacturing <onboarding@resend.dev>",
+            from: "Vectis Manufacturing <belmarj@vectismanufacturing.com>",
             to: ["belmarj@vectismanufacturing.com"],
             subject: `New Part Quotation Request - ${submission.quote_number}`,
             html: `
@@ -269,7 +269,7 @@ const handler = async (req: Request): Promise<Response> => {
           }),
           // Customer confirmation email (without attachments)
           resend.emails.send({
-            from: "Vectis Manufacturing <onboarding@resend.dev>",
+            from: "Vectis Manufacturing <belmarj@vectismanufacturing.com>",
             to: [email],
             subject: `Quotation Request Received - ${submission.quote_number}`,
             html: `

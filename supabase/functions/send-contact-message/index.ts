@@ -104,7 +104,7 @@ const handler = async (req: Request): Promise<Response> => {
     `;
 
     const { error: sendError } = await resend.emails.send({
-      from: 'Vectis Manufacturing <onboarding@resend.dev>',
+      from: 'Vectis Manufacturing <belmarj@vectismanufacturing.com>',
       to: ['belmarj@vectismanufacturing.com'],
       subject: `New Contact Message from ${name}`,
       html: emailHtml,
