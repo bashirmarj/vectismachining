@@ -473,6 +473,9 @@ const PricingSettings = () => {
 
       const crossSections: CrossSection[] = [];
       const pricePerLb = material.price_per_lb || 1.0;
+      
+      // Detect if this is a round bar file based on filename
+      const isRoundBar = file.name.toLowerCase().includes('round');
 
       // Helper to parse values including fractions
       const parseValue = (val: any): number => {
@@ -509,28 +512,50 @@ const PricingSettings = () => {
         const col1 = parseValue(row[1]); // Second column (weight per foot or empty)
         const col2 = parseValue(row[2]); // Third column (weight per bar or empty)
 
-        // Detect thickness header: first column has value, but columns 1 and 2 are empty/zero
-        if (col0 > 0 && col1 === 0 && col2 === 0) {
-          currentThickness = col0;
-          console.log(`Found thickness header: ${currentThickness}`);
-          continue;
-        }
+        if (isRoundBar) {
+          // For round bars: first column is diameter, second is weight per foot
+          if (col0 > 0 && col1 > 0) {
+            const diameter = col0;
+            const weightPerFoot = col1;
+            const weightPerBar = col2 > 0 ? col2 : weightPerFoot * 20; // Round bars often come in 20ft lengths
 
-        // Data row: has thickness set, first column is width, and has weight data
-        if (currentThickness > 0 && col0 > 0 && col1 > 0) {
-          const width = col0;
-          const weightPerFoot = col1;
-          const weightPerBar = col2 > 0 ? col2 : weightPerFoot * 12;
+            console.log(`Adding circular cross-section: diameter=${diameter}, wt/ft=${weightPerFoot}`);
+            
+            crossSections.push({
+              width: diameter,
+              thickness: diameter, // For circular, thickness = diameter
+              weight_per_foot: weightPerFoot,
+              weight_per_bar: weightPerBar,
+              cost_per_inch: (weightPerFoot / 12) * pricePerLb,
+              shape: 'circular'
+            });
+          }
+        } else {
+          // For flat bars (rectangular): detect thickness header and width rows
+          // Detect thickness header: first column has value, but columns 1 and 2 are empty/zero
+          if (col0 > 0 && col1 === 0 && col2 === 0) {
+            currentThickness = col0;
+            console.log(`Found thickness header: ${currentThickness}`);
+            continue;
+          }
 
-          console.log(`Adding cross-section: thickness=${currentThickness}, width=${width}, wt/ft=${weightPerFoot}`);
-          
-          crossSections.push({
-            thickness: currentThickness,
-            width,
-            weight_per_foot: weightPerFoot,
-            weight_per_bar: weightPerBar,
-            cost_per_inch: (weightPerFoot / 12) * pricePerLb
-          });
+          // Data row: has thickness set, first column is width, and has weight data
+          if (currentThickness > 0 && col0 > 0 && col1 > 0) {
+            const width = col0;
+            const weightPerFoot = col1;
+            const weightPerBar = col2 > 0 ? col2 : weightPerFoot * 12;
+
+            console.log(`Adding rectangular cross-section: thickness=${currentThickness}, width=${width}, wt/ft=${weightPerFoot}`);
+            
+            crossSections.push({
+              thickness: currentThickness,
+              width,
+              weight_per_foot: weightPerFoot,
+              weight_per_bar: weightPerBar,
+              cost_per_inch: (weightPerFoot / 12) * pricePerLb,
+              shape: 'rectangular'
+            });
+          }
         }
       }
 
@@ -538,9 +563,8 @@ const PricingSettings = () => {
         setMaterials(prev =>
           prev.map(m => {
             if (m.id === materialId) {
-              // Combine existing and new cross-sections (defaulting to rectangular shape)
-              const newSections = crossSections.map(cs => ({ ...cs, shape: 'rectangular' as const }));
-              const combined = [...(m.cross_sections || []), ...newSections];
+              // Combine existing and new cross-sections (shapes already set)
+              const combined = [...(m.cross_sections || []), ...crossSections];
               
               // Sort by thickness first (ascending), then by width (ascending)
               const sorted = combined.sort((a, b) => {
@@ -556,9 +580,10 @@ const PricingSettings = () => {
           })
         );
         
+        const shapeType = isRoundBar ? 'circular (round bar)' : 'rectangular (flat bar)';
         toast({
           title: "Success!",
-          description: `Added ${crossSections.length} cross-sections. Total data sorted by thickness and width.`,
+          description: `Added ${crossSections.length} ${shapeType} cross-sections.`,
         });
       } else {
         toast({
