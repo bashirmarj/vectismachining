@@ -96,15 +96,26 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
       let bestCost = Infinity;
       
       for (const cs of crossSections) {
+        const isCircular = cs.shape === 'circular';
+        
         // Check if part can be made from this cross-section (considering rotation)
-        // The part's largest two dimensions must fit within the cross-section
         const partDims = [partWidthIn, partHeightIn, partDepthIn].sort((a, b) => b - a);
-        const csDims = [cs.width, cs.thickness].sort((a, b) => b - a);
         
-        // Check if the two largest part dimensions fit in the cross-section
-        const fitsOption1 = partDims[0] <= csDims[0] && partDims[1] <= csDims[1];
+        let fits = false;
         
-        if (fitsOption1) {
+        if (isCircular) {
+          // For circular cross-sections (round bars), check if part fits within circle diameter
+          // The two largest dimensions must fit diagonally within the circular cross-section
+          const diameter = cs.width; // For circular, width represents diameter
+          const diagonalRequired = Math.sqrt(partDims[0] ** 2 + partDims[1] ** 2);
+          fits = diagonalRequired <= diameter;
+        } else {
+          // For rectangular cross-sections (flat bars)
+          const csDims = [cs.width, cs.thickness].sort((a, b) => b - a);
+          fits = partDims[0] <= csDims[0] && partDims[1] <= csDims[1];
+        }
+        
+        if (fits) {
           // Calculate material needed (length is the third dimension)
           const lengthNeeded = partDims[2];
           const materialCostForCS = lengthNeeded * cs.cost_per_inch * inputs.quantity;
@@ -122,7 +133,10 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
       
       if (bestCrossSection) {
         materialCost = bestCrossSection.totalCost / inputs.quantity;
-        console.log(`Linear pricing: Selected ${bestCrossSection.width}" × ${bestCrossSection.thickness}" cross-section, ${bestCrossSection.lengthNeeded.toFixed(2)} inches × $${bestCrossSection.cost_per_inch}/inch = $${materialCost.toFixed(2)} per unit`);
+        const shapeLabel = bestCrossSection.shape === 'circular' 
+          ? `Ø ${bestCrossSection.width}"`
+          : `${bestCrossSection.width}" × ${bestCrossSection.thickness}"`;
+        console.log(`Linear pricing: Selected ${shapeLabel} cross-section, ${bestCrossSection.lengthNeeded.toFixed(2)} inches × $${bestCrossSection.cost_per_inch}/inch = $${materialCost.toFixed(2)} per unit`);
       } else {
         // No cross-section fits - use volume-based fallback
         console.log('No suitable cross-section found, using volume-based fallback');

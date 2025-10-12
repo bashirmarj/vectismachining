@@ -36,6 +36,7 @@ interface CrossSection {
   cost_per_inch: number;
   weight_per_foot?: number;
   weight_per_bar?: number;
+  shape?: 'rectangular' | 'circular'; // 'rectangular' is default for backward compatibility
 }
 
 interface SheetConfiguration {
@@ -448,7 +449,7 @@ const PricingSettings = () => {
       prev.map(m => m.id === materialId 
         ? { 
             ...m, 
-            cross_sections: [...(m.cross_sections || []), { width: 1.0, thickness: 0.5, cost_per_inch: 1.0, weight_per_foot: 0, weight_per_bar: 0 }] 
+            cross_sections: [...(m.cross_sections || []), { width: 1.0, thickness: 0.5, cost_per_inch: 1.0, weight_per_foot: 0, weight_per_bar: 0, shape: 'rectangular' }] 
           }
         : m
       )
@@ -537,8 +538,9 @@ const PricingSettings = () => {
         setMaterials(prev =>
           prev.map(m => {
             if (m.id === materialId) {
-              // Combine existing and new cross-sections
-              const combined = [...(m.cross_sections || []), ...crossSections];
+              // Combine existing and new cross-sections (defaulting to rectangular shape)
+              const newSections = crossSections.map(cs => ({ ...cs, shape: 'rectangular' as const }));
+              const combined = [...(m.cross_sections || []), ...newSections];
               
               // Sort by thickness first (ascending), then by width (ascending)
               const sorted = combined.sort((a, b) => {
@@ -839,17 +841,33 @@ const PricingSettings = () => {
     );
   };
 
-  const updateCrossSection = (materialId: string, index: number, field: keyof CrossSection, value: number) => {
+  const updateCrossSection = (materialId: string, index: number, field: keyof CrossSection, value: number | string) => {
     setMaterials(prev =>
-      prev.map(m => m.id === materialId
-        ? {
-            ...m,
-            cross_sections: (m.cross_sections || []).map((cs, i) =>
-              i === index ? { ...cs, [field]: value } : cs
-            )
+      prev.map(m => {
+        if (m.id === materialId && m.cross_sections) {
+          const updated = [...m.cross_sections];
+          const currentSection = updated[index];
+          
+          // If changing to circular, set thickness to match width (diameter)
+          if (field === 'shape' && value === 'circular') {
+            updated[index] = { ...currentSection, shape: 'circular', thickness: currentSection.width };
+          } 
+          // If already circular and updating width (diameter), also update thickness
+          else if (field === 'width' && currentSection.shape === 'circular') {
+            updated[index] = { ...currentSection, width: value as number, thickness: value as number };
           }
-        : m
-      )
+          // If changing from circular to rectangular, keep current values
+          else if (field === 'shape' && value === 'rectangular') {
+            updated[index] = { ...currentSection, shape: 'rectangular' };
+          }
+          else {
+            updated[index] = { ...currentSection, [field]: value };
+          }
+          
+          return { ...m, cross_sections: updated };
+        }
+        return m;
+      })
     );
   };
 
@@ -1479,7 +1497,10 @@ const PricingSettings = () => {
                                                 <SelectContent className="bg-background z-50">
                                                   {(material.cross_sections || []).map((section, idx) => (
                                                     <SelectItem key={idx} value={idx.toString()}>
-                                                      {decimalToFraction(section.thickness)}" × {decimalToFraction(section.width)}" - ${section.cost_per_inch.toFixed(4)}/inch
+                                                      {section.shape === 'circular' 
+                                                        ? `Ø ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`
+                                                        : `${decimalToFraction(section.thickness)}" × ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`
+                                                      }
                                                     </SelectItem>
                                                   ))}
                                                 </SelectContent>
@@ -1517,16 +1538,37 @@ const PricingSettings = () => {
                                                     </Button>
                                                   </div>
 
-                                                  <div className="grid grid-cols-3 gap-4">
-                                                    <div className="space-y-2">
-                                                      <Label className="text-sm font-medium">Thickness</Label>
-                                                      <div className="text-lg font-semibold">{decimalToFraction(section.thickness)}"</div>
-                                                    </div>
+                                                  <div className="mb-4 space-y-2">
+                                                    <Label className="text-sm font-medium">Shape</Label>
+                                                    <select
+                                                      value={section.shape || 'rectangular'}
+                                                      onChange={(e) => updateCrossSection(material.id, selectedIdx, 'shape', e.target.value as 'rectangular' | 'circular')}
+                                                      className="w-full px-3 py-2 border rounded-md bg-background"
+                                                    >
+                                                      <option value="rectangular">Rectangular (Flat Bar)</option>
+                                                      <option value="circular">Circular (Round Bar)</option>
+                                                    </select>
+                                                  </div>
 
-                                                    <div className="space-y-2">
-                                                      <Label className="text-sm font-medium">Width</Label>
-                                                      <div className="text-lg font-semibold">{decimalToFraction(section.width)}"</div>
-                                                    </div>
+                                                  <div className="grid grid-cols-3 gap-4">
+                                                    {section.shape === 'circular' ? (
+                                                      <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">Diameter (Ø)</Label>
+                                                        <div className="text-lg font-semibold">Ø {decimalToFraction(section.width)}"</div>
+                                                      </div>
+                                                    ) : (
+                                                      <>
+                                                        <div className="space-y-2">
+                                                          <Label className="text-sm font-medium">Thickness</Label>
+                                                          <div className="text-lg font-semibold">{decimalToFraction(section.thickness)}"</div>
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                          <Label className="text-sm font-medium">Width</Label>
+                                                          <div className="text-lg font-semibold">{decimalToFraction(section.width)}"</div>
+                                                        </div>
+                                                      </>
+                                                    )}
 
                                                     <div className="space-y-2">
                                                       <Label className="text-sm font-medium">Weight/Foot (lbs)</Label>
