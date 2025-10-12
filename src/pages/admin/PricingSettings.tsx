@@ -328,11 +328,19 @@ const PricingSettings = () => {
     // Determine category_id based on active tab
     const defaultCategoryId = activeTab === 'uncategorized' ? null : (activeTab || null);
     
+    // Generate unique material name
+    let newMaterialName = 'New Material';
+    let counter = 1;
+    while (materials.some(m => m.material_name === newMaterialName)) {
+      counter++;
+      newMaterialName = `New Material ${counter}`;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('material_costs')
         .insert({
-          material_name: 'New Material',
+          material_name: newMaterialName,
           cost_per_cubic_cm: 0.1,
           cost_per_square_cm: 0.01,
           density: 1.0,
@@ -368,11 +376,12 @@ const PricingSettings = () => {
     } catch (error: any) {
       toast({
         title: 'Error',
-        description: 'Failed to add material',
+        description: error.message || 'Failed to add material',
         variant: 'destructive',
       });
     }
   };
+
 
   const addNewCategory = async () => {
     const categoryName = prompt('Enter new category name:');
