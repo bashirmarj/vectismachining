@@ -1556,7 +1556,7 @@ const PricingSettings = () => {
                                                             const widthDisplay = width > 0 ? decimalToFraction(width) : 'N/A';
                                                             const costDisplay = costPerInch > 0 ? `$${costPerInch.toFixed(4)}/inch` : 'N/A';
                                                             return (
-                                                              <div key={idx} className="flex items-center group hover:bg-accent">
+                                                              <div key={`rect-${idx}`} className="flex items-center group hover:bg-accent">
                                                                 <SelectItem value={idx.toString()} className="flex-1 cursor-pointer">
                                                                   {`${thicknessDisplay}" × ${widthDisplay}" - ${costDisplay}`}
                                                                 </SelectItem>
@@ -1564,8 +1564,9 @@ const PricingSettings = () => {
                                                                   type="button"
                                                                   variant="ghost"
                                                                   size="sm"
-                                                                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity mr-2"
                                                                   onClick={(e) => {
+                                                                    e.preventDefault();
                                                                     e.stopPropagation();
                                                                     removeCrossSection(material.id, idx);
                                                                     setSelectedCrossSections(prev => {
@@ -1600,7 +1601,7 @@ const PricingSettings = () => {
                                                             const diameterDisplay = diameter > 0 ? decimalToFraction(diameter) : 'N/A';
                                                             const costDisplay = costPerInch > 0 ? `$${costPerInch.toFixed(4)}/inch` : 'N/A';
                                                             return (
-                                                              <div key={idx} className="flex items-center group hover:bg-accent">
+                                                              <div key={`circ-${idx}`} className="flex items-center group hover:bg-accent">
                                                                 <SelectItem value={idx.toString()} className="flex-1 cursor-pointer">
                                                                   {`Ø ${diameterDisplay}" - ${costDisplay}`}
                                                                 </SelectItem>
@@ -1608,8 +1609,9 @@ const PricingSettings = () => {
                                                                   type="button"
                                                                   variant="ghost"
                                                                   size="sm"
-                                                                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity mr-2"
                                                                   onClick={(e) => {
+                                                                    e.preventDefault();
                                                                     e.stopPropagation();
                                                                     removeCrossSection(material.id, idx);
                                                                     setSelectedCrossSections(prev => {
