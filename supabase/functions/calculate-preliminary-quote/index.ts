@@ -82,16 +82,59 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
   let materialCost = 0;
   
   if (materialData.pricing_method === 'linear_inch') {
-    // For linear inch pricing, use first cross-section as default
-    // In a real scenario, you'd match dimensions or let user select
+    // For linear inch pricing, find the best cross-section based on part dimensions
     const crossSections = materialData.cross_sections as any[] || [];
-    if (crossSections.length > 0) {
-      // Estimate length from volume (this is simplified - real CAD analysis would provide actual length)
+    if (crossSections.length > 0 && inputs.part_width_cm && inputs.part_height_cm && inputs.part_depth_cm) {
+      // Convert part dimensions from cm to inches
+      const partWidthIn = inputs.part_width_cm / 2.54;
+      const partHeightIn = inputs.part_height_cm / 2.54;
+      const partDepthIn = inputs.part_depth_cm / 2.54;
+      
+      // Find the smallest cross-section that can accommodate the part
+      // Assuming the part needs to fit within the cross-section dimensions
+      let bestCrossSection = null;
+      let bestCost = Infinity;
+      
+      for (const cs of crossSections) {
+        // Check if part can be made from this cross-section (considering rotation)
+        // The part's largest two dimensions must fit within the cross-section
+        const partDims = [partWidthIn, partHeightIn, partDepthIn].sort((a, b) => b - a);
+        const csDims = [cs.width, cs.thickness].sort((a, b) => b - a);
+        
+        // Check if the two largest part dimensions fit in the cross-section
+        const fitsOption1 = partDims[0] <= csDims[0] && partDims[1] <= csDims[1];
+        
+        if (fitsOption1) {
+          // Calculate material needed (length is the third dimension)
+          const lengthNeeded = partDims[2];
+          const materialCostForCS = lengthNeeded * cs.cost_per_inch * inputs.quantity;
+          
+          if (materialCostForCS < bestCost) {
+            bestCost = materialCostForCS;
+            bestCrossSection = {
+              ...cs,
+              lengthNeeded,
+              totalCost: materialCostForCS
+            };
+          }
+        }
+      }
+      
+      if (bestCrossSection) {
+        materialCost = bestCrossSection.totalCost / inputs.quantity;
+        console.log(`Linear pricing: Selected ${bestCrossSection.width}" × ${bestCrossSection.thickness}" cross-section, ${bestCrossSection.lengthNeeded.toFixed(2)} inches × $${bestCrossSection.cost_per_inch}/inch = $${materialCost.toFixed(2)} per unit`);
+      } else {
+        // No cross-section fits - use volume-based fallback
+        console.log('No suitable cross-section found, using volume-based fallback');
+        materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
+      }
+    } else if (crossSections.length > 0) {
+      // Fallback to first cross-section if no part dimensions available
       const avgCrossSection = crossSections[0];
       const crossSectionArea = avgCrossSection.width * avgCrossSection.thickness; // in square inches
       const estimatedLengthInches = (inputs.volume_cm3 * 0.0610237) / crossSectionArea; // convert cm³ to cubic inches
       materialCost = estimatedLengthInches * avgCrossSection.cost_per_inch;
-      console.log(`Linear pricing: ${estimatedLengthInches.toFixed(2)} inches × $${avgCrossSection.cost_per_inch}/inch = $${materialCost.toFixed(2)}`);
+      console.log(`Linear pricing (no dimensions): ${estimatedLengthInches.toFixed(2)} inches × $${avgCrossSection.cost_per_inch}/inch = $${materialCost.toFixed(2)}`);
     } else {
       // Fallback to weight-based if no cross-sections defined
       materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
