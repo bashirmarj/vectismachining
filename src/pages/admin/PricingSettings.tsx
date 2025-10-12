@@ -1702,9 +1702,10 @@ const PricingSettings = () => {
                                                       <Input
                                                         type="number"
                                                         step="0.0001"
-                                                        value={section.weight_per_foot || 0}
+                                                        value={section.weight_per_foot || ''}
+                                                        placeholder="0"
                                                         onChange={(e) => {
-                                                          const weight = parseFloat(e.target.value);
+                                                          const weight = parseFloat(e.target.value) || 0;
                                                           updateCrossSection(material.id, selectedIdx, 'weight_per_foot', weight);
                                                           const pricePerLb = material.price_per_lb || 1.0;
                                                           updateCrossSection(material.id, selectedIdx, 'cost_per_inch', (weight / 12) * pricePerLb);
@@ -1717,9 +1718,10 @@ const PricingSettings = () => {
                                                       <Input
                                                         type="number"
                                                         step="0.0001"
-                                                        value={section.weight_per_bar || 0}
+                                                        value={section.weight_per_bar || ''}
+                                                        placeholder="0"
                                                         onChange={(e) =>
-                                                          updateCrossSection(material.id, selectedIdx, 'weight_per_bar', parseFloat(e.target.value))
+                                                          updateCrossSection(material.id, selectedIdx, 'weight_per_bar', parseFloat(e.target.value) || 0)
                                                         }
                                                       />
                                                       <p className="text-xs text-muted-foreground">12-ft bar weight</p>
@@ -1728,12 +1730,11 @@ const PricingSettings = () => {
                                                     <div className="col-span-2 space-y-2">
                                                       <Label className="text-sm font-medium">Cost per Inch ($)</Label>
                                                       <Input
-                                                        type="number"
-                                                        step="0.0001"
-                                                        value={section.cost_per_inch.toFixed(4)}
+                                                        type="text"
+                                                        value={section.cost_per_inch > 0 ? `$${section.cost_per_inch.toFixed(4)}` : 'N/A'}
                                                         disabled
                                                         className="bg-muted"
-                                                        title={`Calculated: (${section.weight_per_foot || 0} lbs/ft ÷ 12) × $${material.price_per_lb || 1.0}/lb`}
+                                                        title={section.weight_per_foot > 0 ? `Calculated: (${section.weight_per_foot} lbs/ft ÷ 12) × $${material.price_per_lb || 1.0}/lb` : 'Enter weight per foot to calculate'}
                                                       />
                                                       <p className="text-xs text-muted-foreground">Auto-calculated from weight and price per pound</p>
                                                     </div>
