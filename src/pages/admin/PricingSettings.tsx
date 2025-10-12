@@ -32,6 +32,13 @@ interface CrossSection {
   cost_per_inch: number;
 }
 
+interface MaterialCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  display_order: number;
+}
+
 interface MaterialCost {
   id: string;
   material_name: string;
@@ -42,6 +49,7 @@ interface MaterialCost {
   is_active: boolean;
   pricing_method?: string;
   cross_sections?: CrossSection[];
+  category_id?: string | null;
 }
 
 const PricingSettings = () => {
@@ -51,6 +59,7 @@ const PricingSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [processes, setProcesses] = useState<ManufacturingProcess[]>([]);
+  const [categories, setCategories] = useState<MaterialCategory[]>([]);
   const [materials, setMaterials] = useState<MaterialCost[]>([]);
 
   useEffect(() => {
@@ -88,15 +97,18 @@ const PricingSettings = () => {
   const fetchPricingData = async () => {
     setLoading(true);
     try {
-      const [processesResponse, materialsResponse] = await Promise.all([
+      const [processesResponse, materialsResponse, categoriesResponse] = await Promise.all([
         supabase.from('manufacturing_processes').select('*').order('name'),
         supabase.from('material_costs').select('*').order('material_name'),
+        supabase.from('material_categories').select('*').order('display_order'),
       ]);
 
       if (processesResponse.error) throw processesResponse.error;
       if (materialsResponse.error) throw materialsResponse.error;
+      if (categoriesResponse.error) throw categoriesResponse.error;
 
       setProcesses(processesResponse.data || []);
+      setCategories(categoriesResponse.data || []);
       
       // Parse finish_options and cross_sections from JSONB to array
       const parsedMaterials = (materialsResponse.data || []).map(m => ({
@@ -105,7 +117,8 @@ const PricingSettings = () => {
         pricing_method: m.pricing_method || 'weight',
         cross_sections: Array.isArray(m.cross_sections) 
           ? (m.cross_sections as unknown as CrossSection[])
-          : []
+          : [],
+        category_id: m.category_id || null
       }));
       setMaterials(parsedMaterials);
     } catch (error: any) {
@@ -180,6 +193,7 @@ const PricingSettings = () => {
         is_active: m.is_active,
         pricing_method: m.pricing_method || 'weight',
         cross_sections: (m.cross_sections || []) as any,
+        category_id: m.category_id || null,
       }));
 
       for (const update of updates) {
@@ -250,6 +264,7 @@ const PricingSettings = () => {
           is_active: true,
           pricing_method: 'weight',
           cross_sections: [],
+          category_id: null,
         })
         .select()
         .single();
@@ -262,7 +277,8 @@ const PricingSettings = () => {
           pricing_method: data.pricing_method || 'weight',
           cross_sections: Array.isArray(data.cross_sections) 
             ? (data.cross_sections as unknown as CrossSection[])
-            : []
+            : [],
+          category_id: data.category_id || null
         }]);
         toast({
           title: 'Success',
@@ -273,6 +289,38 @@ const PricingSettings = () => {
       toast({
         title: 'Error',
         description: 'Failed to add material',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const addNewCategory = async () => {
+    const categoryName = prompt('Enter new category name:');
+    if (!categoryName?.trim()) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('material_categories')
+        .insert({
+          name: categoryName.trim(),
+          description: null,
+          display_order: categories.length + 1,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setCategories(prev => [...prev, data].sort((a, b) => a.display_order - b.display_order));
+        toast({
+          title: 'Success',
+          description: 'New category added',
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: 'Failed to add category',
         variant: 'destructive',
       });
     }
@@ -531,15 +579,38 @@ const PricingSettings = () => {
                         Set material pricing per volume and surface area
                       </CardDescription>
                     </div>
-                    <Button onClick={addNewMaterial} size="sm">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Material
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button onClick={addNewCategory} variant="outline" size="sm">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Category
+                      </Button>
+                      <Button onClick={addNewMaterial} size="sm">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Material
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Accordion type="multiple" className="w-full">
-                    {materials.map((material) => (
+                  {/* Group materials by category */}
+                  {[...categories, { id: 'uncategorized', name: 'Uncategorized', description: null, display_order: 999 }].map((category) => {
+                    const categoryMaterials = materials.filter(m => 
+                      category.id === 'uncategorized' ? !m.category_id : m.category_id === category.id
+                    );
+                    
+                    if (categoryMaterials.length === 0) return null;
+                    
+                    return (
+                      <div key={category.id} className="mb-8">
+                        <div className="mb-3 pb-2 border-b">
+                          <h3 className="text-lg font-semibold">{category.name}</h3>
+                          {category.description && (
+                            <p className="text-sm text-muted-foreground">{category.description}</p>
+                          )}
+                        </div>
+                        
+                        <Accordion type="multiple" className="w-full">
+                          {categoryMaterials.map((material) => (
                       <AccordionItem key={material.id} value={material.id}>
                         <AccordionTrigger className="hover:no-underline">
                           <div className="flex items-center gap-3 w-full pr-4">
@@ -576,6 +647,29 @@ const PricingSettings = () => {
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
+                            </div>
+
+                            <div className="mb-4">
+                              <Label htmlFor={`category-${material.id}`}>Category</Label>
+                              <Select
+                                value={material.category_id || 'uncategorized'}
+                                onValueChange={(value) => 
+                                  updateMaterial(material.id, 'category_id', value === 'uncategorized' ? null : value)
+                                }
+                              >
+                                <SelectTrigger id={`category-${material.id}`}>
+                                  <SelectValue placeholder="Select category" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-background z-50">
+                                  <SelectItem value="uncategorized">Uncategorized</SelectItem>
+                                  {categories.map(cat => (
+                                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Group materials by type for better organization
+                              </p>
                             </div>
 
                             <div className="mb-4">
@@ -799,9 +893,12 @@ const PricingSettings = () => {
                             </div>
                           </div>
                         </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
+                            </AccordionItem>
+                          ))}
+                        </Accordion>
+                      </div>
+                    );
+                  })}
 
                   <div className="flex justify-end pt-6">
                     <Button onClick={saveMaterials} disabled={saving}>

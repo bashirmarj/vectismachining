@@ -68,8 +68,33 @@ export type Database = {
         }
         Relationships: []
       }
+      material_categories: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          display_order: number | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          display_order?: number | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          display_order?: number | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       material_costs: {
         Row: {
+          category_id: string | null
           cost_per_cubic_cm: number
           cost_per_square_cm: number
           created_at: string | null
@@ -82,6 +107,7 @@ export type Database = {
           pricing_method: string | null
         }
         Insert: {
+          category_id?: string | null
           cost_per_cubic_cm: number
           cost_per_square_cm: number
           created_at?: string | null
@@ -94,6 +120,7 @@ export type Database = {
           pricing_method?: string | null
         }
         Update: {
+          category_id?: string | null
           cost_per_cubic_cm?: number
           cost_per_square_cm?: number
           created_at?: string | null
@@ -105,7 +132,15 @@ export type Database = {
           material_name?: string
           pricing_method?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "material_costs_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "material_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
