@@ -468,18 +468,20 @@ const PricingSettings = () => {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as any[][];
 
       const crossSections: CrossSection[] = [];
       const pricePerLb = material.price_per_lb || 1.0;
 
       // Helper to parse values including fractions
       const parseValue = (val: any): number => {
+        if (val === null || val === undefined || val === '') return 0;
         if (typeof val === 'number') return val;
         if (typeof val === 'string') {
           const trimmed = val.trim();
+          if (!trimmed) return 0;
           // Handle fractions like "1/16", "3/32"
-          if (trimmed.includes('/')) {
+          if (trimmed.includes('/') && !trimmed.includes(' ')) {
             const parts = trimmed.split('/');
             return parseFloat(parts[0]) / parseFloat(parts[1]);
           }
@@ -490,46 +492,44 @@ const PricingSettings = () => {
             const fracParts = parts[1].split('/');
             return whole + (parseFloat(fracParts[0]) / parseFloat(fracParts[1]));
           }
-          return parseFloat(trimmed);
+          return parseFloat(trimmed) || 0;
         }
         return 0;
       };
 
       let currentThickness = 0;
 
-      // Process each row
-      for (let i = 0; i < jsonData.length; i++) {
+      // Skip header row, start from row 1
+      for (let i = 1; i < jsonData.length; i++) {
         const row = jsonData[i];
         if (!row || row.length === 0) continue;
 
-        const firstCell = row[0];
-        
-        // Check if this row defines a new thickness section
-        // (single value that looks like a thickness, with empty or header-like cells after)
-        if (firstCell && (row.length === 1 || !row[1] || typeof row[1] === 'string')) {
-          const parsed = parseValue(firstCell);
-          // If it's a small value (typical thickness), treat it as thickness header
-          if (parsed > 0 && parsed <= 2) {
-            currentThickness = parsed;
-            continue;
-          }
+        const col0 = parseValue(row[0]); // First column value
+        const col1 = parseValue(row[1]); // Second column (weight per foot or empty)
+        const col2 = parseValue(row[2]); // Third column (weight per bar or empty)
+
+        // Detect thickness header: first column has value, but columns 1 and 2 are empty/zero
+        if (col0 > 0 && col1 === 0 && col2 === 0) {
+          currentThickness = col0;
+          console.log(`Found thickness header: ${currentThickness}`);
+          continue;
         }
 
-        // If we have a current thickness, try to parse cross-section data
-        if (currentThickness > 0 && row.length >= 3) {
-          const width = parseValue(row[0]);
-          const weightPerFoot = parseValue(row[2]); // Column 3 is "Lbs. Per Foot"
-          const weightPerBar = row[4] ? parseValue(row[4]) : weightPerFoot * 12; // Column 5 or calculate
+        // Data row: has thickness set, first column is width, and has weight data
+        if (currentThickness > 0 && col0 > 0 && col1 > 0) {
+          const width = col0;
+          const weightPerFoot = col1;
+          const weightPerBar = col2 > 0 ? col2 : weightPerFoot * 12;
 
-          if (width > 0 && weightPerFoot > 0) {
-            crossSections.push({
-              thickness: currentThickness,
-              width,
-              weight_per_foot: weightPerFoot,
-              weight_per_bar: weightPerBar,
-              cost_per_inch: (weightPerFoot / 12) * pricePerLb
-            });
-          }
+          console.log(`Adding cross-section: thickness=${currentThickness}, width=${width}, wt/ft=${weightPerFoot}`);
+          
+          crossSections.push({
+            thickness: currentThickness,
+            width,
+            weight_per_foot: weightPerFoot,
+            weight_per_bar: weightPerBar,
+            cost_per_inch: (weightPerFoot / 12) * pricePerLb
+          });
         }
       }
 
@@ -548,7 +548,7 @@ const PricingSettings = () => {
       } else {
         toast({
           title: "No data found",
-          description: "Could not extract cross-section data from the Excel file",
+          description: "Could not extract cross-section data. Check console for parsing details.",
           variant: "destructive"
         });
       }
