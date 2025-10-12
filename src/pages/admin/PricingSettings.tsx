@@ -1533,9 +1533,14 @@ const PricingSettings = () => {
                                                   </div>
                                                   <Select
                                                     value={selectedCrossSections[material.id]?.toString() || '0'}
-                                                    onValueChange={(value) => 
-                                                      setSelectedCrossSections(prev => ({ ...prev, [material.id]: parseInt(value) }))
-                                                    }
+                                                    onValueChange={(value) => {
+                                                      const newIdx = parseInt(value);
+                                                      console.log(`[DEBUG] Material ${material.id}: Selected cross-section index ${newIdx}`, {
+                                                        section: (material.cross_sections || [])[newIdx],
+                                                        allSections: material.cross_sections
+                                                      });
+                                                      setSelectedCrossSections(prev => ({ ...prev, [material.id]: newIdx }));
+                                                    }}
                                                   >
                                                     <SelectTrigger>
                                                       <SelectValue placeholder="Select a cross section" />
@@ -1547,14 +1552,17 @@ const PricingSettings = () => {
                                                             <span className="w-3 h-3 bg-blue-500 rounded-sm"></span>
                                                             Rectangular (Flat Bar)
                                                           </div>
-                                                           {(material.cross_sections || []).map((section, originalIdx) => {
-                                                            if (section.shape && section.shape !== 'rectangular') return null;
+                                                           {(material.cross_sections || [])
+                                                            .map((section, originalIdx) => ({ section, originalIdx }))
+                                                            .filter(({ section }) => !section.shape || section.shape === 'rectangular')
+                                                            .map(({ section, originalIdx }) => {
                                                             const thickness = section.thickness || 0;
                                                             const width = section.width || 0;
                                                             const costPerInch = section.cost_per_inch || 0;
                                                             const thicknessDisplay = thickness > 0 ? decimalToFraction(thickness) : 'N/A';
                                                             const widthDisplay = width > 0 ? decimalToFraction(width) : 'N/A';
                                                             const costDisplay = costPerInch > 0 ? `$${costPerInch.toFixed(4)}/inch` : 'N/A';
+                                                            console.log(`[DEBUG] Rendering rectangular section ${originalIdx}:`, { thickness, width, costPerInch });
                                                             return (
                                                               <div key={`rect-${originalIdx}`} className="flex items-center group hover:bg-accent">
                                                                 <SelectItem value={originalIdx.toString()} className="flex-1 cursor-pointer">
@@ -1568,6 +1576,7 @@ const PricingSettings = () => {
                                                                   onClick={(e) => {
                                                                     e.preventDefault();
                                                                     e.stopPropagation();
+                                                                    console.log(`[DEBUG] Deleting cross-section ${originalIdx}`);
                                                                     removeCrossSection(material.id, originalIdx);
                                                                     setSelectedCrossSections(prev => {
                                                                       const newVal = { ...prev };
@@ -1594,12 +1603,15 @@ const PricingSettings = () => {
                                                             <span className="w-3 h-3 bg-green-500 rounded-full"></span>
                                                             Circular (Round Bar)
                                                           </div>
-                                                          {(material.cross_sections || []).map((section, originalIdx) => {
-                                                            if (section.shape !== 'circular') return null;
+                                                          {(material.cross_sections || [])
+                                                            .map((section, originalIdx) => ({ section, originalIdx }))
+                                                            .filter(({ section }) => section.shape === 'circular')
+                                                            .map(({ section, originalIdx }) => {
                                                             const diameter = section.width || 0;
                                                             const costPerInch = section.cost_per_inch || 0;
                                                             const diameterDisplay = diameter > 0 ? decimalToFraction(diameter) : 'N/A';
                                                             const costDisplay = costPerInch > 0 ? `$${costPerInch.toFixed(4)}/inch` : 'N/A';
+                                                            console.log(`[DEBUG] Rendering circular section ${originalIdx}:`, { diameter, costPerInch });
                                                             return (
                                                               <div key={`circ-${originalIdx}`} className="flex items-center group hover:bg-accent">
                                                                 <SelectItem value={originalIdx.toString()} className="flex-1 cursor-pointer">
@@ -1613,6 +1625,7 @@ const PricingSettings = () => {
                                                                   onClick={(e) => {
                                                                     e.preventDefault();
                                                                     e.stopPropagation();
+                                                                    console.log(`[DEBUG] Deleting cross-section ${originalIdx}`);
                                                                     removeCrossSection(material.id, originalIdx);
                                                                     setSelectedCrossSections(prev => {
                                                                       const newVal = { ...prev };
