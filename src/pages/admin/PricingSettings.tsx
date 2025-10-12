@@ -73,48 +73,48 @@ const PricingSettings = () => {
   const decimalToFraction = (decimal: number): string => {
     if (decimal === 0) return '0';
     
-    // Common fractions used in metalworking
-    const fractions: Record<string, string> = {
-      '0.0625': '1/16',
-      '0.09375': '3/32',
-      '0.125': '1/8',
-      '0.1875': '3/16',
-      '0.25': '1/4',
-      '0.3125': '5/16',
-      '0.375': '3/8',
-      '0.4375': '7/16',
-      '0.5': '1/2',
-      '0.5625': '9/16',
-      '0.625': '5/8',
-      '0.6875': '11/16',
-      '0.75': '3/4',
-      '0.8125': '13/16',
-      '0.875': '7/8',
-      '0.9375': '15/16',
-      '1': '1',
-      '1.125': '1-1/8',
-      '1.25': '1-1/4',
-      '1.5': '1-1/2',
-      '1.75': '1-3/4',
-      '2': '2',
-      '2.5': '2-1/2',
-      '3': '3',
-      '4': '4',
-      '4.5': '4-1/2',
-      '5': '5',
-      '6': '6',
-    };
+    // Common fractions used in metalworking with tolerance for floating point
+    const fractions: Array<[number, string]> = [
+      [0.0625, '1/16'],
+      [0.09375, '3/32'],
+      [0.125, '1/8'],
+      [0.1875, '3/16'],
+      [0.25, '1/4'],
+      [0.3125, '5/16'],
+      [0.375, '3/8'],
+      [0.4375, '7/16'],
+      [0.5, '1/2'],
+      [0.5625, '9/16'],
+      [0.625, '5/8'],
+      [0.6875, '11/16'],
+      [0.75, '3/4'],
+      [0.8125, '13/16'],
+      [0.875, '7/8'],
+      [0.9375, '15/16'],
+      [1, '1'],
+      [1.125, '1-1/8'],
+      [1.25, '1-1/4'],
+      [1.5, '1-1/2'],
+      [1.75, '1-3/4'],
+      [2, '2'],
+      [2.5, '2-1/2'],
+      [3, '3'],
+      [4, '4'],
+      [4.5, '4-1/2'],
+      [5, '5'],
+      [6, '6'],
+    ];
     
-    const key = decimal.toFixed(5);
-    if (fractions[key]) return fractions[key];
+    // Find closest match with small tolerance
+    const tolerance = 0.0001;
+    for (const [value, fraction] of fractions) {
+      if (Math.abs(decimal - value) < tolerance) {
+        return fraction;
+      }
+    }
     
-    // If not in common fractions, try to find closest match
-    const rounded = Math.round(decimal * 16) / 16;
-    const roundedKey = rounded.toFixed(5);
-    if (fractions[roundedKey]) return fractions[roundedKey];
-    
-    // Fallback to decimal
-    return decimal.toString();
+    // Fallback to decimal with 4 decimal places
+    return decimal.toFixed(4);
   };
 
   const { user, loading: authLoading } = useAuth();
