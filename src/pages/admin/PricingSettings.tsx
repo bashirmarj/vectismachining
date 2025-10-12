@@ -535,15 +535,28 @@ const PricingSettings = () => {
 
       if (crossSections.length > 0) {
         setMaterials(prev =>
-          prev.map(m => m.id === materialId
-            ? { ...m, cross_sections: [...(m.cross_sections || []), ...crossSections] }
-            : m
-          )
+          prev.map(m => {
+            if (m.id === materialId) {
+              // Combine existing and new cross-sections
+              const combined = [...(m.cross_sections || []), ...crossSections];
+              
+              // Sort by thickness first (ascending), then by width (ascending)
+              const sorted = combined.sort((a, b) => {
+                if (a.thickness !== b.thickness) {
+                  return a.thickness - b.thickness;
+                }
+                return a.width - b.width;
+              });
+              
+              return { ...m, cross_sections: sorted };
+            }
+            return m;
+          })
         );
         
         toast({
           title: "Success!",
-          description: `Imported ${crossSections.length} cross-sections from Excel file`,
+          description: `Added ${crossSections.length} cross-sections. Total data sorted by thickness and width.`,
         });
       } else {
         toast({
