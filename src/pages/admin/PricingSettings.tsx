@@ -1550,9 +1550,30 @@ const PricingSettings = () => {
                                                           {(material.cross_sections || []).map((section, idx) => {
                                                             if (section.shape && section.shape !== 'rectangular') return null;
                                                             return (
-                                                              <SelectItem key={idx} value={idx.toString()}>
-                                                                {`${decimalToFraction(section.thickness)}" × ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`}
-                                                              </SelectItem>
+                                                              <div key={idx} className="flex items-center group hover:bg-accent">
+                                                                <SelectItem value={idx.toString()} className="flex-1 cursor-pointer">
+                                                                  {`${decimalToFraction(section.thickness)}" × ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`}
+                                                                </SelectItem>
+                                                                <Button
+                                                                  type="button"
+                                                                  variant="ghost"
+                                                                  size="sm"
+                                                                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                  onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    removeCrossSection(material.id, idx);
+                                                                    setSelectedCrossSections(prev => {
+                                                                      const newVal = { ...prev };
+                                                                      if (newVal[material.id] >= (material.cross_sections?.length || 1) - 1) {
+                                                                        newVal[material.id] = Math.max(0, (material.cross_sections?.length || 1) - 2);
+                                                                      }
+                                                                      return newVal;
+                                                                    });
+                                                                  }}
+                                                                >
+                                                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                                                </Button>
+                                                              </div>
                                                             );
                                                           })}
                                                         </>
@@ -1569,9 +1590,30 @@ const PricingSettings = () => {
                                                           {(material.cross_sections || []).map((section, idx) => {
                                                             if (section.shape !== 'circular') return null;
                                                             return (
-                                                              <SelectItem key={idx} value={idx.toString()}>
-                                                                {`Ø ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`}
-                                                              </SelectItem>
+                                                              <div key={idx} className="flex items-center group hover:bg-accent">
+                                                                <SelectItem value={idx.toString()} className="flex-1 cursor-pointer">
+                                                                  {`Ø ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`}
+                                                                </SelectItem>
+                                                                <Button
+                                                                  type="button"
+                                                                  variant="ghost"
+                                                                  size="sm"
+                                                                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                  onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    removeCrossSection(material.id, idx);
+                                                                    setSelectedCrossSections(prev => {
+                                                                      const newVal = { ...prev };
+                                                                      if (newVal[material.id] >= (material.cross_sections?.length || 1) - 1) {
+                                                                        newVal[material.id] = Math.max(0, (material.cross_sections?.length || 1) - 2);
+                                                                      }
+                                                                      return newVal;
+                                                                    });
+                                                                  }}
+                                                                >
+                                                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                                                </Button>
+                                                              </div>
                                                             );
                                                           })}
                                                         </>
