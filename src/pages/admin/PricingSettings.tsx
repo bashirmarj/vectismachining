@@ -619,313 +619,403 @@ const PricingSettings = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {/* Group materials by category */}
-                  {[...categories, { id: 'uncategorized', name: 'Uncategorized', description: null, display_order: 999 }].map((category) => {
-                    const categoryMaterials = materials.filter(m => 
-                      category.id === 'uncategorized' ? !m.category_id : m.category_id === category.id
-                    );
-                    
-                    if (categoryMaterials.length === 0) return null;
-                    
-                    return (
-                      <div key={category.id} className="mb-8">
-                        <div className="mb-3 pb-2 border-b">
-                          <h3 className="text-lg font-semibold">{category.name}</h3>
-                          {category.description && (
-                            <p className="text-sm text-muted-foreground">{category.description}</p>
-                          )}
-                        </div>
-                        
-                        <Accordion type="multiple" className="w-full">
-                          {categoryMaterials.map((material) => (
-                      <AccordionItem key={material.id} value={material.id}>
-                        <AccordionTrigger className="hover:no-underline">
-                          <div className="flex items-center gap-3 w-full pr-4">
-                            <span className="font-semibold text-lg">{material.material_name}</span>
-                            <Badge variant={material.is_active ? 'default' : 'secondary'}>
-                              {material.is_active ? 'Active' : 'Inactive'}
-                            </Badge>
-                            <span className="ml-auto text-sm text-muted-foreground">
-                              {material.pricing_method === 'linear_inch' ? 'By Linear Inch' : 'By Weight'}
-                            </span>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <div className="space-y-4 pt-4">
-                            <div className="flex items-center gap-2">
-                              <Input
-                                value={material.material_name}
-                                onChange={(e) => updateMaterial(material.id, 'material_name', e.target.value)}
-                                className="font-semibold w-64"
-                              />
-                              <div className="flex items-center gap-2 ml-auto">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => updateMaterial(material.id, 'is_active', !material.is_active)}
-                                >
-                                  {material.is_active ? 'Deactivate' : 'Activate'}
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() => deleteMaterial(material.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
+                  <Tabs defaultValue={categories[0]?.id || 'uncategorized'} className="w-full">
+                    <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
+                      {categories.map((category) => {
+                        const count = materials.filter(m => m.category_id === category.id).length;
+                        if (count === 0) return null;
+                        return (
+                          <TabsTrigger key={category.id} value={category.id} className="gap-2">
+                            {category.name}
+                            <Badge variant="secondary" className="ml-1">{count}</Badge>
+                          </TabsTrigger>
+                        );
+                      })}
+                      {materials.filter(m => !m.category_id).length > 0 && (
+                        <TabsTrigger value="uncategorized" className="gap-2">
+                          Uncategorized
+                          <Badge variant="secondary" className="ml-1">
+                            {materials.filter(m => !m.category_id).length}
+                          </Badge>
+                        </TabsTrigger>
+                      )}
+                    </TabsList>
 
-                            <div className="mb-4">
-                              <Label htmlFor={`category-${material.id}`}>Category</Label>
-                              <Select
-                                value={material.category_id || 'uncategorized'}
-                                onValueChange={(value) => 
-                                  updateMaterial(material.id, 'category_id', value === 'uncategorized' ? null : value)
-                                }
-                              >
-                                <SelectTrigger id={`category-${material.id}`}>
-                                  <SelectValue placeholder="Select category" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-background z-50">
-                                  <SelectItem value="uncategorized">Uncategorized</SelectItem>
-                                  {categories.map(cat => (
-                                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Group materials by type for better organization
-                              </p>
-                            </div>
+                    {categories.map((category) => {
+                      const categoryMaterials = materials.filter(m => m.category_id === category.id);
+                      if (categoryMaterials.length === 0) return null;
 
-                            <div className="mb-4">
-                              <Label htmlFor={`pricing-method-${material.id}`}>Pricing Method</Label>
-                              <Select
-                                value={material.pricing_method || 'weight'}
-                                onValueChange={(value) => updateMaterial(material.id, 'pricing_method', value)}
-                              >
-                                <SelectTrigger id={`pricing-method-${material.id}`}>
-                                  <SelectValue placeholder="Select pricing method" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-background z-50">
-                                  <SelectItem value="weight">By Weight (Volume)</SelectItem>
-                                  <SelectItem value="linear_inch">By Linear Inch</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Choose how to calculate material costs
-                              </p>
-                            </div>
-
-                            {material.pricing_method === 'weight' ? (
-                              <ResizablePanelGroup direction="horizontal" className="min-h-[120px] border rounded-lg">
-                                <ResizablePanel defaultSize={33} minSize={20}>
-                                  <div className="p-4 h-full">
-                                    <Label htmlFor={`volume-${material.id}`}>Cost per cm³ ($)</Label>
-                                    <Input
-                                      id={`volume-${material.id}`}
-                                      type="number"
-                                      step="0.01"
-                                      value={material.cost_per_cubic_cm}
-                                      onChange={(e) =>
-                                        updateMaterial(material.id, 'cost_per_cubic_cm', parseFloat(e.target.value))
-                                      }
-                                    />
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      Material cost per cubic centimeter
-                                    </p>
+                      return (
+                        <TabsContent key={category.id} value={category.id} className="mt-6">
+                          <Accordion type="multiple" className="w-full">
+                            {categoryMaterials.map((material) => (
+                              <AccordionItem key={material.id} value={material.id}>
+                                <AccordionTrigger className="hover:no-underline">
+                                  <div className="flex items-center gap-3 w-full pr-4">
+                                    <span className="font-semibold text-lg">{material.material_name}</span>
+                                    <Badge variant={material.is_active ? 'default' : 'secondary'}>
+                                      {material.is_active ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                    <span className="ml-auto text-sm text-muted-foreground">
+                                      {material.pricing_method === 'linear_inch' ? 'By Linear Inch' : 'By Weight'}
+                                    </span>
                                   </div>
-                                </ResizablePanel>
-                                <ResizableHandle withHandle />
-                                <ResizablePanel defaultSize={33} minSize={20}>
-                                  <div className="p-4 h-full">
-                                    <Label htmlFor={`surface-${material.id}`}>Cost per cm² ($)</Label>
-                                    <Input
-                                      id={`surface-${material.id}`}
-                                      type="number"
-                                      step="0.01"
-                                      value={material.cost_per_square_cm}
-                                      onChange={(e) =>
-                                        updateMaterial(material.id, 'cost_per_square_cm', parseFloat(e.target.value))
-                                      }
-                                    />
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      Used for finish/coating costs
-                                    </p>
-                                  </div>
-                                </ResizablePanel>
-                                <ResizableHandle withHandle />
-                                <ResizablePanel defaultSize={34} minSize={20}>
-                                  <div className="p-4 h-full">
-                                    <Label htmlFor={`density-${material.id}`}>Density (g/cm³)</Label>
-                                    <Input
-                                      id={`density-${material.id}`}
-                                      type="number"
-                                      step="0.01"
-                                      value={material.density || ''}
-                                      onChange={(e) =>
-                                        updateMaterial(material.id, 'density', parseFloat(e.target.value) || null)
-                                      }
-                                    />
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      Material density (optional)
-                                    </p>
-                                  </div>
-                                </ResizablePanel>
-                              </ResizablePanelGroup>
-                            ) : (
-                              <div className="border rounded-lg p-4 space-y-4">
-                                <div className="flex items-center justify-between mb-2">
-                                  <Label>Cross Sections (Width × Thickness)</Label>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => addCrossSection(material.id)}
-                                  >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Add Section
-                                  </Button>
-                                </div>
-                                <p className="text-xs text-muted-foreground mb-3">
-                                  Define standard cross-section sizes and their cost per linear inch
-                                </p>
-                                {(material.cross_sections || []).length === 0 ? (
-                                  <p className="text-sm text-muted-foreground text-center py-4">
-                                    No cross sections defined. Click "Add Section" to create one.
-                                  </p>
-                                ) : (
-                                  <div className="space-y-3">
-                                    {(material.cross_sections || []).map((section, idx) => (
-                                      <div key={idx} className="border rounded-md p-4 grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                          <Label className="text-sm font-medium">Width (inches)</Label>
-                                          <Select
-                                            value={section.width?.toString() || "1"}
-                                            onValueChange={(value) =>
-                                              updateCrossSection(material.id, idx, 'width', parseFloat(value))
-                                            }
-                                          >
-                                            <SelectTrigger>
-                                              <SelectValue placeholder="Select width" />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-background z-50 max-h-[300px]">
-                                              {Array.from({ length: 40 }, (_, i) => i + 1).map((width) => (
-                                                <SelectItem key={width} value={width.toString()}>
-                                                  {width}"
-                                                </SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                          <Label className="text-sm font-medium">Thickness (inches)</Label>
-                                          <Select
-                                            value={section.thickness?.toString() || "0.0625"}
-                                            onValueChange={(value) =>
-                                              updateCrossSection(material.id, idx, 'thickness', parseFloat(value))
-                                            }
-                                          >
-                                            <SelectTrigger>
-                                              <SelectValue placeholder="Select thickness" />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-background z-50 max-h-[300px]">
-                                              <SelectItem value="0.0625">1/16"</SelectItem>
-                                              <SelectItem value="0.125">1/8"</SelectItem>
-                                              <SelectItem value="0.1875">3/16"</SelectItem>
-                                              <SelectItem value="0.25">1/4"</SelectItem>
-                                              <SelectItem value="0.3125">5/16"</SelectItem>
-                                              <SelectItem value="0.375">3/8"</SelectItem>
-                                              <SelectItem value="0.4375">7/16"</SelectItem>
-                                              <SelectItem value="0.5">1/2"</SelectItem>
-                                              <SelectItem value="0.5625">9/16"</SelectItem>
-                                              <SelectItem value="0.625">5/8"</SelectItem>
-                                              <SelectItem value="0.6875">11/16"</SelectItem>
-                                              <SelectItem value="0.75">3/4"</SelectItem>
-                                              <SelectItem value="0.8125">13/16"</SelectItem>
-                                              <SelectItem value="0.875">7/8"</SelectItem>
-                                              <SelectItem value="0.9375">15/16"</SelectItem>
-                                              <SelectItem value="1">1"</SelectItem>
-                                              <SelectItem value="1.125">1 1/8"</SelectItem>
-                                              <SelectItem value="1.25">1 1/4"</SelectItem>
-                                              <SelectItem value="1.375">1 3/8"</SelectItem>
-                                              <SelectItem value="1.5">1 1/2"</SelectItem>
-                                              <SelectItem value="1.625">1 5/8"</SelectItem>
-                                              <SelectItem value="1.75">1 3/4"</SelectItem>
-                                              <SelectItem value="1.875">1 7/8"</SelectItem>
-                                              <SelectItem value="2">2"</SelectItem>
-                                              <SelectItem value="2.25">2 1/4"</SelectItem>
-                                              <SelectItem value="2.5">2 1/2"</SelectItem>
-                                              <SelectItem value="2.75">2 3/4"</SelectItem>
-                                              <SelectItem value="3">3"</SelectItem>
-                                              <SelectItem value="3.5">3 1/2"</SelectItem>
-                                              <SelectItem value="4">4"</SelectItem>
-                                              <SelectItem value="4.5">4 1/2"</SelectItem>
-                                              <SelectItem value="5">5"</SelectItem>
-                                              <SelectItem value="5.5">5 1/2"</SelectItem>
-                                              <SelectItem value="6">6"</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-                                        </div>
-
-                                        <div className="col-span-2 space-y-2">
-                                          <div className="flex items-center justify-between">
-                                            <Label className="text-sm font-medium">Cost per Linear Inch ($)</Label>
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => removeCrossSection(material.id, idx)}
-                                              className="h-8 w-8 p-0"
-                                            >
-                                              <Trash2 className="h-4 w-4 text-destructive" />
-                                            </Button>
-                                          </div>
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            value={section.cost_per_inch}
-                                            onChange={(e) =>
-                                              updateCrossSection(material.id, idx, 'cost_per_inch', parseFloat(e.target.value))
-                                            }
-                                            placeholder="Enter cost per inch"
-                                          />
-                                        </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                  <div className="space-y-4 pt-4">
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        value={material.material_name}
+                                        onChange={(e) => updateMaterial(material.id, 'material_name', e.target.value)}
+                                        className="font-semibold w-64"
+                                      />
+                                      <div className="flex items-center gap-2 ml-auto">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => updateMaterial(material.id, 'is_active', !material.is_active)}
+                                        >
+                                          {material.is_active ? 'Deactivate' : 'Activate'}
+                                        </Button>
+                                        <Button
+                                          variant="destructive"
+                                          size="sm"
+                                          onClick={() => deleteMaterial(material.id)}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
                                       </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                                    </div>
 
-                            <div>
-                              <Label>Available Finishes</Label>
-                              <p className="text-sm text-muted-foreground mb-2">
-                                Comma-separated list of finish options
-                              </p>
-                              <Input
-                                value={Array.isArray(material.finish_options) ? material.finish_options.join(', ') : ''}
-                                onChange={(e) =>
-                                  updateMaterial(
-                                    material.id,
-                                    'finish_options',
-                                    e.target.value.split(',').map(f => f.trim())
-                                  )
-                                }
-                                placeholder="As-machined, Anodized, Powder Coated"
-                              />
-                            </div>
-                          </div>
-                        </AccordionContent>
+                                    <div className="mb-4">
+                                      <Label htmlFor={`category-${material.id}`}>Category</Label>
+                                      <Select
+                                        value={material.category_id || 'uncategorized'}
+                                        onValueChange={(value) => 
+                                          updateMaterial(material.id, 'category_id', value === 'uncategorized' ? null : value)
+                                        }
+                                      >
+                                        <SelectTrigger id={`category-${material.id}`}>
+                                          <SelectValue placeholder="Select category" />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-background z-50">
+                                          <SelectItem value="uncategorized">Uncategorized</SelectItem>
+                                          {categories.map(cat => (
+                                            <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Group materials by type for better organization
+                                      </p>
+                                    </div>
+
+                                    <div className="mb-4">
+                                      <Label htmlFor={`pricing-method-${material.id}`}>Pricing Method</Label>
+                                      <Select
+                                        value={material.pricing_method || 'weight'}
+                                        onValueChange={(value) => updateMaterial(material.id, 'pricing_method', value)}
+                                      >
+                                        <SelectTrigger id={`pricing-method-${material.id}`}>
+                                          <SelectValue placeholder="Select pricing method" />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-background z-50">
+                                          <SelectItem value="weight">By Weight (Volume)</SelectItem>
+                                          <SelectItem value="linear_inch">By Linear Inch</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Choose how to calculate material costs
+                                      </p>
+                                    </div>
+
+                                    {material.pricing_method === 'weight' ? (
+                                      <ResizablePanelGroup direction="horizontal" className="min-h-[120px] border rounded-lg">
+                                        <ResizablePanel defaultSize={33} minSize={20}>
+                                          <div className="p-4 h-full">
+                                            <Label htmlFor={`volume-${material.id}`}>Cost per cm³ ($)</Label>
+                                            <Input
+                                              id={`volume-${material.id}`}
+                                              type="number"
+                                              step="0.01"
+                                              value={material.cost_per_cubic_cm}
+                                              onChange={(e) =>
+                                                updateMaterial(material.id, 'cost_per_cubic_cm', parseFloat(e.target.value))
+                                              }
+                                            />
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                              Material cost per cubic centimeter
+                                            </p>
+                                          </div>
+                                        </ResizablePanel>
+                                        <ResizableHandle withHandle />
+                                        <ResizablePanel defaultSize={33} minSize={20}>
+                                          <div className="p-4 h-full">
+                                            <Label htmlFor={`surface-${material.id}`}>Cost per cm² ($)</Label>
+                                            <Input
+                                              id={`surface-${material.id}`}
+                                              type="number"
+                                              step="0.01"
+                                              value={material.cost_per_square_cm}
+                                              onChange={(e) =>
+                                                updateMaterial(material.id, 'cost_per_square_cm', parseFloat(e.target.value))
+                                              }
+                                            />
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                              Used for finish/coating costs
+                                            </p>
+                                          </div>
+                                        </ResizablePanel>
+                                        <ResizableHandle withHandle />
+                                        <ResizablePanel defaultSize={34} minSize={20}>
+                                          <div className="p-4 h-full">
+                                            <Label htmlFor={`density-${material.id}`}>Density (g/cm³)</Label>
+                                            <Input
+                                              id={`density-${material.id}`}
+                                              type="number"
+                                              step="0.01"
+                                              value={material.density || ''}
+                                              onChange={(e) =>
+                                                updateMaterial(material.id, 'density', parseFloat(e.target.value) || null)
+                                              }
+                                            />
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                              Material density (optional)
+                                            </p>
+                                          </div>
+                                        </ResizablePanel>
+                                      </ResizablePanelGroup>
+                                    ) : (
+                                      <div className="border rounded-lg p-4 space-y-4">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <Label>Cross Sections (Width × Thickness)</Label>
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => addCrossSection(material.id)}
+                                          >
+                                            <Plus className="h-4 w-4 mr-2" />
+                                            Add Section
+                                          </Button>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mb-3">
+                                          Define standard cross-section sizes and their cost per linear inch
+                                        </p>
+                                        {(material.cross_sections || []).length === 0 ? (
+                                          <p className="text-sm text-muted-foreground text-center py-4">
+                                            No cross sections defined. Click "Add Section" to create one.
+                                          </p>
+                                        ) : (
+                                          <div className="space-y-3">
+                                            {(material.cross_sections || []).map((section, idx) => (
+                                              <div key={idx} className="border rounded-md p-4 grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                  <Label className="text-sm font-medium">Width (inches)</Label>
+                                                  <Select
+                                                    value={section.width?.toString() || "1"}
+                                                    onValueChange={(value) =>
+                                                      updateCrossSection(material.id, idx, 'width', parseFloat(value))
+                                                    }
+                                                  >
+                                                    <SelectTrigger>
+                                                      <SelectValue placeholder="Select width" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-background z-50 max-h-[300px]">
+                                                      {Array.from({ length: 40 }, (_, i) => i + 1).map((width) => (
+                                                        <SelectItem key={width} value={width.toString()}>
+                                                          {width}"
+                                                        </SelectItem>
+                                                      ))}
+                                                    </SelectContent>
+                                                  </Select>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                  <Label className="text-sm font-medium">Thickness (inches)</Label>
+                                                  <Select
+                                                    value={section.thickness?.toString() || "0.0625"}
+                                                    onValueChange={(value) =>
+                                                      updateCrossSection(material.id, idx, 'thickness', parseFloat(value))
+                                                    }
+                                                  >
+                                                    <SelectTrigger>
+                                                      <SelectValue placeholder="Select thickness" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-background z-50 max-h-[300px]">
+                                                      <SelectItem value="0.0625">1/16"</SelectItem>
+                                                      <SelectItem value="0.125">1/8"</SelectItem>
+                                                      <SelectItem value="0.1875">3/16"</SelectItem>
+                                                      <SelectItem value="0.25">1/4"</SelectItem>
+                                                      <SelectItem value="0.3125">5/16"</SelectItem>
+                                                      <SelectItem value="0.375">3/8"</SelectItem>
+                                                      <SelectItem value="0.4375">7/16"</SelectItem>
+                                                      <SelectItem value="0.5">1/2"</SelectItem>
+                                                      <SelectItem value="0.5625">9/16"</SelectItem>
+                                                      <SelectItem value="0.625">5/8"</SelectItem>
+                                                      <SelectItem value="0.6875">11/16"</SelectItem>
+                                                      <SelectItem value="0.75">3/4"</SelectItem>
+                                                      <SelectItem value="0.8125">13/16"</SelectItem>
+                                                      <SelectItem value="0.875">7/8"</SelectItem>
+                                                      <SelectItem value="0.9375">15/16"</SelectItem>
+                                                      <SelectItem value="1">1"</SelectItem>
+                                                      <SelectItem value="1.125">1 1/8"</SelectItem>
+                                                      <SelectItem value="1.25">1 1/4"</SelectItem>
+                                                      <SelectItem value="1.375">1 3/8"</SelectItem>
+                                                      <SelectItem value="1.5">1 1/2"</SelectItem>
+                                                      <SelectItem value="1.625">1 5/8"</SelectItem>
+                                                      <SelectItem value="1.75">1 3/4"</SelectItem>
+                                                      <SelectItem value="1.875">1 7/8"</SelectItem>
+                                                      <SelectItem value="2">2"</SelectItem>
+                                                      <SelectItem value="2.25">2 1/4"</SelectItem>
+                                                      <SelectItem value="2.5">2 1/2"</SelectItem>
+                                                      <SelectItem value="2.75">2 3/4"</SelectItem>
+                                                      <SelectItem value="3">3"</SelectItem>
+                                                      <SelectItem value="3.5">3 1/2"</SelectItem>
+                                                      <SelectItem value="4">4"</SelectItem>
+                                                      <SelectItem value="4.5">4 1/2"</SelectItem>
+                                                      <SelectItem value="5">5"</SelectItem>
+                                                      <SelectItem value="5.5">5 1/2"</SelectItem>
+                                                      <SelectItem value="6">6"</SelectItem>
+                                                    </SelectContent>
+                                                  </Select>
+                                                </div>
+
+                                                <div className="col-span-2 space-y-2">
+                                                  <div className="flex items-center justify-between">
+                                                    <Label className="text-sm font-medium">Cost per Linear Inch ($)</Label>
+                                                    <Button
+                                                      type="button"
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      onClick={() => removeCrossSection(material.id, idx)}
+                                                      className="h-8 w-8 p-0"
+                                                    >
+                                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                  </div>
+                                                  <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    value={section.cost_per_inch}
+                                                    onChange={(e) =>
+                                                      updateCrossSection(material.id, idx, 'cost_per_inch', parseFloat(e.target.value))
+                                                    }
+                                                    placeholder="Enter cost per inch"
+                                                  />
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    <div>
+                                      <Label>Available Finishes</Label>
+                                      <p className="text-sm text-muted-foreground mb-2">
+                                        Comma-separated list of finish options
+                                      </p>
+                                      <Input
+                                        value={Array.isArray(material.finish_options) ? material.finish_options.join(', ') : ''}
+                                        onChange={(e) =>
+                                          updateMaterial(
+                                            material.id,
+                                            'finish_options',
+                                            e.target.value.split(',').map(f => f.trim())
+                                          )
+                                        }
+                                        placeholder="As-machined, Anodized, Powder Coated"
+                                      />
+                                    </div>
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            ))}
+                          </Accordion>
+                        </TabsContent>
+                      );
+                    })}
+
+                    {/* Uncategorized materials tab */}
+                    {materials.filter(m => !m.category_id).length > 0 && (
+                      <TabsContent value="uncategorized" className="mt-6">
+                        <Accordion type="multiple" className="w-full">
+                          {materials.filter(m => !m.category_id).map((material) => (
+                            <AccordionItem key={material.id} value={material.id}>
+                              <AccordionTrigger className="hover:no-underline">
+                                <div className="flex items-center gap-3 w-full pr-4">
+                                  <span className="font-semibold text-lg">{material.material_name}</span>
+                                  <Badge variant={material.is_active ? 'default' : 'secondary'}>
+                                    {material.is_active ? 'Active' : 'Inactive'}
+                                  </Badge>
+                                  <span className="ml-auto text-sm text-muted-foreground">
+                                    {material.pricing_method === 'linear_inch' ? 'By Linear Inch' : 'By Weight'}
+                                  </span>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent>
+                                {/* Same content as above - keeping it DRY would require extracting to component */}
+                                <div className="space-y-4 pt-4">
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={material.material_name}
+                                      onChange={(e) => updateMaterial(material.id, 'material_name', e.target.value)}
+                                      className="font-semibold w-64"
+                                    />
+                                    <div className="flex items-center gap-2 ml-auto">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => updateMaterial(material.id, 'is_active', !material.is_active)}
+                                      >
+                                        {material.is_active ? 'Deactivate' : 'Activate'}
+                                      </Button>
+                                      <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => deleteMaterial(material.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  <div className="mb-4">
+                                    <Label htmlFor={`category-${material.id}`}>Category</Label>
+                                    <Select
+                                      value={material.category_id || 'uncategorized'}
+                                      onValueChange={(value) => 
+                                        updateMaterial(material.id, 'category_id', value === 'uncategorized' ? null : value)
+                                      }
+                                    >
+                                      <SelectTrigger id={`category-${material.id}`}>
+                                        <SelectValue placeholder="Select category" />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-background z-50">
+                                        <SelectItem value="uncategorized">Uncategorized</SelectItem>
+                                        {categories.map(cat => (
+                                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Assign this material to a category
+                                    </p>
+                                  </div>
+
+                                  <div className="text-sm text-muted-foreground">
+                                    Configure pricing and other settings after assigning to a category
+                                  </div>
+                                </div>
+                              </AccordionContent>
                             </AccordionItem>
                           ))}
                         </Accordion>
-                      </div>
-                    );
-                  })}
+                      </TabsContent>
+                    )}
+                  </Tabs>
 
                   <div className="flex justify-end pt-6">
                     <Button onClick={saveMaterials} disabled={saving}>
