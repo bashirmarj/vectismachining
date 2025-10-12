@@ -81,6 +81,9 @@ const handler = async (req: Request): Promise<Response> => {
         </head>
         <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #ffffff;">
           <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <img src="https://inqabwlmvrvqsdrgskju.supabase.co/storage/v1/object/public/public/logo-email.png" alt="Vectis Manufacturing" style="height: 60px; width: auto;" />
+            </div>
             <div style="margin-bottom: 30px;">
               <div style="font-size: 18px; font-weight: bold; color: #000000; margin-bottom: 20px;">VECTIS MANUFACTURING</div>
             </div>
