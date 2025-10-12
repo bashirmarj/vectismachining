@@ -623,7 +623,6 @@ const PricingSettings = () => {
                     <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
                       {categories.map((category) => {
                         const count = materials.filter(m => m.category_id === category.id).length;
-                        if (count === 0) return null;
                         return (
                           <TabsTrigger key={category.id} value={category.id} className="gap-2">
                             {category.name}
@@ -643,11 +642,21 @@ const PricingSettings = () => {
 
                     {categories.map((category) => {
                       const categoryMaterials = materials.filter(m => m.category_id === category.id);
-                      if (categoryMaterials.length === 0) return null;
 
                       return (
                         <TabsContent key={category.id} value={category.id} className="mt-6">
-                          <Accordion type="multiple" className="w-full">
+                          {categoryMaterials.length === 0 ? (
+                            <div className="text-center py-12 border rounded-lg bg-muted/20">
+                              <p className="text-muted-foreground mb-4">
+                                No materials in this category yet
+                              </p>
+                              <Button onClick={addNewMaterial} size="sm">
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Material
+                              </Button>
+                            </div>
+                          ) : (
+                            <Accordion type="multiple" className="w-full">
                             {categoryMaterials.map((material) => (
                               <AccordionItem key={material.id} value={material.id}>
                                 <AccordionTrigger className="hover:no-underline">
@@ -933,7 +942,8 @@ const PricingSettings = () => {
                                 </AccordionContent>
                               </AccordionItem>
                             ))}
-                          </Accordion>
+                            </Accordion>
+                          )}
                         </TabsContent>
                       );
                     })}
