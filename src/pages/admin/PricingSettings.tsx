@@ -1251,27 +1251,13 @@ const PricingSettings = () => {
 
                                                   <div className="grid grid-cols-3 gap-4">
                                                     <div className="space-y-2">
-                                                      <Label className="text-sm font-medium">Width (inches)</Label>
-                                                      <Input
-                                                        type="number"
-                                                        step="0.125"
-                                                        value={section.width}
-                                                        onChange={(e) =>
-                                                          updateCrossSection(material.id, selectedIdx, 'width', parseFloat(e.target.value))
-                                                        }
-                                                      />
+                                                      <Label className="text-sm font-medium">Thickness</Label>
+                                                      <div className="text-lg font-semibold">{decimalToFraction(section.thickness)}"</div>
                                                     </div>
 
                                                     <div className="space-y-2">
-                                                      <Label className="text-sm font-medium">Thickness (inches)</Label>
-                                                      <Input
-                                                        type="number"
-                                                        step="0.125"
-                                                        value={section.thickness}
-                                                        onChange={(e) =>
-                                                          updateCrossSection(material.id, selectedIdx, 'thickness', parseFloat(e.target.value))
-                                                        }
-                                                      />
+                                                      <Label className="text-sm font-medium">Width</Label>
+                                                      <div className="text-lg font-semibold">{decimalToFraction(section.width)}"</div>
                                                     </div>
 
                                                     <div className="space-y-2">
