@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, Plus, Trash2, Settings, GripVertical } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, Settings, GripVertical, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +35,14 @@ interface CrossSection {
   cost_per_inch: number;
 }
 
+interface SheetConfiguration {
+  width: number;
+  height: number;
+  thickness: number;
+  cost_per_sheet: number;
+  unit: 'cm' | 'inch';
+}
+
 interface MaterialCategory {
   id: string;
   name: string;
@@ -52,6 +60,8 @@ interface MaterialCost {
   is_active: boolean;
   pricing_method?: string;
   cross_sections?: CrossSection[];
+  sheet_configurations?: SheetConfiguration[];
+  default_nesting_efficiency?: number;
   category_id?: string | null;
 }
 
@@ -122,6 +132,10 @@ const PricingSettings = () => {
         cross_sections: Array.isArray(m.cross_sections) 
           ? (m.cross_sections as unknown as CrossSection[])
           : [],
+        sheet_configurations: Array.isArray(m.sheet_configurations)
+          ? (m.sheet_configurations as unknown as SheetConfiguration[])
+          : [],
+        default_nesting_efficiency: m.default_nesting_efficiency || 0.75,
         category_id: m.category_id || null
       }));
       setMaterials(parsedMaterials);
@@ -197,6 +211,8 @@ const PricingSettings = () => {
         is_active: m.is_active,
         pricing_method: m.pricing_method || 'weight',
         cross_sections: (m.cross_sections || []) as any,
+        sheet_configurations: (m.sheet_configurations || []) as any,
+        default_nesting_efficiency: m.default_nesting_efficiency || 0.75,
         category_id: m.category_id || null,
       }));
 
@@ -285,6 +301,10 @@ const PricingSettings = () => {
           cross_sections: Array.isArray(data.cross_sections) 
             ? (data.cross_sections as unknown as CrossSection[])
             : [],
+          sheet_configurations: Array.isArray(data.sheet_configurations)
+            ? (data.sheet_configurations as unknown as SheetConfiguration[])
+            : [],
+          default_nesting_efficiency: data.default_nesting_efficiency || 0.75,
           category_id: data.category_id || null
         }]);
         toast({
@@ -391,6 +411,47 @@ const PricingSettings = () => {
             ...m,
             cross_sections: (m.cross_sections || []).map((cs, i) =>
               i === index ? { ...cs, [field]: value } : cs
+            )
+          }
+        : m
+      )
+    );
+  };
+
+  const addSheetConfiguration = (materialId: string) => {
+    setMaterials(prev =>
+      prev.map(m => m.id === materialId
+        ? {
+            ...m,
+            sheet_configurations: [
+              ...(m.sheet_configurations || []),
+              { width: 48, height: 96, thickness: 0.125, cost_per_sheet: 100, unit: 'inch' as const }
+            ]
+          }
+        : m
+      )
+    );
+  };
+
+  const removeSheetConfiguration = (materialId: string, index: number) => {
+    setMaterials(prev =>
+      prev.map(m => m.id === materialId
+        ? {
+            ...m,
+            sheet_configurations: (m.sheet_configurations || []).filter((_, i) => i !== index)
+          }
+        : m
+      )
+    );
+  };
+
+  const updateSheetConfiguration = (materialId: string, index: number, field: keyof SheetConfiguration, value: number | string) => {
+    setMaterials(prev =>
+      prev.map(m => m.id === materialId
+        ? {
+            ...m,
+            sheet_configurations: (m.sheet_configurations || []).map((sc, i) =>
+              i === index ? { ...sc, [field]: value } : sc
             )
           }
         : m
@@ -726,7 +787,8 @@ const PricingSettings = () => {
                                       {material.is_active ? 'Active' : 'Inactive'}
                                     </Badge>
                                     <span className="ml-auto text-sm text-muted-foreground">
-                                      {material.pricing_method === 'linear_inch' ? 'By Linear Inch' : 'By Weight'}
+                                      {material.pricing_method === 'linear_inch' ? 'By Linear Inch' : 
+                                       material.pricing_method === 'sheet' ? 'By Sheet' : 'By Weight'}
                                     </span>
                                   </div>
                                 </AccordionTrigger>
@@ -791,6 +853,7 @@ const PricingSettings = () => {
                                         <SelectContent className="bg-background z-50">
                                           <SelectItem value="weight">By Weight (Volume)</SelectItem>
                                           <SelectItem value="linear_inch">By Linear Inch</SelectItem>
+                                          <SelectItem value="sheet">By Sheet (Nesting)</SelectItem>
                                         </SelectContent>
                                       </Select>
                                       <p className="text-xs text-muted-foreground mt-1">
@@ -854,7 +917,7 @@ const PricingSettings = () => {
                                           </div>
                                         </ResizablePanel>
                                       </ResizablePanelGroup>
-                                    ) : (
+                                    ) : material.pricing_method === 'linear_inch' ? (
                                       <div className="border rounded-lg p-4 space-y-4">
                                         <div className="flex items-center justify-between mb-2">
                                           <Label>Cross Sections (Width × Thickness)</Label>
@@ -881,73 +944,26 @@ const PricingSettings = () => {
                                               <div key={idx} className="border rounded-md p-4 grid grid-cols-2 gap-4">
                                                 <div className="space-y-2">
                                                   <Label className="text-sm font-medium">Width (inches)</Label>
-                                                  <Select
-                                                    value={section.width?.toString() || "1"}
-                                                    onValueChange={(value) =>
-                                                      updateCrossSection(material.id, idx, 'width', parseFloat(value))
+                                                  <Input
+                                                    type="number"
+                                                    step="0.125"
+                                                    value={section.width}
+                                                    onChange={(e) =>
+                                                      updateCrossSection(material.id, idx, 'width', parseFloat(e.target.value))
                                                     }
-                                                  >
-                                                    <SelectTrigger>
-                                                      <SelectValue placeholder="Select width" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-background z-50 max-h-[300px]">
-                                                      {Array.from({ length: 40 }, (_, i) => i + 1).map((width) => (
-                                                        <SelectItem key={width} value={width.toString()}>
-                                                          {width}"
-                                                        </SelectItem>
-                                                      ))}
-                                                    </SelectContent>
-                                                  </Select>
+                                                  />
                                                 </div>
 
                                                 <div className="space-y-2">
                                                   <Label className="text-sm font-medium">Thickness (inches)</Label>
-                                                  <Select
-                                                    value={section.thickness?.toString() || "0.0625"}
-                                                    onValueChange={(value) =>
-                                                      updateCrossSection(material.id, idx, 'thickness', parseFloat(value))
+                                                  <Input
+                                                    type="number"
+                                                    step="0.125"
+                                                    value={section.thickness}
+                                                    onChange={(e) =>
+                                                      updateCrossSection(material.id, idx, 'thickness', parseFloat(e.target.value))
                                                     }
-                                                  >
-                                                    <SelectTrigger>
-                                                      <SelectValue placeholder="Select thickness" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-background z-50 max-h-[300px]">
-                                                      <SelectItem value="0.0625">1/16"</SelectItem>
-                                                      <SelectItem value="0.125">1/8"</SelectItem>
-                                                      <SelectItem value="0.1875">3/16"</SelectItem>
-                                                      <SelectItem value="0.25">1/4"</SelectItem>
-                                                      <SelectItem value="0.3125">5/16"</SelectItem>
-                                                      <SelectItem value="0.375">3/8"</SelectItem>
-                                                      <SelectItem value="0.4375">7/16"</SelectItem>
-                                                      <SelectItem value="0.5">1/2"</SelectItem>
-                                                      <SelectItem value="0.5625">9/16"</SelectItem>
-                                                      <SelectItem value="0.625">5/8"</SelectItem>
-                                                      <SelectItem value="0.6875">11/16"</SelectItem>
-                                                      <SelectItem value="0.75">3/4"</SelectItem>
-                                                      <SelectItem value="0.8125">13/16"</SelectItem>
-                                                      <SelectItem value="0.875">7/8"</SelectItem>
-                                                      <SelectItem value="0.9375">15/16"</SelectItem>
-                                                      <SelectItem value="1">1"</SelectItem>
-                                                      <SelectItem value="1.125">1 1/8"</SelectItem>
-                                                      <SelectItem value="1.25">1 1/4"</SelectItem>
-                                                      <SelectItem value="1.375">1 3/8"</SelectItem>
-                                                      <SelectItem value="1.5">1 1/2"</SelectItem>
-                                                      <SelectItem value="1.625">1 5/8"</SelectItem>
-                                                      <SelectItem value="1.75">1 3/4"</SelectItem>
-                                                      <SelectItem value="1.875">1 7/8"</SelectItem>
-                                                      <SelectItem value="2">2"</SelectItem>
-                                                      <SelectItem value="2.25">2 1/4"</SelectItem>
-                                                      <SelectItem value="2.5">2 1/2"</SelectItem>
-                                                      <SelectItem value="2.75">2 3/4"</SelectItem>
-                                                      <SelectItem value="3">3"</SelectItem>
-                                                      <SelectItem value="3.5">3 1/2"</SelectItem>
-                                                      <SelectItem value="4">4"</SelectItem>
-                                                      <SelectItem value="4.5">4 1/2"</SelectItem>
-                                                      <SelectItem value="5">5"</SelectItem>
-                                                      <SelectItem value="5.5">5 1/2"</SelectItem>
-                                                      <SelectItem value="6">6"</SelectItem>
-                                                    </SelectContent>
-                                                  </Select>
+                                                  />
                                                 </div>
 
                                                 <div className="col-span-2 space-y-2">
@@ -979,7 +995,129 @@ const PricingSettings = () => {
                                           </div>
                                         )}
                                       </div>
-                                    )}
+                                    ) : material.pricing_method === 'sheet' ? (
+                                      <div className="border rounded-lg p-4 space-y-4">
+                                        <div>
+                                          <Label>Nesting Efficiency (%)</Label>
+                                          <p className="text-xs text-muted-foreground mb-2">
+                                            Typical: 70-85%. Higher = better material utilization.
+                                          </p>
+                                          <Input
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            step="1"
+                                            value={((material.default_nesting_efficiency || 0.75) * 100).toFixed(0)}
+                                            onChange={(e) =>
+                                              updateMaterial(material.id, 'default_nesting_efficiency', parseFloat(e.target.value) / 100)
+                                            }
+                                          />
+                                        </div>
+
+                                        <div className="flex items-center justify-between mb-2">
+                                          <Label>Sheet Configurations</Label>
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => addSheetConfiguration(material.id)}
+                                          >
+                                            <Plus className="h-4 w-4 mr-2" />
+                                            Add Sheet Size
+                                          </Button>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mb-3">
+                                          Define available sheet sizes and cost per sheet
+                                        </p>
+                                        {(material.sheet_configurations || []).length === 0 ? (
+                                          <p className="text-sm text-muted-foreground text-center py-4">
+                                            No sheet sizes defined. Click "Add Sheet Size" to create one.
+                                          </p>
+                                        ) : (
+                                          <div className="space-y-3">
+                                            {(material.sheet_configurations || []).map((sheet, idx) => (
+                                              <div key={idx} className="border rounded-md p-4 space-y-3">
+                                                <div className="flex items-center justify-between mb-2">
+                                                  <Label className="text-sm font-medium">Sheet {idx + 1}</Label>
+                                                  <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => removeSheetConfiguration(material.id, idx)}
+                                                    className="h-8 w-8 p-0"
+                                                  >
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                  </Button>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                  <div className="space-y-2">
+                                                    <Label className="text-xs">Width</Label>
+                                                    <Input
+                                                      type="number"
+                                                      step="0.125"
+                                                      value={sheet.width}
+                                                      onChange={(e) =>
+                                                        updateSheetConfiguration(material.id, idx, 'width', parseFloat(e.target.value))
+                                                      }
+                                                    />
+                                                  </div>
+                                                  <div className="space-y-2">
+                                                    <Label className="text-xs">Height</Label>
+                                                    <Input
+                                                      type="number"
+                                                      step="0.125"
+                                                      value={sheet.height}
+                                                      onChange={(e) =>
+                                                        updateSheetConfiguration(material.id, idx, 'height', parseFloat(e.target.value))
+                                                      }
+                                                    />
+                                                  </div>
+                                                  <div className="space-y-2">
+                                                    <Label className="text-xs">Thickness</Label>
+                                                    <Input
+                                                      type="number"
+                                                      step="0.001"
+                                                      value={sheet.thickness}
+                                                      onChange={(e) =>
+                                                        updateSheetConfiguration(material.id, idx, 'thickness', parseFloat(e.target.value))
+                                                      }
+                                                    />
+                                                  </div>
+                                                  <div className="space-y-2">
+                                                    <Label className="text-xs">Cost/Sheet ($)</Label>
+                                                    <Input
+                                                      type="number"
+                                                      step="0.01"
+                                                      value={sheet.cost_per_sheet}
+                                                      onChange={(e) =>
+                                                        updateSheetConfiguration(material.id, idx, 'cost_per_sheet', parseFloat(e.target.value))
+                                                      }
+                                                    />
+                                                  </div>
+                                                  <div className="col-span-2 space-y-2">
+                                                    <Label className="text-xs">Unit</Label>
+                                                    <Select
+                                                      value={sheet.unit}
+                                                      onValueChange={(value) =>
+                                                        updateSheetConfiguration(material.id, idx, 'unit', value)
+                                                      }
+                                                    >
+                                                      <SelectTrigger>
+                                                        <SelectValue />
+                                                      </SelectTrigger>
+                                                      <SelectContent className="bg-background z-50">
+                                                        <SelectItem value="inch">Inches</SelectItem>
+                                                        <SelectItem value="cm">Centimeters</SelectItem>
+                                                      </SelectContent>
+                                                    </Select>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : null}
 
                                     <div>
                                       <Label>Available Finishes</Label>

@@ -99,12 +99,14 @@ export type Database = {
           cost_per_square_cm: number
           created_at: string | null
           cross_sections: Json | null
+          default_nesting_efficiency: number | null
           density: number | null
           finish_options: Json | null
           id: string
           is_active: boolean | null
           material_name: string
           pricing_method: string | null
+          sheet_configurations: Json | null
         }
         Insert: {
           category_id?: string | null
@@ -112,12 +114,14 @@ export type Database = {
           cost_per_square_cm: number
           created_at?: string | null
           cross_sections?: Json | null
+          default_nesting_efficiency?: number | null
           density?: number | null
           finish_options?: Json | null
           id?: string
           is_active?: boolean | null
           material_name: string
           pricing_method?: string | null
+          sheet_configurations?: Json | null
         }
         Update: {
           category_id?: string | null
@@ -125,12 +129,14 @@ export type Database = {
           cost_per_square_cm?: number
           created_at?: string | null
           cross_sections?: Json | null
+          default_nesting_efficiency?: number | null
           density?: number | null
           finish_options?: Json | null
           id?: string
           is_active?: boolean | null
           material_name?: string
           pricing_method?: string | null
+          sheet_configurations?: Json | null
         }
         Relationships: [
           {
@@ -242,6 +248,9 @@ export type Database = {
           material_cost: number | null
           material_type: string | null
           notes: string | null
+          part_depth_cm: number | null
+          part_height_cm: number | null
+          part_width_cm: number | null
           preliminary_unit_price: number | null
           quantity: number
           quotation_id: string
@@ -265,6 +274,9 @@ export type Database = {
           material_cost?: number | null
           material_type?: string | null
           notes?: string | null
+          part_depth_cm?: number | null
+          part_height_cm?: number | null
+          part_width_cm?: number | null
           preliminary_unit_price?: number | null
           quantity?: number
           quotation_id: string
@@ -288,6 +300,9 @@ export type Database = {
           material_cost?: number | null
           material_type?: string | null
           notes?: string | null
+          part_depth_cm?: number | null
+          part_height_cm?: number | null
+          part_width_cm?: number | null
           preliminary_unit_price?: number | null
           quantity?: number
           quotation_id?: string

@@ -19,6 +19,9 @@ interface QuoteInputs {
   process?: string;
   material?: string;
   finish?: string;
+  part_width_cm?: number;
+  part_height_cm?: number;
+  part_depth_cm?: number;
 }
 
 interface QuoteBreakdown {
@@ -91,6 +94,58 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
       console.log(`Linear pricing: ${estimatedLengthInches.toFixed(2)} inches × $${avgCrossSection.cost_per_inch}/inch = $${materialCost.toFixed(2)}`);
     } else {
       // Fallback to weight-based if no cross-sections defined
+      materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
+    }
+  } else if (materialData.pricing_method === 'sheet') {
+    // Sheet-based pricing with nesting efficiency
+    const sheetConfigs = materialData.sheet_configurations as any[] || [];
+    const nestingEfficiency = materialData.default_nesting_efficiency || 0.75;
+    
+    if (sheetConfigs.length > 0 && inputs.part_width_cm && inputs.part_height_cm) {
+      // Find the most economical sheet size
+      let bestCost = Infinity;
+      let bestSheetInfo = null;
+      
+      for (const sheet of sheetConfigs) {
+        // Convert all to cm for consistency
+        const sheetWidthCm = sheet.unit === 'inch' ? sheet.width * 2.54 : sheet.width;
+        const sheetHeightCm = sheet.unit === 'inch' ? sheet.height * 2.54 : sheet.height;
+        
+        // Calculate how many parts fit per sheet (with rotation consideration)
+        const partsPerSheetOption1 = Math.floor(sheetWidthCm / inputs.part_width_cm) * 
+                                     Math.floor(sheetHeightCm / inputs.part_height_cm);
+        const partsPerSheetOption2 = Math.floor(sheetWidthCm / inputs.part_height_cm) * 
+                                     Math.floor(sheetHeightCm / inputs.part_width_cm);
+        const partsPerSheet = Math.max(partsPerSheetOption1, partsPerSheetOption2) * nestingEfficiency;
+        
+        if (partsPerSheet > 0) {
+          const sheetsNeeded = Math.ceil(inputs.quantity / partsPerSheet);
+          const totalCost = sheetsNeeded * sheet.cost_per_sheet;
+          const costPerPart = totalCost / inputs.quantity;
+          
+          if (costPerPart < bestCost) {
+            bestCost = costPerPart;
+            bestSheetInfo = {
+              sheet,
+              partsPerSheet: Math.floor(partsPerSheet),
+              sheetsNeeded,
+              totalCost,
+              utilization: (inputs.quantity / (sheetsNeeded * partsPerSheet)) * 100
+            };
+          }
+        }
+      }
+      
+      if (bestSheetInfo) {
+        materialCost = bestSheetInfo.totalCost / inputs.quantity;
+        console.log(`Sheet pricing: ${bestSheetInfo.sheetsNeeded} sheets × $${bestSheetInfo.sheet.cost_per_sheet}/sheet = $${bestSheetInfo.totalCost.toFixed(2)} (${bestSheetInfo.partsPerSheet} parts/sheet, ${bestSheetInfo.utilization.toFixed(1)}% utilization)`);
+      } else {
+        // Fallback if part is too large for any sheet
+        console.log('Part too large for available sheets, using volume-based fallback');
+        materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
+      }
+    } else {
+      // Fallback to weight-based if no sheets or part dimensions
       materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
     }
   } else {

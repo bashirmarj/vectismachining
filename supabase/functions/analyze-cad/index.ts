@@ -17,6 +17,9 @@ interface AnalysisResult {
   complexity_score: number;
   confidence: number;
   method: string;
+  part_width_cm?: number;
+  part_height_cm?: number;
+  part_depth_cm?: number;
 }
 
 function estimateFromFile(fileName: string, fileSize: number): AnalysisResult {
@@ -55,14 +58,23 @@ function estimateFromFile(fileName: string, fileSize: number): AnalysisResult {
     complexity = 4;
   }
   
-  console.log(`Estimated - Volume: ${estimatedVolume}cm³, Surface: ${estimatedSurfaceArea}cm², Complexity: ${complexity}/10`);
+  // Estimate bounding box dimensions from volume (simplified cubic approximation)
+  const cubeSide = Math.pow(estimatedVolume, 1/3);
+  const part_width_cm = Number((cubeSide * (0.8 + Math.random() * 0.4)).toFixed(2));
+  const part_height_cm = Number((cubeSide * (0.8 + Math.random() * 0.4)).toFixed(2));
+  const part_depth_cm = Number((cubeSide * (0.8 + Math.random() * 0.4)).toFixed(2));
+  
+  console.log(`Estimated - Volume: ${estimatedVolume}cm³, Surface: ${estimatedSurfaceArea}cm², Complexity: ${complexity}/10, Dimensions: ${part_width_cm} × ${part_height_cm} × ${part_depth_cm} cm`);
   
   return {
     volume_cm3: Number(estimatedVolume.toFixed(2)),
     surface_area_cm2: Number(estimatedSurfaceArea.toFixed(2)),
     complexity_score: complexity,
     confidence: 0.6, // medium confidence for heuristic method
-    method: 'file_heuristic'
+    method: 'file_heuristic',
+    part_width_cm,
+    part_height_cm,
+    part_depth_cm
   };
 }
 
