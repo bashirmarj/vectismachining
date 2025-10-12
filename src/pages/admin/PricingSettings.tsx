@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -452,6 +453,98 @@ const PricingSettings = () => {
         : m
       )
     );
+  };
+
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>, materialId: string, material: MaterialCost) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    toast({
+      title: "Processing Excel file...",
+      description: "Extracting cross-section data from the spreadsheet",
+    });
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+      const crossSections: CrossSection[] = [];
+      const pricePerLb = material.price_per_lb || 1.0;
+
+      // Skip header row and process data rows
+      for (let i = 1; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (!row || row.length < 3) continue;
+
+        // Convert fraction strings to decimals
+        const parseValue = (val: any): number => {
+          if (typeof val === 'number') return val;
+          if (typeof val === 'string') {
+            // Handle fractions like "1/16", "3/32"
+            if (val.includes('/')) {
+              const parts = val.split('/');
+              return parseFloat(parts[0]) / parseFloat(parts[1]);
+            }
+            // Handle mixed numbers like "1-1/8"
+            if (val.includes('-')) {
+              const parts = val.split('-');
+              const whole = parseFloat(parts[0]);
+              const fracParts = parts[1].split('/');
+              return whole + (parseFloat(fracParts[0]) / parseFloat(fracParts[1]));
+            }
+            return parseFloat(val);
+          }
+          return 0;
+        };
+
+        const thickness = parseValue(row[0]);
+        const width = parseValue(row[1]);
+        const weightPerFoot = parseValue(row[2]);
+        const weightPerBar = row[3] ? parseValue(row[3]) : weightPerFoot * 12;
+
+        if (thickness && width && weightPerFoot) {
+          crossSections.push({
+            thickness,
+            width,
+            weight_per_foot: weightPerFoot,
+            weight_per_bar: weightPerBar,
+            cost_per_inch: (weightPerFoot / 12) * pricePerLb
+          });
+        }
+      }
+
+      if (crossSections.length > 0) {
+        setMaterials(prev =>
+          prev.map(m => m.id === materialId
+            ? { ...m, cross_sections: [...(m.cross_sections || []), ...crossSections] }
+            : m
+          )
+        );
+        
+        toast({
+          title: "Success!",
+          description: `Imported ${crossSections.length} cross-sections from Excel file`,
+        });
+      } else {
+        toast({
+          title: "No data found",
+          description: "Could not extract cross-section data from the Excel file. Make sure columns are: Thickness, Width, Weight/Foot, Weight/Bar",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error processing Excel file:', error);
+      toast({
+        title: "Error",
+        description: "Failed to process the Excel file. Make sure it's a valid .xlsx or .xls file",
+        variant: "destructive"
+      });
+    }
+    
+    // Reset the input
+    e.target.value = '';
   };
 
   const handleTableUpload = async (e: React.ChangeEvent<HTMLInputElement>, materialId: string, material: MaterialCost) => {
@@ -1177,6 +1270,24 @@ const PricingSettings = () => {
                                               <Plus className="h-4 w-4 mr-2" />
                                               Add Custom Cross Section
                                             </Button>
+                                            <label htmlFor={`upload-excel-${material.id}`}>
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => document.getElementById(`upload-excel-${material.id}`)?.click()}
+                                              >
+                                                <Upload className="h-4 w-4 mr-2" />
+                                                Upload Excel File
+                                              </Button>
+                                            </label>
+                                            <input
+                                              id={`upload-excel-${material.id}`}
+                                              type="file"
+                                              accept=".xlsx,.xls"
+                                              className="hidden"
+                                              onChange={(e) => handleExcelUpload(e, material.id, material)}
+                                            />
                                             <label htmlFor={`upload-table-${material.id}`}>
                                               <Button
                                                 type="button"
