@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, Plus, Trash2, Settings, GripVertical, X } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, Settings, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -1373,10 +1373,7 @@ const SortableTabTrigger = ({ category, count }: { category: any; count: number 
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center">
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1">
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
-      </div>
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
       <TabsTrigger value={category.id} className="gap-2">
         {category.name}
         <Badge variant="secondary" className="ml-1">{count}</Badge>
