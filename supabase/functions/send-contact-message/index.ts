@@ -118,29 +118,12 @@ const handler = async (req: Request): Promise<Response> => {
       </html>
     `;
 
-    // Read logo file
-    const logoPath = '/var/task/public/logo-email.png';
-    let logoContent: Uint8Array;
-    
-    try {
-      logoContent = await Deno.readFile(logoPath);
-    } catch (error) {
-      console.error('Could not read logo file:', error);
-      // Use placeholder if logo not found
-      logoContent = new Uint8Array(0);
-    }
-
     const { error: sendError } = await resend.emails.send({
       from: 'Vectis Manufacturing <belmarj@vectismanufacturing.com>',
       to: ['belmarj@vectismanufacturing.com'],
       subject: `New Contact Message from ${name}`,
       html: emailHtml,
-      replyTo: email,
-      attachments: logoContent.length > 0 ? [{
-        filename: 'logo.png',
-        content: logoContent,
-        content_id: 'logo'
-      }] : undefined
+      replyTo: email
     });
 
     if (sendError) {
