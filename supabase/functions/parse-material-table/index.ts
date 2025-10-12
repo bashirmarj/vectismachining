@@ -35,7 +35,7 @@ serve(async (req) => {
               {
                 type: 'text',
                 text: `Analyze this material specification table and extract all cross-section data. 
-                
+
 For each row, extract:
 - thickness (convert fractions to decimal, e.g., "1/16" = 0.0625)
 - width (convert fractions to decimal)
@@ -67,8 +67,7 @@ Important:
             ]
           }
         ],
-        max_tokens: 4000,
-        temperature: 0.1
+        max_completion_tokens: 4000
       })
     });
 
