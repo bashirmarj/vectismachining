@@ -75,6 +75,7 @@ const PricingSettings = () => {
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
   const [materials, setMaterials] = useState<MaterialCost[]>([]);
   const [activeTab, setActiveTab] = useState<string>('');
+  const [selectedCrossSections, setSelectedCrossSections] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const checkAdminAndFetchData = async () => {
@@ -920,7 +921,7 @@ const PricingSettings = () => {
                                     ) : material.pricing_method === 'linear_inch' ? (
                                       <div className="border rounded-lg p-4 space-y-4">
                                         <div className="flex items-center justify-between mb-2">
-                                          <Label>Cross Sections (Width × Thickness)</Label>
+                                          <Label>Cross Sections</Label>
                                           <Button
                                             type="button"
                                             variant="outline"
@@ -928,7 +929,7 @@ const PricingSettings = () => {
                                             onClick={() => addCrossSection(material.id)}
                                           >
                                             <Plus className="h-4 w-4 mr-2" />
-                                            Add Section
+                                            Add Cross Section
                                           </Button>
                                         </div>
                                         <p className="text-xs text-muted-foreground mb-3">
@@ -936,62 +937,104 @@ const PricingSettings = () => {
                                         </p>
                                         {(material.cross_sections || []).length === 0 ? (
                                           <p className="text-sm text-muted-foreground text-center py-4">
-                                            No cross sections defined. Click "Add Section" to create one.
+                                            No cross sections defined. Click "Add Cross Section" to create one.
                                           </p>
                                         ) : (
-                                          <div className="space-y-3">
-                                            {(material.cross_sections || []).map((section, idx) => (
-                                              <div key={idx} className="border rounded-md p-4 grid grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                  <Label className="text-sm font-medium">Width (inches)</Label>
-                                                  <Input
-                                                    type="number"
-                                                    step="0.125"
-                                                    value={section.width}
-                                                    onChange={(e) =>
-                                                      updateCrossSection(material.id, idx, 'width', parseFloat(e.target.value))
-                                                    }
-                                                  />
-                                                </div>
+                                          <div className="space-y-4">
+                                            <div>
+                                              <Label className="text-sm font-medium mb-2 block">Select Cross Section to Edit</Label>
+                                              <Select
+                                                value={selectedCrossSections[material.id]?.toString() || '0'}
+                                                onValueChange={(value) => 
+                                                  setSelectedCrossSections(prev => ({ ...prev, [material.id]: parseInt(value) }))
+                                                }
+                                              >
+                                                <SelectTrigger>
+                                                  <SelectValue placeholder="Select a cross section" />
+                                                </SelectTrigger>
+                                                <SelectContent className="bg-background z-50">
+                                                  {(material.cross_sections || []).map((section, idx) => (
+                                                    <SelectItem key={idx} value={idx.toString()}>
+                                                      {section.width}" × {section.thickness}" - ${section.cost_per_inch}/inch
+                                                    </SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                            </div>
 
-                                                <div className="space-y-2">
-                                                  <Label className="text-sm font-medium">Thickness (inches)</Label>
-                                                  <Input
-                                                    type="number"
-                                                    step="0.125"
-                                                    value={section.thickness}
-                                                    onChange={(e) =>
-                                                      updateCrossSection(material.id, idx, 'thickness', parseFloat(e.target.value))
-                                                    }
-                                                  />
-                                                </div>
+                                            {(() => {
+                                              const selectedIdx = selectedCrossSections[material.id] ?? 0;
+                                              const section = (material.cross_sections || [])[selectedIdx];
+                                              if (!section) return null;
 
-                                                <div className="col-span-2 space-y-2">
+                                              return (
+                                                <div className="border rounded-md p-4 space-y-4">
                                                   <div className="flex items-center justify-between">
-                                                    <Label className="text-sm font-medium">Cost per Linear Inch ($)</Label>
+                                                    <Label className="text-sm font-semibold">
+                                                      Cross Section {selectedIdx + 1}
+                                                    </Label>
                                                     <Button
                                                       type="button"
-                                                      variant="ghost"
+                                                      variant="destructive"
                                                       size="sm"
-                                                      onClick={() => removeCrossSection(material.id, idx)}
-                                                      className="h-8 w-8 p-0"
+                                                      onClick={() => {
+                                                        removeCrossSection(material.id, selectedIdx);
+                                                        setSelectedCrossSections(prev => {
+                                                          const newVal = { ...prev };
+                                                          if (newVal[material.id] >= (material.cross_sections?.length || 1) - 1) {
+                                                            newVal[material.id] = Math.max(0, (material.cross_sections?.length || 1) - 2);
+                                                          }
+                                                          return newVal;
+                                                        });
+                                                      }}
                                                     >
-                                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                                      <Trash2 className="h-4 w-4 mr-2" />
+                                                      Delete
                                                     </Button>
                                                   </div>
-                                                  <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    min="0"
-                                                    value={section.cost_per_inch}
-                                                    onChange={(e) =>
-                                                      updateCrossSection(material.id, idx, 'cost_per_inch', parseFloat(e.target.value))
-                                                    }
-                                                    placeholder="Enter cost per inch"
-                                                  />
+
+                                                  <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                      <Label className="text-sm font-medium">Width (inches)</Label>
+                                                      <Input
+                                                        type="number"
+                                                        step="0.125"
+                                                        value={section.width}
+                                                        onChange={(e) =>
+                                                          updateCrossSection(material.id, selectedIdx, 'width', parseFloat(e.target.value))
+                                                        }
+                                                      />
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                      <Label className="text-sm font-medium">Thickness (inches)</Label>
+                                                      <Input
+                                                        type="number"
+                                                        step="0.125"
+                                                        value={section.thickness}
+                                                        onChange={(e) =>
+                                                          updateCrossSection(material.id, selectedIdx, 'thickness', parseFloat(e.target.value))
+                                                        }
+                                                      />
+                                                    </div>
+
+                                                    <div className="col-span-2 space-y-2">
+                                                      <Label className="text-sm font-medium">Cost per Linear Inch ($)</Label>
+                                                      <Input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0"
+                                                        value={section.cost_per_inch}
+                                                        onChange={(e) =>
+                                                          updateCrossSection(material.id, selectedIdx, 'cost_per_inch', parseFloat(e.target.value))
+                                                        }
+                                                        placeholder="Enter cost per inch"
+                                                      />
+                                                    </div>
+                                                  </div>
                                                 </div>
-                                              </div>
-                                            ))}
+                                              );
+                                            })()}
                                           </div>
                                         )}
                                       </div>
