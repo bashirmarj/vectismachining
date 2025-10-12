@@ -11,8 +11,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, Download, Save, Send } from 'lucide-react';
+import { Loader2, ArrowLeft, Download, Save, Send, Sparkles } from 'lucide-react';
 import { StatusBadge } from '@/components/admin/StatusBadge';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 
 interface QuotationData {
   id: string;
@@ -36,6 +38,18 @@ interface LineItem {
   unit_price: number | null;
   lead_time_days: number | null;
   notes: string | null;
+  estimated_volume_cm3: number | null;
+  estimated_surface_area_cm2: number | null;
+  estimated_complexity_score: number | null;
+  material_cost: number | null;
+  machining_cost: number | null;
+  setup_cost: number | null;
+  finish_cost: number | null;
+  preliminary_unit_price: number | null;
+  selected_process: string | null;
+  material_type: string | null;
+  finish_type: string | null;
+  estimated_machine_time_hours: number | null;
 }
 
 interface Quote {
@@ -400,6 +414,113 @@ const QuotationDetails = () => {
                         Download
                       </Button>
                     </div>
+                    
+                    {/* AI Analysis Results */}
+                    {item.preliminary_unit_price && (
+                      <Card className="border-green-500 bg-green-50/50">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="flex items-center gap-2 text-base">
+                            <Sparkles className="h-4 w-4 text-green-600" />
+                            AI-Generated Preliminary Quote
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {/* Analysis Metrics */}
+                          {(item.estimated_volume_cm3 || item.estimated_complexity_score) && (
+                            <div className="grid grid-cols-3 gap-3">
+                              {item.estimated_volume_cm3 && (
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Volume</Label>
+                                  <p className="text-lg font-bold">{item.estimated_volume_cm3} cm³</p>
+                                </div>
+                              )}
+                              {item.estimated_surface_area_cm2 && (
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Surface Area</Label>
+                                  <p className="text-lg font-bold">{item.estimated_surface_area_cm2.toFixed(1)} cm²</p>
+                                </div>
+                              )}
+                              {item.estimated_complexity_score && (
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Complexity</Label>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-lg font-bold">{item.estimated_complexity_score}/10</p>
+                                    <Badge variant={item.estimated_complexity_score > 7 ? 'destructive' : 'default'}>
+                                      {item.estimated_complexity_score > 7 ? 'Complex' : item.estimated_complexity_score < 4 ? 'Simple' : 'Medium'}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          <Separator />
+                          
+                          {/* AI Pricing Breakdown */}
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center bg-green-100 p-3 rounded">
+                              <span className="font-medium">AI Suggested Unit Price:</span>
+                              <span className="text-2xl font-bold text-green-700">
+                                ${item.preliminary_unit_price.toFixed(2)}
+                              </span>
+                            </div>
+                            
+                            {(item.material_cost || item.machining_cost) && (
+                              <div className="text-xs space-y-1 pl-3">
+                                {item.material_cost && (
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Material Cost:</span>
+                                    <span className="font-mono">${item.material_cost.toFixed(2)}</span>
+                                  </div>
+                                )}
+                                {item.machining_cost && (
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Machining Cost ({item.estimated_machine_time_hours?.toFixed(1)}h):</span>
+                                    <span className="font-mono">${item.machining_cost.toFixed(2)}</span>
+                                  </div>
+                                )}
+                                {item.setup_cost && (
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Setup Cost (amortized):</span>
+                                    <span className="font-mono">${item.setup_cost.toFixed(2)}</span>
+                                  </div>
+                                )}
+                                {item.finish_cost && item.finish_cost > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Finish Cost:</span>
+                                    <span className="font-mono">${item.finish_cost.toFixed(2)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            <div className="flex gap-2 pt-2">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => updateLineItem(index, 'unit_price', item.preliminary_unit_price)}
+                              >
+                                Apply AI Price
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => {
+                                  const priceWithMargin = (item.preliminary_unit_price || 0) * 1.1;
+                                  updateLineItem(index, 'unit_price', parseFloat(priceWithMargin.toFixed(2)));
+                                }}
+                              >
+                                Apply +10% Margin
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                    
+                    <Separator />
                     
                     <div className="grid gap-4 md:grid-cols-3">
                       <div>

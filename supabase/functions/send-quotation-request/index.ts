@@ -176,15 +176,98 @@ const handler = async (req: Request): Promise<Response> => {
       }))
     ];
 
+    let insertedLineItems: any[] = [];
     if (lineItems.length > 0) {
-      const { error: lineItemsError } = await supabase
+      const { data: inserted, error: lineItemsError } = await supabase
         .from('quote_line_items')
-        .insert(lineItems);
+        .insert(lineItems)
+        .select();
 
       if (lineItemsError) {
         console.error('Error storing line items:', lineItemsError);
-        // Don't throw - this is not critical for the submission
+      } else {
+        insertedLineItems = inserted || [];
       }
+    }
+
+    // Trigger CAD analysis and preliminary pricing in background
+    // Don't await - run asynchronously to avoid blocking response
+    if (insertedLineItems.length > 0) {
+      Promise.all(files.map(async (file, index) => {
+        const lineItem = insertedLineItems[index];
+        if (!lineItem) return;
+
+        try {
+          // Call analyze-cad function
+          const analysisResponse = await fetch(`${supabaseUrl}/functions/v1/analyze-cad`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({
+              file_name: file.name,
+              file_size: file.size,
+              quantity: file.quantity
+            })
+          });
+
+          if (!analysisResponse.ok) {
+            console.error(`Analysis failed for ${file.name}`);
+            return;
+          }
+
+          const analysisData = await analysisResponse.json();
+
+          // Call pricing calculator
+          const quoteResponse = await fetch(`${supabaseUrl}/functions/v1/calculate-preliminary-quote`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({
+              volume_cm3: analysisData.volume_cm3,
+              surface_area_cm2: analysisData.surface_area_cm2,
+              complexity_score: analysisData.complexity_score,
+              quantity: file.quantity,
+              process: 'CNC Machining',
+              material: 'Aluminum 6061',
+              finish: 'As-machined'
+            })
+          });
+
+          if (!quoteResponse.ok) {
+            console.error(`Quote calculation failed for ${file.name}`);
+            return;
+          }
+
+          const quoteData = await quoteResponse.json();
+
+          // Update line item with preliminary pricing
+          await supabase
+            .from('quote_line_items')
+            .update({
+              estimated_volume_cm3: analysisData.volume_cm3,
+              estimated_surface_area_cm2: analysisData.surface_area_cm2,
+              estimated_complexity_score: analysisData.complexity_score,
+              preliminary_unit_price: quoteData.unit_price,
+              material_cost: quoteData.breakdown.material_cost,
+              machining_cost: quoteData.breakdown.machining_cost,
+              setup_cost: quoteData.breakdown.setup_cost,
+              finish_cost: quoteData.breakdown.finish_cost,
+              selected_process: quoteData.process,
+              material_type: quoteData.material,
+              finish_type: quoteData.finish,
+              estimated_machine_time_hours: quoteData.estimated_hours
+            })
+            .eq('id', lineItem.id);
+
+          console.log(`Preliminary quote generated for ${file.name}: $${quoteData.unit_price}`);
+        } catch (error) {
+          console.error(`Error processing ${file.name}:`, error);
+        }
+      })).catch(err => console.error('Background analysis error:', err));
     }
 
     // Send emails in the background to not block the response

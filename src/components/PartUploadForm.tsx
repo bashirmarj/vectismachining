@@ -2,14 +2,16 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Upload, File, CheckCircle2, AlertCircle, ChevronsUpDown, Check } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Upload, File, CheckCircle2, AlertCircle, ChevronsUpDown, Check, Zap, Info, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 
 const countryCodes = [
   { code: "+1", country: "Canada" },
@@ -38,6 +40,24 @@ const countryCodes = [
 interface FileWithQuantity {
   file: File;
   quantity: number;
+  analysis?: {
+    volume_cm3: number;
+    surface_area_cm2: number;
+    complexity_score: number;
+  };
+  quote?: {
+    unit_price: number;
+    total_price: number;
+    breakdown: {
+      material_cost: number;
+      machining_cost: number;
+      setup_cost: number;
+      finish_cost: number;
+      discount_applied: string;
+    };
+    lead_time_days: number;
+  };
+  isAnalyzing?: boolean;
 }
 
 export const PartUploadForm = () => {
@@ -96,6 +116,70 @@ export const PartUploadForm = () => {
     return () => clearInterval(interval);
   }, [rateLimitRemaining]);
 
+  const analyzeFile = async (fileWithQty: FileWithQuantity, index: number) => {
+    try {
+      // Mark as analyzing
+      setFiles(prev => prev.map((f, i) => 
+        i === index ? { ...f, isAnalyzing: true } : f
+      ));
+
+      // Call analyze-cad function
+      const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze-cad', {
+        body: {
+          file_name: fileWithQty.file.name,
+          file_size: fileWithQty.file.size,
+          quantity: fileWithQty.quantity
+        }
+      });
+
+      if (analysisError) throw analysisError;
+
+      // Call pricing calculator
+      const { data: quoteData, error: quoteError } = await supabase.functions.invoke('calculate-preliminary-quote', {
+        body: {
+          volume_cm3: analysisData.volume_cm3,
+          surface_area_cm2: analysisData.surface_area_cm2,
+          complexity_score: analysisData.complexity_score,
+          quantity: fileWithQty.quantity,
+          process: 'CNC Machining',
+          material: 'Aluminum 6061',
+          finish: 'As-machined'
+        }
+      });
+
+      if (quoteError) throw quoteError;
+
+      // Update file with analysis and quote
+      setFiles(prev => prev.map((f, i) => 
+        i === index ? { 
+          ...f, 
+          analysis: {
+            volume_cm3: analysisData.volume_cm3,
+            surface_area_cm2: analysisData.surface_area_cm2,
+            complexity_score: analysisData.complexity_score
+          },
+          quote: quoteData,
+          isAnalyzing: false 
+        } : f
+      ));
+
+      toast({
+        title: "Analysis Complete",
+        description: `Preliminary quote: $${quoteData.unit_price.toFixed(2)}/unit`,
+      });
+    } catch (error: any) {
+      console.error('Error analyzing file:', error);
+      setFiles(prev => prev.map((f, i) => 
+        i === index ? { ...f, isAnalyzing: false } : f
+      ));
+      toast({
+        title: "Analysis Failed",
+        description: "Could not generate preliminary quote. You can still submit your request.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     if (selectedFiles.length > 0) {
@@ -122,7 +206,14 @@ export const PartUploadForm = () => {
       }
       
       const filesWithQuantity = selectedFiles.map(file => ({ file, quantity: 1 }));
-      setFiles(prev => [...prev, ...filesWithQuantity]);
+      const newFiles = [...files, ...filesWithQuantity];
+      setFiles(newFiles);
+      
+      // Analyze each new file
+      filesWithQuantity.forEach((fileWithQty, idx) => {
+        const fileIndex = files.length + idx;
+        analyzeFile(fileWithQty, fileIndex);
+      });
     }
   };
 
@@ -152,9 +243,16 @@ export const PartUploadForm = () => {
   };
 
   const updateFileQuantity = (index: number, quantity: number) => {
+    const newQuantity = Math.max(1, quantity);
     setFiles(prev => prev.map((item, i) => 
-      i === index ? { ...item, quantity: Math.max(1, quantity) } : item
+      i === index ? { ...item, quantity: newQuantity } : item
     ));
+    
+    // Re-analyze with new quantity
+    const fileWithQty = files[index];
+    if (fileWithQty && !fileWithQty.isAnalyzing) {
+      analyzeFile({ ...fileWithQty, quantity: newQuantity }, index);
+    }
   };
 
   const removeDrawingFile = (index: number) => {
@@ -504,43 +602,131 @@ export const PartUploadForm = () => {
                 className="cursor-pointer flex flex-col items-center"
               >
                  {files.length > 0 ? (
-                  <div className="w-full space-y-2">
+                  <div className="w-full space-y-3">
                     {files.map((fileWithQty, index) => (
-                      <div key={index} className="flex items-center justify-between gap-3 p-3 bg-primary/5 rounded">
-                        <div className="flex items-center gap-3 flex-1">
-                          <File className="h-6 w-6 text-primary flex-shrink-0" />
-                          <div className="text-left flex-1">
-                            <p className="font-medium text-sm">{fileWithQty.file.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {(fileWithQty.file.size / 1024 / 1024).toFixed(2)} MB
-                            </p>
+                      <div key={index} className="space-y-2">
+                        <div className="flex items-center justify-between gap-3 p-3 bg-primary/5 rounded">
+                          <div className="flex items-center gap-3 flex-1">
+                            <File className="h-6 w-6 text-primary flex-shrink-0" />
+                            <div className="text-left flex-1">
+                              <p className="font-medium text-sm">{fileWithQty.file.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {(fileWithQty.file.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
                           <div className="flex items-center gap-2">
-                            <Label htmlFor={`qty-${index}`} className="text-xs whitespace-nowrap">Qty:</Label>
-                            <Input
-                              id={`qty-${index}`}
-                              type="number"
-                              min="1"
-                              value={fileWithQty.quantity}
-                              onChange={(e) => updateFileQuantity(index, parseInt(e.target.value) || 1)}
-                              className="w-20 h-8"
-                            />
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor={`qty-${index}`} className="text-xs whitespace-nowrap">Qty:</Label>
+                              <Input
+                                id={`qty-${index}`}
+                                type="number"
+                                min="1"
+                                value={fileWithQty.quantity}
+                                onChange={(e) => updateFileQuantity(index, parseInt(e.target.value) || 1)}
+                                className="w-20 h-8"
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                removeFile(index);
+                              }}
+                              className="h-8 w-8 p-0"
+                            >
+                              ×
+                            </Button>
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              removeFile(index);
-                            }}
-                            className="h-8 w-8 p-0"
-                          >
-                            ×
-                          </Button>
                         </div>
+                        
+                        {/* Instant Quote Preview */}
+                        {fileWithQty.isAnalyzing && (
+                          <Card className="border-blue-500/50">
+                            <CardContent className="pt-4">
+                              <div className="flex items-center gap-2 text-blue-600">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span className="text-sm">Analyzing CAD file...</span>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                        
+                        {fileWithQty.quote && !fileWithQty.isAnalyzing && (
+                          <Card className="border-blue-500">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="flex items-center gap-2 text-base">
+                                <Zap className="h-4 w-4 text-blue-500" />
+                                Preliminary Estimate
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Unit Price</Label>
+                                  <p className="text-2xl font-bold text-blue-600">
+                                    ${fileWithQty.quote.unit_price.toFixed(2)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Lead Time</Label>
+                                  <p className="text-2xl font-bold">
+                                    {fileWithQty.quote.lead_time_days} days
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Total for {fileWithQty.quantity} units</Label>
+                                  <p className="text-lg font-semibold">
+                                    ${fileWithQty.quote.total_price.toFixed(2)}
+                                  </p>
+                                </div>
+                                {fileWithQty.quote.breakdown.discount_applied !== 'None' && (
+                                  <div>
+                                    <Label className="text-xs text-muted-foreground">Discount Applied</Label>
+                                    <p className="text-lg font-semibold text-green-600">
+                                      {fileWithQty.quote.breakdown.discount_applied}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <Separator />
+                              
+                              <div className="space-y-1 text-xs">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Material:</span>
+                                  <span className="font-mono">${fileWithQty.quote.breakdown.material_cost.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Machining:</span>
+                                  <span className="font-mono">${fileWithQty.quote.breakdown.machining_cost.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Setup (amortized):</span>
+                                  <span className="font-mono">${fileWithQty.quote.breakdown.setup_cost.toFixed(2)}</span>
+                                </div>
+                                {fileWithQty.quote.breakdown.finish_cost > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Finish:</span>
+                                    <span className="font-mono">${fileWithQty.quote.breakdown.finish_cost.toFixed(2)}</span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <Alert className="bg-blue-50 border-blue-200">
+                                <Info className="h-3 w-3" />
+                                <AlertDescription className="text-xs">
+                                  Preliminary estimate • Final pricing subject to engineering review
+                                </AlertDescription>
+                              </Alert>
+                            </CardContent>
+                          </Card>
+                        )}
                       </div>
                     ))}
                     <div className="flex items-center justify-center gap-2 text-primary pt-2">

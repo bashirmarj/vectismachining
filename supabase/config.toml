@@ -2,3 +2,9 @@ project_id = "inqabwlmvrvqsdrgskju"
 
 [functions.send-quotation-request]
 verify_jwt = false
+
+[functions.analyze-cad]
+verify_jwt = false
+
+[functions.calculate-preliminary-quote]
+verify_jwt = false

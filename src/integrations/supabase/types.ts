@@ -38,6 +38,69 @@ export type Database = {
         }
         Relationships: []
       }
+      manufacturing_processes: {
+        Row: {
+          base_rate_per_hour: number
+          complexity_multiplier: number | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          setup_cost: number
+        }
+        Insert: {
+          base_rate_per_hour: number
+          complexity_multiplier?: number | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          setup_cost: number
+        }
+        Update: {
+          base_rate_per_hour?: number
+          complexity_multiplier?: number | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          setup_cost?: number
+        }
+        Relationships: []
+      }
+      material_costs: {
+        Row: {
+          cost_per_cubic_cm: number
+          cost_per_square_cm: number
+          created_at: string | null
+          density: number | null
+          finish_options: Json | null
+          id: string
+          is_active: boolean | null
+          material_name: string
+        }
+        Insert: {
+          cost_per_cubic_cm: number
+          cost_per_square_cm: number
+          created_at?: string | null
+          density?: number | null
+          finish_options?: Json | null
+          id?: string
+          is_active?: boolean | null
+          material_name: string
+        }
+        Update: {
+          cost_per_cubic_cm?: number
+          cost_per_square_cm?: number
+          created_at?: string | null
+          density?: number | null
+          finish_options?: Json | null
+          id?: string
+          is_active?: boolean | null
+          material_name?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -124,35 +187,71 @@ export type Database = {
       quote_line_items: {
         Row: {
           created_at: string
+          estimated_complexity_score: number | null
+          estimated_machine_time_hours: number | null
+          estimated_surface_area_cm2: number | null
+          estimated_volume_cm3: number | null
           file_name: string
           file_path: string
+          finish_cost: number | null
+          finish_type: string | null
           id: string
           lead_time_days: number | null
+          machining_cost: number | null
+          material_cost: number | null
+          material_type: string | null
           notes: string | null
+          preliminary_unit_price: number | null
           quantity: number
           quotation_id: string
+          selected_process: string | null
+          setup_cost: number | null
           unit_price: number | null
         }
         Insert: {
           created_at?: string
+          estimated_complexity_score?: number | null
+          estimated_machine_time_hours?: number | null
+          estimated_surface_area_cm2?: number | null
+          estimated_volume_cm3?: number | null
           file_name: string
           file_path: string
+          finish_cost?: number | null
+          finish_type?: string | null
           id?: string
           lead_time_days?: number | null
+          machining_cost?: number | null
+          material_cost?: number | null
+          material_type?: string | null
           notes?: string | null
+          preliminary_unit_price?: number | null
           quantity?: number
           quotation_id: string
+          selected_process?: string | null
+          setup_cost?: number | null
           unit_price?: number | null
         }
         Update: {
           created_at?: string
+          estimated_complexity_score?: number | null
+          estimated_machine_time_hours?: number | null
+          estimated_surface_area_cm2?: number | null
+          estimated_volume_cm3?: number | null
           file_name?: string
           file_path?: string
+          finish_cost?: number | null
+          finish_type?: string | null
           id?: string
           lead_time_days?: number | null
+          machining_cost?: number | null
+          material_cost?: number | null
+          material_type?: string | null
           notes?: string | null
+          preliminary_unit_price?: number | null
           quantity?: number
           quotation_id?: string
+          selected_process?: string | null
+          setup_cost?: number | null
           unit_price?: number | null
         }
         Relationships: [
