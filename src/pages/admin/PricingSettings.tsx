@@ -449,7 +449,7 @@ const PricingSettings = () => {
       prev.map(m => m.id === materialId 
         ? { 
             ...m, 
-            cross_sections: [...(m.cross_sections || []), { width: 1.0, thickness: 0.5, cost_per_inch: 1.0, weight_per_foot: 0, weight_per_bar: 0, shape: 'rectangular' }] 
+            cross_sections: [...(m.cross_sections || []), { width: 0, thickness: 0, cost_per_inch: 0, weight_per_foot: 0, weight_per_bar: 0, shape: 'rectangular' }] 
           }
         : m
       )
@@ -1547,12 +1547,18 @@ const PricingSettings = () => {
                                                             <span className="w-3 h-3 bg-blue-500 rounded-sm"></span>
                                                             Rectangular (Flat Bar)
                                                           </div>
-                                                          {(material.cross_sections || []).map((section, idx) => {
+                                                           {(material.cross_sections || []).map((section, idx) => {
                                                             if (section.shape && section.shape !== 'rectangular') return null;
+                                                            const thickness = section.thickness || 0;
+                                                            const width = section.width || 0;
+                                                            const costPerInch = section.cost_per_inch || 0;
+                                                            const thicknessDisplay = thickness > 0 ? decimalToFraction(thickness) : 'N/A';
+                                                            const widthDisplay = width > 0 ? decimalToFraction(width) : 'N/A';
+                                                            const costDisplay = costPerInch > 0 ? `$${costPerInch.toFixed(4)}/inch` : 'N/A';
                                                             return (
                                                               <div key={idx} className="flex items-center group hover:bg-accent">
                                                                 <SelectItem value={idx.toString()} className="flex-1 cursor-pointer">
-                                                                  {`${decimalToFraction(section.thickness)}" × ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`}
+                                                                  {`${thicknessDisplay}" × ${widthDisplay}" - ${costDisplay}`}
                                                                 </SelectItem>
                                                                 <Button
                                                                   type="button"
@@ -1681,12 +1687,12 @@ const PricingSettings = () => {
                                                       <>
                                                         <div className="space-y-2">
                                                           <Label className="text-sm font-medium">Thickness</Label>
-                                                          <div className="text-lg font-semibold">{decimalToFraction(section.thickness)}"</div>
+                                                          <div className="text-lg font-semibold">{section.thickness > 0 ? decimalToFraction(section.thickness) : 'N/A'}"</div>
                                                         </div>
 
                                                         <div className="space-y-2">
                                                           <Label className="text-sm font-medium">Width</Label>
-                                                          <div className="text-lg font-semibold">{decimalToFraction(section.width)}"</div>
+                                                          <div className="text-lg font-semibold">{section.width > 0 ? decimalToFraction(section.width) : 'N/A'}"</div>
                                                         </div>
                                                       </>
                                                     )}
