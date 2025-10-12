@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, Plus, Trash2, Settings, X } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, Settings, X, Download, Upload } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -395,6 +395,63 @@ const PricingSettings = () => {
         : m
       )
     );
+  };
+
+  const handleTableUpload = async (e: React.ChangeEvent<HTMLInputElement>, materialId: string, material: MaterialCost) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    toast({
+      title: "Processing table...",
+      description: "Analyzing the uploaded image to extract cross-section data",
+    });
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64Image = event.target?.result as string;
+        
+        const { data, error } = await supabase.functions.invoke('parse-material-table', {
+          body: { 
+            image: base64Image,
+            price_per_lb: material.price_per_lb || 1.0 
+          }
+        });
+
+        if (error) throw error;
+
+        if (data.cross_sections && data.cross_sections.length > 0) {
+          setMaterials(prev =>
+            prev.map(m => m.id === materialId
+              ? { ...m, cross_sections: [...(m.cross_sections || []), ...data.cross_sections] }
+              : m
+            )
+          );
+          
+          toast({
+            title: "Success!",
+            description: `Imported ${data.cross_sections.length} cross-sections from the table`,
+          });
+        } else {
+          toast({
+            title: "No data found",
+            description: "Could not extract cross-section data from the image",
+            variant: "destructive"
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error processing table:', error);
+      toast({
+        title: "Error",
+        description: "Failed to process the table image",
+        variant: "destructive"
+      });
+    }
+    
+    // Reset the input
+    e.target.value = '';
   };
 
   const importEMJData = (materialId: string) => {
@@ -1044,14 +1101,14 @@ const PricingSettings = () => {
 
                                         <div className="flex items-center justify-between mb-2">
                                           <Label>Cross Sections</Label>
-                                          <div className="flex gap-2">
+                                          <div className="flex gap-2 flex-wrap">
                                             <Button
                                               type="button"
                                               variant="outline"
                                               size="sm"
                                               onClick={() => importEMJData(material.id)}
                                             >
-                                              <Plus className="h-4 w-4 mr-2" />
+                                              <Download className="h-4 w-4 mr-2" />
                                               Import EMJ Standard Sizes
                                             </Button>
                                             <Button
@@ -1063,6 +1120,24 @@ const PricingSettings = () => {
                                               <Plus className="h-4 w-4 mr-2" />
                                               Add Custom Cross Section
                                             </Button>
+                                            <label htmlFor={`upload-table-${material.id}`}>
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => document.getElementById(`upload-table-${material.id}`)?.click()}
+                                              >
+                                                <Upload className="h-4 w-4 mr-2" />
+                                                Upload Table Image
+                                              </Button>
+                                            </label>
+                                            <input
+                                              id={`upload-table-${material.id}`}
+                                              type="file"
+                                              accept="image/*"
+                                              className="hidden"
+                                              onChange={(e) => handleTableUpload(e, material.id, material)}
+                                            />
                                           </div>
                                         </div>
                                         <p className="text-xs text-muted-foreground mb-3">
