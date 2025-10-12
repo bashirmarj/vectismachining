@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, horizontalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, Plus, Trash2, Settings } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, Settings, GripVertical } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -61,6 +64,7 @@ const PricingSettings = () => {
   const [processes, setProcesses] = useState<ManufacturingProcess[]>([]);
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
   const [materials, setMaterials] = useState<MaterialCost[]>([]);
+  const [activeTab, setActiveTab] = useState<string>('');
 
   useEffect(() => {
     const checkAdminAndFetchData = async () => {
@@ -252,6 +256,9 @@ const PricingSettings = () => {
   };
 
   const addNewMaterial = async () => {
+    // Determine category_id based on active tab
+    const defaultCategoryId = activeTab === 'uncategorized' ? null : (activeTab || null);
+    
     try {
       const { data, error } = await supabase
         .from('material_costs')
@@ -264,7 +271,7 @@ const PricingSettings = () => {
           is_active: true,
           pricing_method: 'weight',
           cross_sections: [],
-          category_id: null,
+          category_id: defaultCategoryId,
         })
         .select()
         .single();
@@ -432,6 +439,53 @@ const PricingSettings = () => {
         description: 'Failed to delete material',
         variant: 'destructive',
       });
+    }
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: any) => {
+    const { active, over } = event;
+
+    if (active.id !== over.id) {
+      const oldIndex = categories.findIndex((cat) => cat.id === active.id);
+      const newIndex = categories.findIndex((cat) => cat.id === over.id);
+
+      const reorderedCategories = arrayMove(categories, oldIndex, newIndex);
+      
+      // Update display_order for all categories
+      const updatedCategories = reorderedCategories.map((cat, index) => ({
+        ...cat,
+        display_order: index + 1
+      }));
+
+      setCategories(updatedCategories);
+
+      // Save new order to database
+      try {
+        for (const cat of updatedCategories) {
+          await supabase
+            .from('material_categories')
+            .update({ display_order: cat.display_order })
+            .eq('id', cat.id);
+        }
+
+        toast({
+          title: 'Success',
+          description: 'Category order updated',
+        });
+      } catch (error: any) {
+        toast({
+          title: 'Error',
+          description: 'Failed to update category order',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -619,26 +673,32 @@ const PricingSettings = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Tabs defaultValue={categories[0]?.id || 'uncategorized'} className="w-full">
-                    <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
-                      {categories.map((category) => {
-                        const count = materials.filter(m => m.category_id === category.id).length;
-                        return (
-                          <TabsTrigger key={category.id} value={category.id} className="gap-2">
-                            {category.name}
-                            <Badge variant="secondary" className="ml-1">{count}</Badge>
-                          </TabsTrigger>
-                        );
-                      })}
-                      {materials.filter(m => !m.category_id).length > 0 && (
-                        <TabsTrigger value="uncategorized" className="gap-2">
-                          Uncategorized
-                          <Badge variant="secondary" className="ml-1">
-                            {materials.filter(m => !m.category_id).length}
-                          </Badge>
-                        </TabsTrigger>
-                      )}
-                    </TabsList>
+                  <Tabs value={activeTab || categories[0]?.id || 'uncategorized'} onValueChange={setActiveTab} className="w-full">
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <SortableContext
+                        items={categories.map(c => c.id)}
+                        strategy={horizontalListSortingStrategy}
+                      >
+                        <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
+                          {categories.map((category) => {
+                            const count = materials.filter(m => m.category_id === category.id).length;
+                            return <SortableTabTrigger key={category.id} category={category} count={count} />;
+                          })}
+                          {materials.filter(m => !m.category_id).length > 0 && (
+                            <TabsTrigger value="uncategorized" className="gap-2">
+                              Uncategorized
+                              <Badge variant="secondary" className="ml-1">
+                                {materials.filter(m => !m.category_id).length}
+                              </Badge>
+                            </TabsTrigger>
+                          )}
+                        </TabsList>
+                      </SortableContext>
+                    </DndContext>
 
                     {categories.map((category) => {
                       const categoryMaterials = materials.filter(m => m.category_id === category.id);
@@ -1155,6 +1215,34 @@ const PricingSettings = () => {
         </div>
       </main>
       <Footer />
+    </div>
+  );
+};
+
+// Sortable Tab Trigger Component
+const SortableTabTrigger = ({ category, count }: { category: any; count: number }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: category.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center">
+      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1">
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <TabsTrigger value={category.id} className="gap-2">
+        {category.name}
+        <Badge variant="secondary" className="ml-1">{count}</Badge>
+      </TabsTrigger>
     </div>
   );
 };
