@@ -1547,9 +1547,8 @@ const PricingSettings = () => {
                                                             <span className="w-3 h-3 bg-blue-500 rounded-sm"></span>
                                                             Rectangular (Flat Bar)
                                                           </div>
-                                                           {rectangularSections.map((section) => {
-                                                            const originalIdx = material.cross_sections?.indexOf(section) ?? -1;
-                                                            if (originalIdx === -1) return null;
+                                                           {(material.cross_sections || []).map((section, originalIdx) => {
+                                                            if (section.shape && section.shape !== 'rectangular') return null;
                                                             const thickness = section.thickness || 0;
                                                             const width = section.width || 0;
                                                             const costPerInch = section.cost_per_inch || 0;
@@ -1595,9 +1594,8 @@ const PricingSettings = () => {
                                                             <span className="w-3 h-3 bg-green-500 rounded-full"></span>
                                                             Circular (Round Bar)
                                                           </div>
-                                                          {circularSections.map((section) => {
-                                                            const originalIdx = material.cross_sections?.indexOf(section) ?? -1;
-                                                            if (originalIdx === -1) return null;
+                                                          {(material.cross_sections || []).map((section, originalIdx) => {
+                                                            if (section.shape !== 'circular') return null;
                                                             const diameter = section.width || 0;
                                                             const costPerInch = section.cost_per_inch || 0;
                                                             const diameterDisplay = diameter > 0 ? decimalToFraction(diameter) : 'N/A';
