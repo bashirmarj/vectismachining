@@ -867,11 +867,14 @@ const PricingSettings = () => {
   };
 
   const updateCrossSection = (materialId: string, index: number, field: keyof CrossSection, value: number | string) => {
+    console.log(`[DEBUG updateCrossSection] Material: ${materialId}, Index: ${index}, Field: ${field}, Value:`, value);
     setMaterials(prev =>
       prev.map(m => {
         if (m.id === materialId && m.cross_sections) {
+          console.log(`[DEBUG] Current cross_sections:`, m.cross_sections.map((s, i) => ({ i, shape: s.shape, width: s.width, thickness: s.thickness })));
           const updated = [...m.cross_sections];
           const currentSection = updated[index];
+          console.log(`[DEBUG] Updating section at index ${index}:`, currentSection);
           
           // If changing to circular, set thickness to match width (diameter)
           if (field === 'shape' && value === 'circular') {
@@ -889,6 +892,7 @@ const PricingSettings = () => {
             updated[index] = { ...currentSection, [field]: value };
           }
           
+          console.log(`[DEBUG] After update at index ${index}:`, updated[index]);
           return { ...m, cross_sections: updated };
         }
         return m;
