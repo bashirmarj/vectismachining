@@ -1589,10 +1589,14 @@ const PricingSettings = () => {
                                                           </div>
                                                           {(material.cross_sections || []).map((section, idx) => {
                                                             if (section.shape !== 'circular') return null;
+                                                            const diameter = section.width || 0;
+                                                            const costPerInch = section.cost_per_inch || 0;
+                                                            const diameterDisplay = diameter > 0 ? decimalToFraction(diameter) : 'N/A';
+                                                            const costDisplay = costPerInch > 0 ? `$${costPerInch.toFixed(4)}/inch` : 'N/A';
                                                             return (
                                                               <div key={idx} className="flex items-center group hover:bg-accent">
                                                                 <SelectItem value={idx.toString()} className="flex-1 cursor-pointer">
-                                                                  {`Ø ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`}
+                                                                  {`Ø ${diameterDisplay}" - ${costDisplay}`}
                                                                 </SelectItem>
                                                                 <Button
                                                                   type="button"
@@ -1671,7 +1675,7 @@ const PricingSettings = () => {
                                                     {section.shape === 'circular' ? (
                                                       <div className="space-y-2">
                                                         <Label className="text-sm font-medium">Diameter (Ø)</Label>
-                                                        <div className="text-lg font-semibold">Ø {decimalToFraction(section.width)}"</div>
+                                                        <div className="text-lg font-semibold">Ø {section.width > 0 ? decimalToFraction(section.width) : 'N/A'}"</div>
                                                       </div>
                                                     ) : (
                                                       <>
