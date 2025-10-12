@@ -1163,7 +1163,7 @@ const PricingSettings = () => {
                                                 <SelectContent className="bg-background z-50">
                                                   {(material.cross_sections || []).map((section, idx) => (
                                                     <SelectItem key={idx} value={idx.toString()}>
-                                                      {section.width}" × {section.thickness}" - ${section.cost_per_inch}/inch
+                                                      {section.thickness}" × {section.width}" - ${section.cost_per_inch.toFixed(4)}/inch
                                                     </SelectItem>
                                                   ))}
                                                 </SelectContent>
