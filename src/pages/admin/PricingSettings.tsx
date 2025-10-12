@@ -473,45 +473,63 @@ const PricingSettings = () => {
       const crossSections: CrossSection[] = [];
       const pricePerLb = material.price_per_lb || 1.0;
 
-      // Skip header row and process data rows
-      for (let i = 1; i < jsonData.length; i++) {
-        const row = jsonData[i];
-        if (!row || row.length < 3) continue;
-
-        // Convert fraction strings to decimals
-        const parseValue = (val: any): number => {
-          if (typeof val === 'number') return val;
-          if (typeof val === 'string') {
-            // Handle fractions like "1/16", "3/32"
-            if (val.includes('/')) {
-              const parts = val.split('/');
-              return parseFloat(parts[0]) / parseFloat(parts[1]);
-            }
-            // Handle mixed numbers like "1-1/8"
-            if (val.includes('-')) {
-              const parts = val.split('-');
-              const whole = parseFloat(parts[0]);
-              const fracParts = parts[1].split('/');
-              return whole + (parseFloat(fracParts[0]) / parseFloat(fracParts[1]));
-            }
-            return parseFloat(val);
+      // Helper to parse values including fractions
+      const parseValue = (val: any): number => {
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string') {
+          const trimmed = val.trim();
+          // Handle fractions like "1/16", "3/32"
+          if (trimmed.includes('/')) {
+            const parts = trimmed.split('/');
+            return parseFloat(parts[0]) / parseFloat(parts[1]);
           }
-          return 0;
-        };
+          // Handle mixed numbers like "1 1/8"
+          if (trimmed.includes(' ') && trimmed.includes('/')) {
+            const parts = trimmed.split(' ');
+            const whole = parseFloat(parts[0]);
+            const fracParts = parts[1].split('/');
+            return whole + (parseFloat(fracParts[0]) / parseFloat(fracParts[1]));
+          }
+          return parseFloat(trimmed);
+        }
+        return 0;
+      };
 
-        const thickness = parseValue(row[0]);
-        const width = parseValue(row[1]);
-        const weightPerFoot = parseValue(row[2]);
-        const weightPerBar = row[3] ? parseValue(row[3]) : weightPerFoot * 12;
+      let currentThickness = 0;
 
-        if (thickness && width && weightPerFoot) {
-          crossSections.push({
-            thickness,
-            width,
-            weight_per_foot: weightPerFoot,
-            weight_per_bar: weightPerBar,
-            cost_per_inch: (weightPerFoot / 12) * pricePerLb
-          });
+      // Process each row
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (!row || row.length === 0) continue;
+
+        const firstCell = row[0];
+        
+        // Check if this row defines a new thickness section
+        // (single value that looks like a thickness, with empty or header-like cells after)
+        if (firstCell && (row.length === 1 || !row[1] || typeof row[1] === 'string')) {
+          const parsed = parseValue(firstCell);
+          // If it's a small value (typical thickness), treat it as thickness header
+          if (parsed > 0 && parsed <= 2) {
+            currentThickness = parsed;
+            continue;
+          }
+        }
+
+        // If we have a current thickness, try to parse cross-section data
+        if (currentThickness > 0 && row.length >= 3) {
+          const width = parseValue(row[0]);
+          const weightPerFoot = parseValue(row[2]); // Column 3 is "Lbs. Per Foot"
+          const weightPerBar = row[4] ? parseValue(row[4]) : weightPerFoot * 12; // Column 5 or calculate
+
+          if (width > 0 && weightPerFoot > 0) {
+            crossSections.push({
+              thickness: currentThickness,
+              width,
+              weight_per_foot: weightPerFoot,
+              weight_per_bar: weightPerBar,
+              cost_per_inch: (weightPerFoot / 12) * pricePerLb
+            });
+          }
         }
       }
 
@@ -530,7 +548,7 @@ const PricingSettings = () => {
       } else {
         toast({
           title: "No data found",
-          description: "Could not extract cross-section data from the Excel file. Make sure columns are: Thickness, Width, Weight/Foot, Weight/Bar",
+          description: "Could not extract cross-section data from the Excel file",
           variant: "destructive"
         });
       }
