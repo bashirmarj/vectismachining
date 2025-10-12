@@ -59,44 +59,54 @@ const handler = async (req: Request): Promise<Response> => {
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
-            body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5; }
-            .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-            .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 40px 30px; text-align: center; }
-            .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: 600; }
-            .content { padding: 40px 30px; }
-            .section { margin-bottom: 30px; }
-            .section-title { color: #1a1a2e; font-size: 18px; font-weight: 600; margin-bottom: 15px; padding-bottom: 8px; border-bottom: 2px solid #0f3460; }
-            .info-row { margin: 12px 0; line-height: 1.6; color: #333333; }
-            .label { font-weight: 600; color: #1a1a2e; display: inline-block; min-width: 100px; }
-            .value { color: #555555; }
-            .message-box { background-color: #f8f9fa; padding: 15px; border-radius: 6px; white-space: pre-line; color: #555555; line-height: 1.6; margin-top: 10px; }
-            .footer { background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0; }
-            .footer-text { color: #666666; font-size: 14px; margin: 5px 0; }
+            body { margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #ffffff; }
+            .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+            .header { margin-bottom: 30px; }
+            .company-name { font-size: 18px; font-weight: bold; color: #000000; margin-bottom: 20px; }
+            .intro { font-size: 14px; line-height: 1.6; color: #000000; margin-bottom: 30px; }
+            .info-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            .info-table td { padding: 12px; border: 1px solid #cccccc; font-size: 14px; }
+            .info-table td:first-child { background-color: #f9f9f9; font-weight: normal; color: #000000; width: 180px; }
+            .info-table td:last-child { color: #000000; }
+            .message-row td { vertical-align: top; white-space: pre-line; }
+            .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #cccccc; font-size: 12px; color: #666666; }
           </style>
         </head>
         <body>
           <div class="container">
             <div class="header">
-              <h1>📧 New Contact Message</h1>
+              <div class="company-name">VECTIS MANUFACTURING</div>
             </div>
             
-            <div class="content">
-              <div class="section">
-                <div class="section-title">Contact Information</div>
-                <div class="info-row"><span class="label">Name:</span> <span class="value">${name}</span></div>
-                <div class="info-row"><span class="label">Email:</span> <span class="value">${email}</span></div>
-                ${phone ? `<div class="info-row"><span class="label">Phone:</span> <span class="value">${phone}</span></div>` : ''}
-              </div>
-              
-              <div class="section">
-                <div class="section-title">Message</div>
-                <div class="message-box">${message}</div>
-              </div>
+            <div class="intro">
+              Hello, You have received a new contact message. Here is a summary of the submission:
             </div>
+            
+            <table class="info-table">
+              <tr>
+                <td>Name</td>
+                <td>${name}</td>
+              </tr>
+              <tr>
+                <td>Company</td>
+                <td>${name}</td>
+              </tr>
+              <tr>
+                <td>Email</td>
+                <td>${email}</td>
+              </tr>
+              ${phone ? `<tr>
+                <td>Phone</td>
+                <td>${phone}</td>
+              </tr>` : ''}
+              <tr class="message-row">
+                <td>Message</td>
+                <td>${message}</td>
+              </tr>
+            </table>
             
             <div class="footer">
-              <div class="footer-text"><strong>Vectis Manufacturing</strong></div>
-              <div class="footer-text">Your Partner in Precision Manufacturing</div>
+              Thank you for choosing Vectis Manufacturing.
             </div>
           </div>
         </body>

@@ -78,89 +78,88 @@ const handler = async (req: Request): Promise<Response> => {
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Your Quotation - ${quoteNumber}</title>
         </head>
-        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f9fafb;">
-          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
-            <!-- Header -->
-            <div style="background-color: #1f2937; color: #ffffff; padding: 32px 24px; text-align: center;">
-              <h1 style="margin: 0; font-size: 28px;">Your Quotation</h1>
-              <p style="margin: 8px 0 0 0; font-size: 18px; opacity: 0.9;">${quoteNumber}</p>
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #ffffff;">
+          <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <div style="margin-bottom: 30px;">
+              <div style="font-size: 18px; font-weight: bold; color: #000000; margin-bottom: 20px;">VECTIS MANUFACTURING</div>
             </div>
 
-            <!-- Content -->
-            <div style="padding: 32px 24px;">
-              <p style="margin: 0 0 24px 0; font-size: 16px;">Dear ${customerName},</p>
-              
-              <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.5;">
-                Thank you for your quotation request. We're pleased to provide you with the following quote for your custom manufacturing project.
-              </p>
+            <div style="font-size: 14px; line-height: 1.6; color: #000000; margin-bottom: 30px;">
+              Hello ${customerName}, Thank you for your quotation request. We're pleased to provide you with the following quote for your custom manufacturing project.
+            </div>
 
-              <!-- Line Items Table -->
-              <table style="width: 100%; border-collapse: collapse; margin: 24px 0;">
-                <thead>
-                  <tr style="background-color: #f3f4f6;">
-                    <th style="padding: 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #e5e7eb;">Part</th>
-                    <th style="padding: 12px; text-align: center; font-weight: 600; border-bottom: 2px solid #e5e7eb;">Qty</th>
-                    <th style="padding: 12px; text-align: right; font-weight: 600; border-bottom: 2px solid #e5e7eb;">Unit Price</th>
-                    <th style="padding: 12px; text-align: right; font-weight: 600; border-bottom: 2px solid #e5e7eb;">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${lineItemsHtml}
-                </tbody>
-              </table>
-
-              <!-- Totals -->
-              <div style="margin: 24px 0; padding: 20px; background-color: #f9fafb; border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                  <span>Subtotal:</span>
-                  <span style="font-weight: 600;">$${Number(quote.subtotal).toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                  <span>Shipping:</span>
-                  <span style="font-weight: 600;">$${Number(quote.shipping_cost).toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                  <span>Tax (${Number(quote.tax_rate).toFixed(2)}%):</span>
-                  <span style="font-weight: 600;">$${Number(quote.tax_amount).toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; padding-top: 12px; border-top: 2px solid #e5e7eb; margin-top: 12px;">
-                  <span style="font-size: 18px; font-weight: 700;">Total:</span>
-                  <span style="font-size: 18px; font-weight: 700; color: #1f2937;">$${Number(quote.total_amount).toFixed(2)} ${quote.currency}</span>
-                </div>
-              </div>
-
+            <!-- Quote Summary -->
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+              <tr>
+                <td style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; font-size: 14px; width: 180px;">Quote Number</td>
+                <td style="padding: 12px; border: 1px solid #cccccc; font-size: 14px; color: #000000;">${quoteNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; font-size: 14px;">Date</td>
+                <td style="padding: 12px; border: 1px solid #cccccc; font-size: 14px; color: #000000;">${new Date().toLocaleDateString()}</td>
+              </tr>
               ${quote.estimated_lead_time_days ? `
-              <div style="margin: 24px 0; padding: 16px; background-color: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 4px;">
-                <p style="margin: 0; font-weight: 600;">Estimated Lead Time: ${quote.estimated_lead_time_days} business days</p>
-              </div>
-              ` : ''}
+              <tr>
+                <td style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; font-size: 14px;">Estimated Lead Time</td>
+                <td style="padding: 12px; border: 1px solid #cccccc; font-size: 14px; color: #000000;">${quote.estimated_lead_time_days} business days</td>
+              </tr>` : ''}
+              <tr>
+                <td style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; font-size: 14px;">Valid Until</td>
+                <td style="padding: 12px; border: 1px solid #cccccc; font-size: 14px; color: #000000;">${new Date(quote.valid_until).toLocaleDateString()}</td>
+              </tr>
+            </table>
 
-              ${quote.notes ? `
-              <div style="margin: 24px 0;">
-                <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600;">Additional Notes:</h3>
-                <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #4b5563; white-space: pre-line;">${quote.notes}</p>
-              </div>
-              ` : ''}
+            <!-- Line Items Table -->
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+              <thead>
+                <tr>
+                  <th style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; text-align: left; font-size: 14px; font-weight: normal;">Part</th>
+                  <th style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; text-align: center; font-size: 14px; font-weight: normal;">Qty</th>
+                  <th style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; text-align: right; font-size: 14px; font-weight: normal;">Unit Price</th>
+                  <th style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; text-align: right; font-size: 14px; font-weight: normal;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${lineItemsHtml}
+              </tbody>
+            </table>
 
-              <div style="margin: 32px 0 24px 0; padding: 16px; background-color: #fef3c7; border-radius: 4px;">
-                <p style="margin: 0; font-size: 14px; font-weight: 600;">This quote is valid until: ${new Date(quote.valid_until).toLocaleDateString()}</p>
-              </div>
+            <!-- Totals -->
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+              <tr>
+                <td style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; font-size: 14px; width: 180px;">Subtotal</td>
+                <td style="padding: 12px; border: 1px solid #cccccc; font-size: 14px; text-align: right; color: #000000;">$${Number(quote.subtotal).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; font-size: 14px;">Shipping</td>
+                <td style="padding: 12px; border: 1px solid #cccccc; font-size: 14px; text-align: right; color: #000000;">$${Number(quote.shipping_cost).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; font-size: 14px;">Tax (${Number(quote.tax_rate).toFixed(2)}%)</td>
+                <td style="padding: 12px; border: 1px solid #cccccc; font-size: 14px; text-align: right; color: #000000;">$${Number(quote.tax_amount).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; font-size: 14px; font-weight: bold;">Total</td>
+                <td style="padding: 12px; border: 1px solid #cccccc; font-size: 14px; text-align: right; font-weight: bold; color: #000000;">$${Number(quote.total_amount).toFixed(2)} ${quote.currency}</td>
+              </tr>
+            </table>
 
-              <p style="margin: 24px 0 0 0; font-size: 16px; line-height: 1.5;">
-                If you have any questions or would like to proceed with this order, please reply to this email or contact us directly.
-              </p>
+            ${quote.notes ? `
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+              <tr>
+                <td style="padding: 12px; border: 1px solid #cccccc; background-color: #f9f9f9; font-size: 14px; vertical-align: top; width: 180px;">Additional Notes</td>
+                <td style="padding: 12px; border: 1px solid #cccccc; font-size: 14px; color: #000000; white-space: pre-line;">${quote.notes}</td>
+              </tr>
+            </table>
+            ` : ''}
 
-              <p style="margin: 24px 0 0 0; font-size: 16px;">
-                Best regards,<br>
-                <strong>Your Manufacturing Team</strong>
-              </p>
+            <div style="font-size: 14px; line-height: 1.6; color: #000000; margin-bottom: 30px;">
+              If you have any questions or would like to proceed with this order, please reply to this email or contact us directly.
             </div>
 
-            <!-- Footer -->
-            <div style="background-color: #f3f4f6; padding: 24px; text-align: center; font-size: 14px; color: #6b7280;">
-              <p style="margin: 0;">Thank you for choosing our manufacturing services.</p>
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #cccccc; font-size: 12px; color: #666666;">
+              Thank you for choosing Vectis Manufacturing.
             </div>
           </div>
         </body>
