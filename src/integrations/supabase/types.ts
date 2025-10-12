@@ -105,6 +105,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           material_name: string
+          price_per_lb: number | null
           pricing_method: string | null
           sheet_configurations: Json | null
         }
@@ -120,6 +121,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           material_name: string
+          price_per_lb?: number | null
           pricing_method?: string | null
           sheet_configurations?: Json | null
         }
@@ -135,6 +137,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           material_name?: string
+          price_per_lb?: number | null
           pricing_method?: string | null
           sheet_configurations?: Json | null
         }

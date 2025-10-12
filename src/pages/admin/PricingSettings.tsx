@@ -33,6 +33,8 @@ interface CrossSection {
   width: number;
   thickness: number;
   cost_per_inch: number;
+  weight_per_foot?: number;
+  weight_per_bar?: number;
 }
 
 interface SheetConfiguration {
@@ -63,6 +65,7 @@ interface MaterialCost {
   sheet_configurations?: SheetConfiguration[];
   default_nesting_efficiency?: number;
   category_id?: string | null;
+  price_per_lb?: number;
 }
 
 const PricingSettings = () => {
@@ -215,6 +218,7 @@ const PricingSettings = () => {
         sheet_configurations: (m.sheet_configurations || []) as any,
         default_nesting_efficiency: m.default_nesting_efficiency || 0.75,
         category_id: m.category_id || null,
+        price_per_lb: m.price_per_lb || null,
       }));
 
       for (const update of updates) {
@@ -386,11 +390,97 @@ const PricingSettings = () => {
       prev.map(m => m.id === materialId 
         ? { 
             ...m, 
-            cross_sections: [...(m.cross_sections || []), { width: 1.0, thickness: 0.5, cost_per_inch: 1.0 }] 
+            cross_sections: [...(m.cross_sections || []), { width: 1.0, thickness: 0.5, cost_per_inch: 1.0, weight_per_foot: 0, weight_per_bar: 0 }] 
           }
         : m
       )
     );
+  };
+
+  const importEMJData = (materialId: string) => {
+    const EMJ_COLD_ROLLED_STRIP: Record<string, Array<{ width: number; weight_per_foot: number; weight_per_bar: number }>> = {
+      '0.0625': [ // 1/16"
+        { width: 0.25, weight_per_foot: 0.0532, weight_per_bar: 0.6381 },
+        { width: 0.375, weight_per_foot: 0.0798, weight_per_bar: 0.9572 },
+        { width: 0.5, weight_per_foot: 0.1064, weight_per_bar: 1.276 },
+        { width: 0.625, weight_per_foot: 0.1329, weight_per_bar: 1.595 },
+        { width: 0.75, weight_per_foot: 0.1595, weight_per_bar: 1.914 },
+        { width: 0.875, weight_per_foot: 0.1861, weight_per_bar: 2.233 },
+        { width: 1.0, weight_per_foot: 0.2127, weight_per_bar: 2.552 },
+        { width: 1.125, weight_per_foot: 0.2393, weight_per_bar: 2.871 },
+        { width: 1.25, weight_per_foot: 0.2659, weight_per_bar: 3.191 },
+        { width: 1.5, weight_per_foot: 0.3191, weight_per_bar: 3.829 },
+        { width: 1.75, weight_per_foot: 0.3722, weight_per_bar: 4.467 },
+        { width: 2.0, weight_per_foot: 0.4254, weight_per_bar: 5.105 },
+        { width: 2.5, weight_per_foot: 0.5318, weight_per_bar: 6.381 },
+        { width: 3.0, weight_per_foot: 0.6381, weight_per_bar: 7.657 }
+      ],
+      '0.09375': [ // 3/32"
+        { width: 0.375, weight_per_foot: 0.1196, weight_per_bar: 1.436 },
+        { width: 0.5, weight_per_foot: 0.1595, weight_per_bar: 1.914 },
+        { width: 0.625, weight_per_foot: 0.1994, weight_per_bar: 2.393 },
+        { width: 0.75, weight_per_foot: 0.2393, weight_per_bar: 2.871 },
+        { width: 0.875, weight_per_foot: 0.2792, weight_per_bar: 3.350 },
+        { width: 1.0, weight_per_foot: 0.3191, weight_per_bar: 3.829 },
+        { width: 1.125, weight_per_foot: 0.3589, weight_per_bar: 4.307 },
+        { width: 1.25, weight_per_foot: 0.3988, weight_per_bar: 4.786 },
+        { width: 1.5, weight_per_foot: 0.4786, weight_per_bar: 5.743 },
+        { width: 1.75, weight_per_foot: 0.5583, weight_per_bar: 6.700 }
+      ],
+      '0.125': [ // 1/8"
+        { width: 0.1875, weight_per_foot: 0.0798, weight_per_bar: 0.9572 },
+        { width: 0.25, weight_per_foot: 0.1064, weight_per_bar: 1.276 },
+        { width: 0.375, weight_per_foot: 0.1595, weight_per_bar: 1.914 },
+        { width: 0.5, weight_per_foot: 0.2127, weight_per_bar: 2.552 },
+        { width: 0.625, weight_per_foot: 0.2659, weight_per_bar: 3.191 },
+        { width: 0.75, weight_per_foot: 0.3191, weight_per_bar: 3.829 },
+        { width: 0.875, weight_per_foot: 0.3722, weight_per_bar: 4.467 },
+        { width: 1.0, weight_per_foot: 0.4254, weight_per_bar: 5.105 },
+        { width: 1.125, weight_per_foot: 0.4786, weight_per_bar: 5.743 },
+        { width: 1.25, weight_per_foot: 0.5318, weight_per_bar: 6.381 },
+        { width: 1.5, weight_per_foot: 0.6381, weight_per_bar: 7.657 },
+        { width: 1.75, weight_per_foot: 0.7445, weight_per_bar: 8.933 },
+        { width: 2.0, weight_per_foot: 0.8508, weight_per_bar: 10.21 },
+        { width: 2.5, weight_per_foot: 1.064, weight_per_bar: 12.76 },
+        { width: 3.0, weight_per_foot: 1.276, weight_per_bar: 15.31 },
+        { width: 4.0, weight_per_foot: 1.702, weight_per_bar: 20.42 },
+        { width: 4.5, weight_per_foot: 1.914, weight_per_bar: 22.97 },
+        { width: 5.0, weight_per_foot: 2.127, weight_per_bar: 25.52 },
+        { width: 6.0, weight_per_foot: 2.552, weight_per_bar: 30.63 }
+      ]
+    };
+
+    const material = materials.find(m => m.id === materialId);
+    if (!material) return;
+
+    const pricePerLb = material.price_per_lb || 1.0;
+    const allCrossSections: CrossSection[] = [];
+
+    Object.entries(EMJ_COLD_ROLLED_STRIP).forEach(([thickness, sizes]) => {
+      const thicknessValue = parseFloat(thickness);
+      
+      sizes.forEach(size => {
+        allCrossSections.push({
+          width: size.width,
+          thickness: thicknessValue,
+          weight_per_foot: size.weight_per_foot,
+          weight_per_bar: size.weight_per_bar,
+          cost_per_inch: (size.weight_per_foot / 12) * pricePerLb
+        });
+      });
+    });
+
+    setMaterials(prev =>
+      prev.map(m => m.id === materialId
+        ? { ...m, cross_sections: allCrossSections }
+        : m
+      )
+    );
+
+    toast({
+      title: 'Success',
+      description: `Imported ${allCrossSections.length} EMJ standard cross-sections`,
+    });
   };
 
   const removeCrossSection = (materialId: string, index: number) => {
@@ -920,17 +1010,60 @@ const PricingSettings = () => {
                                       </ResizablePanelGroup>
                                     ) : material.pricing_method === 'linear_inch' ? (
                                       <div className="border rounded-lg p-4 space-y-4">
+                                        <div className="space-y-4 mb-4">
+                                          <div>
+                                            <Label>Price Per Pound ($)</Label>
+                                            <Input
+                                              type="number"
+                                              step="0.01"
+                                              value={material.price_per_lb || 1.0}
+                                              onChange={(e) => {
+                                                const newPrice = parseFloat(e.target.value);
+                                                setMaterials(prev =>
+                                                  prev.map(m => {
+                                                    if (m.id === material.id) {
+                                                      const updatedCrossSections = (m.cross_sections || []).map(cs => ({
+                                                        ...cs,
+                                                        cost_per_inch: cs.weight_per_foot 
+                                                          ? (cs.weight_per_foot / 12) * newPrice 
+                                                          : cs.cost_per_inch
+                                                      }));
+                                                      return { ...m, price_per_lb: newPrice, cross_sections: updatedCrossSections };
+                                                    }
+                                                    return m;
+                                                  })
+                                                );
+                                              }}
+                                              className="max-w-xs"
+                                            />
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                              Base price per pound - all cross-section prices will be calculated from this
+                                            </p>
+                                          </div>
+                                        </div>
+
                                         <div className="flex items-center justify-between mb-2">
                                           <Label>Cross Sections</Label>
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => addCrossSection(material.id)}
-                                          >
-                                            <Plus className="h-4 w-4 mr-2" />
-                                            Add Cross Section
-                                          </Button>
+                                          <div className="flex gap-2">
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => importEMJData(material.id)}
+                                            >
+                                              <Plus className="h-4 w-4 mr-2" />
+                                              Import EMJ Standard Sizes
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => addCrossSection(material.id)}
+                                            >
+                                              <Plus className="h-4 w-4 mr-2" />
+                                              Add Custom Cross Section
+                                            </Button>
+                                          </div>
                                         </div>
                                         <p className="text-xs text-muted-foreground mb-3">
                                           Define standard cross-section sizes and their cost per linear inch
@@ -993,7 +1126,7 @@ const PricingSettings = () => {
                                                     </Button>
                                                   </div>
 
-                                                  <div className="grid grid-cols-2 gap-4">
+                                                  <div className="grid grid-cols-3 gap-4">
                                                     <div className="space-y-2">
                                                       <Label className="text-sm font-medium">Width (inches)</Label>
                                                       <Input
@@ -1018,18 +1151,45 @@ const PricingSettings = () => {
                                                       />
                                                     </div>
 
-                                                    <div className="col-span-2 space-y-2">
-                                                      <Label className="text-sm font-medium">Cost per Linear Inch ($)</Label>
+                                                    <div className="space-y-2">
+                                                      <Label className="text-sm font-medium">Weight/Foot (lbs)</Label>
                                                       <Input
                                                         type="number"
-                                                        step="0.01"
-                                                        min="0"
-                                                        value={section.cost_per_inch}
-                                                        onChange={(e) =>
-                                                          updateCrossSection(material.id, selectedIdx, 'cost_per_inch', parseFloat(e.target.value))
-                                                        }
-                                                        placeholder="Enter cost per inch"
+                                                        step="0.0001"
+                                                        value={section.weight_per_foot || 0}
+                                                        onChange={(e) => {
+                                                          const weight = parseFloat(e.target.value);
+                                                          updateCrossSection(material.id, selectedIdx, 'weight_per_foot', weight);
+                                                          const pricePerLb = material.price_per_lb || 1.0;
+                                                          updateCrossSection(material.id, selectedIdx, 'cost_per_inch', (weight / 12) * pricePerLb);
+                                                        }}
                                                       />
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                      <Label className="text-sm font-medium">Weight/Bar (lbs)</Label>
+                                                      <Input
+                                                        type="number"
+                                                        step="0.0001"
+                                                        value={section.weight_per_bar || 0}
+                                                        onChange={(e) =>
+                                                          updateCrossSection(material.id, selectedIdx, 'weight_per_bar', parseFloat(e.target.value))
+                                                        }
+                                                      />
+                                                      <p className="text-xs text-muted-foreground">12-ft bar weight</p>
+                                                    </div>
+
+                                                    <div className="col-span-2 space-y-2">
+                                                      <Label className="text-sm font-medium">Cost per Inch ($)</Label>
+                                                      <Input
+                                                        type="number"
+                                                        step="0.0001"
+                                                        value={section.cost_per_inch.toFixed(4)}
+                                                        disabled
+                                                        className="bg-muted"
+                                                        title={`Calculated: (${section.weight_per_foot || 0} lbs/ft ÷ 12) × $${material.price_per_lb || 1.0}/lb`}
+                                                      />
+                                                      <p className="text-xs text-muted-foreground">Auto-calculated from weight and price per pound</p>
                                                     </div>
                                                   </div>
                                                 </div>
