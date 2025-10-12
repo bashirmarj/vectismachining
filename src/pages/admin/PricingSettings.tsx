@@ -1547,8 +1547,9 @@ const PricingSettings = () => {
                                                             <span className="w-3 h-3 bg-blue-500 rounded-sm"></span>
                                                             Rectangular (Flat Bar)
                                                           </div>
-                                                           {(material.cross_sections || []).map((section, idx) => {
-                                                            if (section.shape && section.shape !== 'rectangular') return null;
+                                                           {rectangularSections.map((section) => {
+                                                            const originalIdx = material.cross_sections?.indexOf(section) ?? -1;
+                                                            if (originalIdx === -1) return null;
                                                             const thickness = section.thickness || 0;
                                                             const width = section.width || 0;
                                                             const costPerInch = section.cost_per_inch || 0;
@@ -1556,8 +1557,8 @@ const PricingSettings = () => {
                                                             const widthDisplay = width > 0 ? decimalToFraction(width) : 'N/A';
                                                             const costDisplay = costPerInch > 0 ? `$${costPerInch.toFixed(4)}/inch` : 'N/A';
                                                             return (
-                                                              <div key={`rect-${idx}`} className="flex items-center group hover:bg-accent">
-                                                                <SelectItem value={idx.toString()} className="flex-1 cursor-pointer">
+                                                              <div key={`rect-${originalIdx}`} className="flex items-center group hover:bg-accent">
+                                                                <SelectItem value={originalIdx.toString()} className="flex-1 cursor-pointer">
                                                                   {`${thicknessDisplay}" × ${widthDisplay}" - ${costDisplay}`}
                                                                 </SelectItem>
                                                                 <Button
@@ -1568,7 +1569,7 @@ const PricingSettings = () => {
                                                                   onClick={(e) => {
                                                                     e.preventDefault();
                                                                     e.stopPropagation();
-                                                                    removeCrossSection(material.id, idx);
+                                                                    removeCrossSection(material.id, originalIdx);
                                                                     setSelectedCrossSections(prev => {
                                                                       const newVal = { ...prev };
                                                                       if (newVal[material.id] >= (material.cross_sections?.length || 1) - 1) {
@@ -1594,15 +1595,16 @@ const PricingSettings = () => {
                                                             <span className="w-3 h-3 bg-green-500 rounded-full"></span>
                                                             Circular (Round Bar)
                                                           </div>
-                                                          {(material.cross_sections || []).map((section, idx) => {
-                                                            if (section.shape !== 'circular') return null;
+                                                          {circularSections.map((section) => {
+                                                            const originalIdx = material.cross_sections?.indexOf(section) ?? -1;
+                                                            if (originalIdx === -1) return null;
                                                             const diameter = section.width || 0;
                                                             const costPerInch = section.cost_per_inch || 0;
                                                             const diameterDisplay = diameter > 0 ? decimalToFraction(diameter) : 'N/A';
                                                             const costDisplay = costPerInch > 0 ? `$${costPerInch.toFixed(4)}/inch` : 'N/A';
                                                             return (
-                                                              <div key={`circ-${idx}`} className="flex items-center group hover:bg-accent">
-                                                                <SelectItem value={idx.toString()} className="flex-1 cursor-pointer">
+                                                              <div key={`circ-${originalIdx}`} className="flex items-center group hover:bg-accent">
+                                                                <SelectItem value={originalIdx.toString()} className="flex-1 cursor-pointer">
                                                                   {`Ø ${diameterDisplay}" - ${costDisplay}`}
                                                                 </SelectItem>
                                                                 <Button
@@ -1613,7 +1615,7 @@ const PricingSettings = () => {
                                                                   onClick={(e) => {
                                                                     e.preventDefault();
                                                                     e.stopPropagation();
-                                                                    removeCrossSection(material.id, idx);
+                                                                    removeCrossSection(material.id, originalIdx);
                                                                     setSelectedCrossSections(prev => {
                                                                       const newVal = { ...prev };
                                                                       if (newVal[material.id] >= (material.cross_sections?.length || 1) - 1) {
