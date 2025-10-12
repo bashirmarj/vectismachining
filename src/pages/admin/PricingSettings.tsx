@@ -298,6 +298,20 @@ const PricingSettings = () => {
     const categoryName = prompt('Enter new category name:');
     if (!categoryName?.trim()) return;
 
+    // Check if category already exists
+    const existingCategory = categories.find(
+      cat => cat.name.toLowerCase() === categoryName.trim().toLowerCase()
+    );
+    
+    if (existingCategory) {
+      toast({
+        title: 'Category Already Exists',
+        description: `A category named "${categoryName}" already exists.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('material_categories')
@@ -309,7 +323,20 @@ const PricingSettings = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Handle duplicate key error specifically
+        if (error.code === '23505') {
+          toast({
+            title: 'Category Already Exists',
+            description: `A category named "${categoryName}" already exists.`,
+            variant: 'destructive',
+          });
+        } else {
+          throw error;
+        }
+        return;
+      }
+      
       if (data) {
         setCategories(prev => [...prev, data].sort((a, b) => a.display_order - b.display_order));
         toast({
@@ -320,7 +347,7 @@ const PricingSettings = () => {
     } catch (error: any) {
       toast({
         title: 'Error',
-        description: 'Failed to add category',
+        description: error.message || 'Failed to add category',
         variant: 'destructive',
       });
     }
