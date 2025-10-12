@@ -13,6 +13,8 @@ import { Loader2, Save, Plus, Trash2, Settings } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 
 interface ManufacturingProcess {
   id: string;
@@ -23,6 +25,12 @@ interface ManufacturingProcess {
   is_active: boolean;
 }
 
+interface CrossSection {
+  width: number;
+  thickness: number;
+  cost_per_inch: number;
+}
+
 interface MaterialCost {
   id: string;
   material_name: string;
@@ -31,6 +39,8 @@ interface MaterialCost {
   density: number | null;
   finish_options: any;
   is_active: boolean;
+  pricing_method?: string;
+  cross_sections?: CrossSection[];
 }
 
 const PricingSettings = () => {
@@ -87,10 +97,14 @@ const PricingSettings = () => {
 
       setProcesses(processesResponse.data || []);
       
-      // Parse finish_options from JSONB to array
+      // Parse finish_options and cross_sections from JSONB to array
       const parsedMaterials = (materialsResponse.data || []).map(m => ({
         ...m,
-        finish_options: Array.isArray(m.finish_options) ? m.finish_options : []
+        finish_options: Array.isArray(m.finish_options) ? m.finish_options : [],
+        pricing_method: m.pricing_method || 'weight',
+        cross_sections: Array.isArray(m.cross_sections) 
+          ? (m.cross_sections as unknown as CrossSection[])
+          : []
       }));
       setMaterials(parsedMaterials);
     } catch (error: any) {
@@ -163,6 +177,8 @@ const PricingSettings = () => {
         density: m.density,
         finish_options: m.finish_options,
         is_active: m.is_active,
+        pricing_method: m.pricing_method || 'weight',
+        cross_sections: (m.cross_sections || []) as any,
       }));
 
       for (const update of updates) {
@@ -231,6 +247,8 @@ const PricingSettings = () => {
           density: 1.0,
           finish_options: ['As-machined'],
           is_active: true,
+          pricing_method: 'weight',
+          cross_sections: [],
         })
         .select()
         .single();
@@ -239,7 +257,11 @@ const PricingSettings = () => {
       if (data) {
         setMaterials(prev => [...prev, {
           ...data,
-          finish_options: Array.isArray(data.finish_options) ? data.finish_options : []
+          finish_options: Array.isArray(data.finish_options) ? data.finish_options : [],
+          pricing_method: data.pricing_method || 'weight',
+          cross_sections: Array.isArray(data.cross_sections) 
+            ? (data.cross_sections as unknown as CrossSection[])
+            : []
         }]);
         toast({
           title: 'Success',
@@ -253,6 +275,44 @@ const PricingSettings = () => {
         variant: 'destructive',
       });
     }
+  };
+
+  const addCrossSection = (materialId: string) => {
+    setMaterials(prev =>
+      prev.map(m => m.id === materialId 
+        ? { 
+            ...m, 
+            cross_sections: [...(m.cross_sections || []), { width: 1.0, thickness: 0.5, cost_per_inch: 1.0 }] 
+          }
+        : m
+      )
+    );
+  };
+
+  const removeCrossSection = (materialId: string, index: number) => {
+    setMaterials(prev =>
+      prev.map(m => m.id === materialId
+        ? { 
+            ...m, 
+            cross_sections: (m.cross_sections || []).filter((_, i) => i !== index) 
+          }
+        : m
+      )
+    );
+  };
+
+  const updateCrossSection = (materialId: string, index: number, field: keyof CrossSection, value: number) => {
+    setMaterials(prev =>
+      prev.map(m => m.id === materialId
+        ? {
+            ...m,
+            cross_sections: (m.cross_sections || []).map((cs, i) =>
+              i === index ? { ...cs, [field]: value } : cs
+            )
+          }
+        : m
+      )
+    );
   };
 
   const deleteProcess = async (id: string) => {
@@ -496,53 +556,169 @@ const PricingSettings = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <Label htmlFor={`volume-${material.id}`}>Cost per cm³ ($)</Label>
-                          <Input
-                            id={`volume-${material.id}`}
-                            type="number"
-                            step="0.01"
-                            value={material.cost_per_cubic_cm}
-                            onChange={(e) =>
-                              updateMaterial(material.id, 'cost_per_cubic_cm', parseFloat(e.target.value))
-                            }
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Material cost per cubic centimeter
-                          </p>
-                        </div>
-                        <div>
-                          <Label htmlFor={`surface-${material.id}`}>Cost per cm² ($)</Label>
-                          <Input
-                            id={`surface-${material.id}`}
-                            type="number"
-                            step="0.01"
-                            value={material.cost_per_square_cm}
-                            onChange={(e) =>
-                              updateMaterial(material.id, 'cost_per_square_cm', parseFloat(e.target.value))
-                            }
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Used for finish/coating costs
-                          </p>
-                        </div>
-                        <div>
-                          <Label htmlFor={`density-${material.id}`}>Density (g/cm³)</Label>
-                          <Input
-                            id={`density-${material.id}`}
-                            type="number"
-                            step="0.01"
-                            value={material.density || ''}
-                            onChange={(e) =>
-                              updateMaterial(material.id, 'density', parseFloat(e.target.value) || null)
-                            }
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Material density (optional)
-                          </p>
-                        </div>
+                      <div className="mb-4">
+                        <Label htmlFor={`pricing-method-${material.id}`}>Pricing Method</Label>
+                        <Select
+                          value={material.pricing_method || 'weight'}
+                          onValueChange={(value) => updateMaterial(material.id, 'pricing_method', value)}
+                        >
+                          <SelectTrigger id={`pricing-method-${material.id}`}>
+                            <SelectValue placeholder="Select pricing method" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-background z-50">
+                            <SelectItem value="weight">By Weight (Volume)</SelectItem>
+                            <SelectItem value="linear_inch">By Linear Inch</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Choose how to calculate material costs
+                        </p>
                       </div>
+
+                      {material.pricing_method === 'weight' ? (
+                        <ResizablePanelGroup direction="horizontal" className="min-h-[120px] border rounded-lg">
+                          <ResizablePanel defaultSize={33} minSize={20}>
+                            <div className="p-4 h-full">
+                              <Label htmlFor={`volume-${material.id}`}>Cost per cm³ ($)</Label>
+                              <Input
+                                id={`volume-${material.id}`}
+                                type="number"
+                                step="0.01"
+                                value={material.cost_per_cubic_cm}
+                                onChange={(e) =>
+                                  updateMaterial(material.id, 'cost_per_cubic_cm', parseFloat(e.target.value))
+                                }
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Material cost per cubic centimeter
+                              </p>
+                            </div>
+                          </ResizablePanel>
+                          <ResizableHandle withHandle />
+                          <ResizablePanel defaultSize={33} minSize={20}>
+                            <div className="p-4 h-full">
+                              <Label htmlFor={`surface-${material.id}`}>Cost per cm² ($)</Label>
+                              <Input
+                                id={`surface-${material.id}`}
+                                type="number"
+                                step="0.01"
+                                value={material.cost_per_square_cm}
+                                onChange={(e) =>
+                                  updateMaterial(material.id, 'cost_per_square_cm', parseFloat(e.target.value))
+                                }
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Used for finish/coating costs
+                              </p>
+                            </div>
+                          </ResizablePanel>
+                          <ResizableHandle withHandle />
+                          <ResizablePanel defaultSize={34} minSize={20}>
+                            <div className="p-4 h-full">
+                              <Label htmlFor={`density-${material.id}`}>Density (g/cm³)</Label>
+                              <Input
+                                id={`density-${material.id}`}
+                                type="number"
+                                step="0.01"
+                                value={material.density || ''}
+                                onChange={(e) =>
+                                  updateMaterial(material.id, 'density', parseFloat(e.target.value) || null)
+                                }
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Material density (optional)
+                              </p>
+                            </div>
+                          </ResizablePanel>
+                        </ResizablePanelGroup>
+                      ) : (
+                        <div className="border rounded-lg p-4 space-y-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <Label>Cross Sections (Width × Thickness)</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addCrossSection(material.id)}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add Section
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-3">
+                            Define standard cross-section sizes and their cost per linear inch
+                          </p>
+                          {(material.cross_sections || []).length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                              No cross sections defined. Click "Add Section" to create one.
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {(material.cross_sections || []).map((section, idx) => (
+                                <ResizablePanelGroup key={idx} direction="horizontal" className="border rounded-md">
+                                  <ResizablePanel defaultSize={28} minSize={20}>
+                                    <div className="p-3">
+                                      <Label className="text-xs">Width (inches)</Label>
+                                      <Input
+                                        type="number"
+                                        step="0.125"
+                                        value={section.width}
+                                        onChange={(e) =>
+                                          updateCrossSection(material.id, idx, 'width', parseFloat(e.target.value))
+                                        }
+                                        className="mt-1"
+                                      />
+                                    </div>
+                                  </ResizablePanel>
+                                  <ResizableHandle />
+                                  <ResizablePanel defaultSize={28} minSize={20}>
+                                    <div className="p-3">
+                                      <Label className="text-xs">Thickness (inches)</Label>
+                                      <Input
+                                        type="number"
+                                        step="0.125"
+                                        value={section.thickness}
+                                        onChange={(e) =>
+                                          updateCrossSection(material.id, idx, 'thickness', parseFloat(e.target.value))
+                                        }
+                                        className="mt-1"
+                                      />
+                                    </div>
+                                  </ResizablePanel>
+                                  <ResizableHandle />
+                                  <ResizablePanel defaultSize={28} minSize={20}>
+                                    <div className="p-3">
+                                      <Label className="text-xs">Cost per Inch ($)</Label>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={section.cost_per_inch}
+                                        onChange={(e) =>
+                                          updateCrossSection(material.id, idx, 'cost_per_inch', parseFloat(e.target.value))
+                                        }
+                                        className="mt-1"
+                                      />
+                                    </div>
+                                  </ResizablePanel>
+                                  <ResizableHandle />
+                                  <ResizablePanel defaultSize={16} minSize={10}>
+                                    <div className="p-3 flex items-center justify-center h-full">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => removeCrossSection(material.id, idx)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </ResizablePanel>
+                                </ResizablePanelGroup>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div>
                         <Label>Available Finishes</Label>

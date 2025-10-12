@@ -75,8 +75,28 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
     throw new Error(`Material "${materialName}" not found`);
   }
   
-  // 3. Material Cost (volume × rate)
-  const materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
+  // 3. Material Cost - calculate based on pricing method
+  let materialCost = 0;
+  
+  if (materialData.pricing_method === 'linear_inch') {
+    // For linear inch pricing, use first cross-section as default
+    // In a real scenario, you'd match dimensions or let user select
+    const crossSections = materialData.cross_sections as any[] || [];
+    if (crossSections.length > 0) {
+      // Estimate length from volume (this is simplified - real CAD analysis would provide actual length)
+      const avgCrossSection = crossSections[0];
+      const crossSectionArea = avgCrossSection.width * avgCrossSection.thickness; // in square inches
+      const estimatedLengthInches = (inputs.volume_cm3 * 0.0610237) / crossSectionArea; // convert cm³ to cubic inches
+      materialCost = estimatedLengthInches * avgCrossSection.cost_per_inch;
+      console.log(`Linear pricing: ${estimatedLengthInches.toFixed(2)} inches × $${avgCrossSection.cost_per_inch}/inch = $${materialCost.toFixed(2)}`);
+    } else {
+      // Fallback to weight-based if no cross-sections defined
+      materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
+    }
+  } else {
+    // Weight-based pricing (default)
+    materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
+  }
   
   // 4. Machining Time Estimation
   // Formula: surface_area / cutting_speed × complexity_multiplier

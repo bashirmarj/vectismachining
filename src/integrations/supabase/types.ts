@@ -73,31 +73,37 @@ export type Database = {
           cost_per_cubic_cm: number
           cost_per_square_cm: number
           created_at: string | null
+          cross_sections: Json | null
           density: number | null
           finish_options: Json | null
           id: string
           is_active: boolean | null
           material_name: string
+          pricing_method: string | null
         }
         Insert: {
           cost_per_cubic_cm: number
           cost_per_square_cm: number
           created_at?: string | null
+          cross_sections?: Json | null
           density?: number | null
           finish_options?: Json | null
           id?: string
           is_active?: boolean | null
           material_name: string
+          pricing_method?: string | null
         }
         Update: {
           cost_per_cubic_cm?: number
           cost_per_square_cm?: number
           created_at?: string | null
+          cross_sections?: Json | null
           density?: number | null
           finish_options?: Json | null
           id?: string
           is_active?: boolean | null
           material_name?: string
+          pricing_method?: string | null
         }
         Relationships: []
       }
