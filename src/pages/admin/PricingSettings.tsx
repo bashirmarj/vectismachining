@@ -1508,29 +1508,79 @@ const PricingSettings = () => {
                                           </p>
                                         ) : (
                                           <div className="space-y-4">
-                                            <div>
-                                              <Label className="text-sm font-medium mb-2 block">Select Cross Section to Edit</Label>
-                                              <Select
-                                                value={selectedCrossSections[material.id]?.toString() || '0'}
-                                                onValueChange={(value) => 
-                                                  setSelectedCrossSections(prev => ({ ...prev, [material.id]: parseInt(value) }))
-                                                }
-                                              >
-                                                <SelectTrigger>
-                                                  <SelectValue placeholder="Select a cross section" />
-                                                </SelectTrigger>
-                                                <SelectContent className="bg-background z-50">
-                                                  {(material.cross_sections || []).map((section, idx) => (
-                                                    <SelectItem key={idx} value={idx.toString()}>
-                                                      {section.shape === 'circular' 
-                                                        ? `Ø ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`
-                                                        : `${decimalToFraction(section.thickness)}" × ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`
-                                                      }
-                                                    </SelectItem>
-                                                  ))}
-                                                </SelectContent>
-                                              </Select>
-                                            </div>
+                                            {(() => {
+                                              const rectangularSections = (material.cross_sections || []).filter(s => !s.shape || s.shape === 'rectangular');
+                                              const circularSections = (material.cross_sections || []).filter(s => s.shape === 'circular');
+                                              
+                                              return (
+                                                <div>
+                                                  <div className="flex items-center justify-between mb-2">
+                                                    <Label className="text-sm font-medium">Select Cross Section to Edit</Label>
+                                                    <div className="flex gap-2 text-xs text-muted-foreground">
+                                                      {rectangularSections.length > 0 && (
+                                                        <span className="flex items-center gap-1">
+                                                          <span className="w-3 h-3 bg-blue-500 rounded-sm"></span>
+                                                          {rectangularSections.length} Rectangular
+                                                        </span>
+                                                      )}
+                                                      {circularSections.length > 0 && (
+                                                        <span className="flex items-center gap-1">
+                                                          <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                                                          {circularSections.length} Circular
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                  <Select
+                                                    value={selectedCrossSections[material.id]?.toString() || '0'}
+                                                    onValueChange={(value) => 
+                                                      setSelectedCrossSections(prev => ({ ...prev, [material.id]: parseInt(value) }))
+                                                    }
+                                                  >
+                                                    <SelectTrigger>
+                                                      <SelectValue placeholder="Select a cross section" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-background z-50">
+                                                      {rectangularSections.length > 0 && (
+                                                        <>
+                                                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 flex items-center gap-2">
+                                                            <span className="w-3 h-3 bg-blue-500 rounded-sm"></span>
+                                                            Rectangular (Flat Bar)
+                                                          </div>
+                                                          {(material.cross_sections || []).map((section, idx) => {
+                                                            if (section.shape && section.shape !== 'rectangular') return null;
+                                                            return (
+                                                              <SelectItem key={idx} value={idx.toString()}>
+                                                                {`${decimalToFraction(section.thickness)}" × ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`}
+                                                              </SelectItem>
+                                                            );
+                                                          })}
+                                                        </>
+                                                      )}
+                                                      {circularSections.length > 0 && (
+                                                        <>
+                                                          {rectangularSections.length > 0 && (
+                                                            <div className="my-1 border-t"></div>
+                                                          )}
+                                                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 flex items-center gap-2">
+                                                            <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                                                            Circular (Round Bar)
+                                                          </div>
+                                                          {(material.cross_sections || []).map((section, idx) => {
+                                                            if (section.shape !== 'circular') return null;
+                                                            return (
+                                                              <SelectItem key={idx} value={idx.toString()}>
+                                                                {`Ø ${decimalToFraction(section.width)}" - $${section.cost_per_inch.toFixed(4)}/inch`}
+                                                              </SelectItem>
+                                                            );
+                                                          })}
+                                                        </>
+                                                      )}
+                                                    </SelectContent>
+                                                  </Select>
+                                                </div>
+                                              );
+                                            })()}
 
                                             {(() => {
                                               const selectedIdx = selectedCrossSections[material.id] ?? 0;
