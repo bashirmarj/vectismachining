@@ -190,6 +190,17 @@ const handler = async (req: Request): Promise<Response> => {
     // Send emails in the background to not block the response
     const sendEmails = async () => {
       try {
+        // Read logo file
+        const logoPath = '/var/task/public/logo-email.png';
+        let logoContent: Uint8Array;
+        
+        try {
+          logoContent = await Deno.readFile(logoPath);
+        } catch (error) {
+          console.error('Could not read logo file:', error);
+          logoContent = new Uint8Array(0);
+        }
+
         const [emailResponse, customerEmailResponse] = await Promise.all([
           // Admin email with attachments
           resend.emails.send({
@@ -222,7 +233,7 @@ const handler = async (req: Request): Promise<Response> => {
                 <body>
                   <div class="container">
                     <div class="logo">
-                      <img src="https://inqabwlmvrvqsdrgskju.supabase.co/storage/v1/object/public/public/logo-email.png" alt="Vectis Manufacturing" />
+                      <img src="cid:logo" alt="Vectis Manufacturing" />
                     </div>
                     <div class="header">
                       <div class="company-name">VECTIS MANUFACTURING</div>
@@ -290,7 +301,14 @@ const handler = async (req: Request): Promise<Response> => {
                 </body>
               </html>
             `,
-            attachments,
+            attachments: [
+              ...(logoContent.length > 0 ? [{
+                filename: 'logo.png',
+                content: logoContent,
+                content_id: 'logo'
+              }] : []),
+              ...attachments
+            ],
           }),
           // Customer confirmation email (without attachments)
           resend.emails.send({
@@ -307,7 +325,7 @@ const handler = async (req: Request): Promise<Response> => {
                 <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #ffffff;">
                   <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
                     <div style="text-align: center; margin-bottom: 20px;">
-                      <img src="https://inqabwlmvrvqsdrgskju.supabase.co/storage/v1/object/public/public/logo-email.png" alt="Vectis Manufacturing" style="height: 60px; width: auto;" />
+                      <img src="cid:logo" alt="Vectis Manufacturing" style="height: 60px; width: auto;" />
                     </div>
                     <div style="margin-bottom: 30px;">
                       <div style="font-size: 18px; font-weight: bold; color: #000000; margin-bottom: 20px;">VECTIS MANUFACTURING</div>
@@ -383,6 +401,11 @@ const handler = async (req: Request): Promise<Response> => {
                 </body>
               </html>
             `,
+            attachments: logoContent.length > 0 ? [{
+              filename: 'logo.png',
+              content: logoContent,
+              content_id: 'logo'
+            }] : undefined
           })
         ]);
 
