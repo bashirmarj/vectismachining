@@ -547,6 +547,112 @@ const PricingSettings = () => {
     e.target.value = '';
   };
 
+  const handleMaterialsExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    toast({
+      title: "Processing Excel file...",
+      description: "Importing materials from spreadsheet",
+    });
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+      const importedMaterials: MaterialCost[] = [];
+
+      for (const row of jsonData) {
+        const materialName = row['Material Name'] || row['material_name'] || row['Name'];
+        if (!materialName) continue;
+
+        // Parse pricing method
+        let pricingMethod = (row['Pricing Method'] || row['pricing_method'] || 'weight').toLowerCase();
+        if (!['weight', 'linear_inch', 'sheet'].includes(pricingMethod)) {
+          pricingMethod = 'weight';
+        }
+
+        // Parse category
+        let categoryId = null;
+        const categoryName = row['Category'] || row['category'];
+        if (categoryName) {
+          const category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
+          categoryId = category?.id || null;
+        }
+
+        // Parse finish options
+        let finishOptions = ['As-machined'];
+        if (row['Finish Options'] || row['finish_options']) {
+          const finishStr = String(row['Finish Options'] || row['finish_options']);
+          finishOptions = finishStr.split(',').map(f => f.trim()).filter(Boolean);
+        }
+
+        // Insert material
+        const { data: newMaterial, error } = await supabase
+          .from('material_costs')
+          .insert({
+            material_name: materialName,
+            cost_per_cubic_cm: parseFloat(row['Cost Per Cubic CM'] || row['cost_per_cubic_cm'] || 0.1),
+            cost_per_square_cm: parseFloat(row['Cost Per Square CM'] || row['cost_per_square_cm'] || 0.01),
+            density: row['Density'] || row['density'] ? parseFloat(row['Density'] || row['density']) : null,
+            price_per_lb: row['Price Per LB'] || row['price_per_lb'] ? parseFloat(row['Price Per LB'] || row['price_per_lb']) : null,
+            finish_options: finishOptions,
+            is_active: true,
+            pricing_method: pricingMethod,
+            cross_sections: [],
+            sheet_configurations: [],
+            default_nesting_efficiency: parseFloat(row['Nesting Efficiency'] || row['nesting_efficiency'] || 0.75),
+            category_id: categoryId,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error importing material:', materialName, error);
+          continue;
+        }
+
+        if (newMaterial) {
+          importedMaterials.push({
+            ...newMaterial,
+            finish_options: Array.isArray(newMaterial.finish_options) ? newMaterial.finish_options : [],
+            pricing_method: newMaterial.pricing_method || 'weight',
+            cross_sections: [],
+            sheet_configurations: [],
+            default_nesting_efficiency: newMaterial.default_nesting_efficiency || 0.75,
+            category_id: newMaterial.category_id || null
+          });
+        }
+      }
+
+      if (importedMaterials.length > 0) {
+        setMaterials(prev => [...prev, ...importedMaterials]);
+        toast({
+          title: "Success!",
+          description: `Imported ${importedMaterials.length} material(s) from Excel file`,
+        });
+      } else {
+        toast({
+          title: "No materials imported",
+          description: "No valid material data found in the Excel file",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error processing Excel file:', error);
+      toast({
+        title: "Error",
+        description: "Failed to process the Excel file",
+        variant: "destructive"
+      });
+    }
+
+    // Reset the input
+    e.target.value = '';
+  };
+
   const handleTableUpload = async (e: React.ChangeEvent<HTMLInputElement>, materialId: string, material: MaterialCost) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1024,10 +1130,21 @@ const PricingSettings = () => {
                         <Plus className="h-4 w-4 mr-2" />
                         Add Category
                       </Button>
-                      <Button onClick={addNewMaterial} size="sm">
+                      <Button onClick={addNewMaterial} variant="outline" size="sm">
                         <Plus className="h-4 w-4 mr-2" />
                         Add Material
                       </Button>
+                      <Button onClick={() => document.getElementById('import-materials-excel')?.click()} size="sm">
+                        <Upload className="h-4 w-4 mr-2" />
+                        Import from Excel
+                      </Button>
+                      <input
+                        id="import-materials-excel"
+                        type="file"
+                        accept=".xlsx,.xls"
+                        className="hidden"
+                        onChange={handleMaterialsExcelImport}
+                      />
                     </div>
                   </div>
                 </CardHeader>
