@@ -301,14 +301,7 @@ const handler = async (req: Request): Promise<Response> => {
                 </body>
               </html>
             `,
-            attachments: [
-              ...(logoContent.length > 0 ? [{
-                filename: 'logo.png',
-                content: logoContent,
-                content_id: 'logo'
-              }] : []),
-              ...attachments
-            ],
+            attachments: attachments,
           }),
           // Customer confirmation email (without attachments)
           resend.emails.send({
@@ -400,12 +393,7 @@ const handler = async (req: Request): Promise<Response> => {
                   </div>
                 </body>
               </html>
-            `,
-            attachments: logoContent.length > 0 ? [{
-              filename: 'logo.png',
-              content: logoContent,
-              content_id: 'logo'
-            }] : undefined
+            `
           })
         ]);
 
