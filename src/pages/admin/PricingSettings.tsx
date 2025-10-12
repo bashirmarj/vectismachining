@@ -653,67 +653,105 @@ const PricingSettings = () => {
                               No cross sections defined. Click "Add Section" to create one.
                             </p>
                           ) : (
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               {(material.cross_sections || []).map((section, idx) => (
-                                <ResizablePanelGroup key={idx} direction="horizontal" className="border rounded-md">
-                                  <ResizablePanel defaultSize={28} minSize={20}>
-                                    <div className="p-3">
-                                      <Label className="text-xs">Width (inches)</Label>
-                                      <Input
-                                        type="number"
-                                        step="0.125"
-                                        value={section.width}
-                                        onChange={(e) =>
-                                          updateCrossSection(material.id, idx, 'width', parseFloat(e.target.value))
-                                        }
-                                        className="mt-1"
-                                      />
-                                    </div>
-                                  </ResizablePanel>
-                                  <ResizableHandle />
-                                  <ResizablePanel defaultSize={28} minSize={20}>
-                                    <div className="p-3">
-                                      <Label className="text-xs">Thickness (inches)</Label>
-                                      <Input
-                                        type="number"
-                                        step="0.125"
-                                        value={section.thickness}
-                                        onChange={(e) =>
-                                          updateCrossSection(material.id, idx, 'thickness', parseFloat(e.target.value))
-                                        }
-                                        className="mt-1"
-                                      />
-                                    </div>
-                                  </ResizablePanel>
-                                  <ResizableHandle />
-                                  <ResizablePanel defaultSize={28} minSize={20}>
-                                    <div className="p-3">
-                                      <Label className="text-xs">Cost per Inch ($)</Label>
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={section.cost_per_inch}
-                                        onChange={(e) =>
-                                          updateCrossSection(material.id, idx, 'cost_per_inch', parseFloat(e.target.value))
-                                        }
-                                        className="mt-1"
-                                      />
-                                    </div>
-                                  </ResizablePanel>
-                                  <ResizableHandle />
-                                  <ResizablePanel defaultSize={16} minSize={10}>
-                                    <div className="p-3 flex items-center justify-center h-full">
+                                <div key={idx} className="border rounded-md p-4 grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label className="text-sm font-medium">Width (inches)</Label>
+                                    <Select
+                                      value={section.width?.toString() || "1"}
+                                      onValueChange={(value) =>
+                                        updateCrossSection(material.id, idx, 'width', parseFloat(value))
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select width" />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-background z-50 max-h-[300px]">
+                                        {Array.from({ length: 40 }, (_, i) => i + 1).map((width) => (
+                                          <SelectItem key={width} value={width.toString()}>
+                                            {width}"
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-sm font-medium">Thickness (inches)</Label>
+                                    <Select
+                                      value={section.thickness?.toString() || "0.0625"}
+                                      onValueChange={(value) =>
+                                        updateCrossSection(material.id, idx, 'thickness', parseFloat(value))
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select thickness" />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-background z-50 max-h-[300px]">
+                                        <SelectItem value="0.0625">1/16"</SelectItem>
+                                        <SelectItem value="0.125">1/8"</SelectItem>
+                                        <SelectItem value="0.1875">3/16"</SelectItem>
+                                        <SelectItem value="0.25">1/4"</SelectItem>
+                                        <SelectItem value="0.3125">5/16"</SelectItem>
+                                        <SelectItem value="0.375">3/8"</SelectItem>
+                                        <SelectItem value="0.4375">7/16"</SelectItem>
+                                        <SelectItem value="0.5">1/2"</SelectItem>
+                                        <SelectItem value="0.5625">9/16"</SelectItem>
+                                        <SelectItem value="0.625">5/8"</SelectItem>
+                                        <SelectItem value="0.6875">11/16"</SelectItem>
+                                        <SelectItem value="0.75">3/4"</SelectItem>
+                                        <SelectItem value="0.8125">13/16"</SelectItem>
+                                        <SelectItem value="0.875">7/8"</SelectItem>
+                                        <SelectItem value="0.9375">15/16"</SelectItem>
+                                        <SelectItem value="1">1"</SelectItem>
+                                        <SelectItem value="1.125">1 1/8"</SelectItem>
+                                        <SelectItem value="1.25">1 1/4"</SelectItem>
+                                        <SelectItem value="1.375">1 3/8"</SelectItem>
+                                        <SelectItem value="1.5">1 1/2"</SelectItem>
+                                        <SelectItem value="1.625">1 5/8"</SelectItem>
+                                        <SelectItem value="1.75">1 3/4"</SelectItem>
+                                        <SelectItem value="1.875">1 7/8"</SelectItem>
+                                        <SelectItem value="2">2"</SelectItem>
+                                        <SelectItem value="2.25">2 1/4"</SelectItem>
+                                        <SelectItem value="2.5">2 1/2"</SelectItem>
+                                        <SelectItem value="2.75">2 3/4"</SelectItem>
+                                        <SelectItem value="3">3"</SelectItem>
+                                        <SelectItem value="3.5">3 1/2"</SelectItem>
+                                        <SelectItem value="4">4"</SelectItem>
+                                        <SelectItem value="4.5">4 1/2"</SelectItem>
+                                        <SelectItem value="5">5"</SelectItem>
+                                        <SelectItem value="5.5">5 1/2"</SelectItem>
+                                        <SelectItem value="6">6"</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  <div className="col-span-2 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <Label className="text-sm font-medium">Cost per Linear Inch ($)</Label>
                                       <Button
                                         type="button"
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => removeCrossSection(material.id, idx)}
+                                        className="h-8 w-8 p-0"
                                       >
-                                        <Trash2 className="h-4 w-4" />
+                                        <Trash2 className="h-4 w-4 text-destructive" />
                                       </Button>
                                     </div>
-                                  </ResizablePanel>
-                                </ResizablePanelGroup>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={section.cost_per_inch}
+                                      onChange={(e) =>
+                                        updateCrossSection(material.id, idx, 'cost_per_inch', parseFloat(e.target.value))
+                                      }
+                                      placeholder="Enter cost per inch"
+                                    />
+                                  </div>
+                                </div>
                               ))}
                             </div>
                           )}
