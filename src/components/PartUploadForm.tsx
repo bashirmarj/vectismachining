@@ -188,7 +188,8 @@ export const PartUploadForm = () => {
         '.sldprt', '.sldasm', '.slddrw',
         '.ipt', '.iam', '.idw',
         '.catpart', '.catproduct',
-        '.x_t', '.x_b', '.prt', '.asm'
+        '.x_t', '.x_b', '.prt', '.asm',
+        '.pdf'
       ];
       
       const invalidFiles = selectedFiles.filter(file => {
@@ -222,13 +223,13 @@ export const PartUploadForm = () => {
     if (selectedFiles.length > 0) {
       const invalidFiles = selectedFiles.filter(file => {
         const fileName = file.name.toLowerCase();
-        return !fileName.endsWith('.dwg') && !fileName.endsWith('.dxf');
+        return !fileName.endsWith('.dwg') && !fileName.endsWith('.dxf') && !fileName.endsWith('.pdf');
       });
 
       if (invalidFiles.length > 0) {
         toast({
           title: "Invalid file type",
-          description: `${invalidFiles.length} file(s) must be DWG or DXF format`,
+          description: `${invalidFiles.length} file(s) must be DWG, DXF, or PDF format`,
           variant: "destructive",
         });
         return;
@@ -593,7 +594,7 @@ export const PartUploadForm = () => {
                 id="file-upload"
                 type="file"
                 multiple
-                accept=".step,.stp,.iges,.igs,.stl,.obj,.sldprt,.sldasm,.slddrw,.ipt,.iam,.idw,.catpart,.catproduct,.x_t,.x_b,.prt,.asm"
+                accept=".step,.stp,.iges,.igs,.stl,.obj,.sldprt,.sldasm,.slddrw,.ipt,.iam,.idw,.catpart,.catproduct,.x_t,.x_b,.prt,.asm,.pdf"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -756,7 +757,7 @@ export const PartUploadForm = () => {
                 id="drawing-upload"
                 type="file"
                 multiple
-                accept=".dwg,.dxf"
+                accept=".dwg,.dxf,.pdf"
                 onChange={handleDrawingFileChange}
                 className="hidden"
               />
