@@ -163,6 +163,7 @@ const PricingSettings = () => {
   const [materials, setMaterials] = useState<MaterialCost[]>([]);
   const [treatments, setTreatments] = useState<SurfaceTreatment[]>([]);
   const [materialProcessParams, setMaterialProcessParams] = useState<MaterialProcessParameter[]>([]);
+  const [selectedMaterials, setSelectedMaterials] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<string>('');
   const [selectedCrossSections, setSelectedCrossSections] = useState<Record<string, number>>({});
   const [editingTreatmentId, setEditingTreatmentId] = useState<string | null>(null);
@@ -1135,6 +1136,80 @@ const PricingSettings = () => {
     });
   };
 
+  const getMaterialProcessParam = (processId: string, materialId: string) => {
+    return materialProcessParams.find(
+      p => p.process_id === processId && p.material_id === materialId
+    );
+  };
+
+  const saveMaterialProcessParams = async (processId: string, materialId: string, params: Partial<MaterialProcessParameter>) => {
+    const existing = getMaterialProcessParam(processId, materialId);
+    
+    if (existing) {
+      const { error } = await supabase
+        .from("material_process_parameters")
+        .update(params)
+        .eq("id", existing.id);
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to update material parameters",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      const { error } = await supabase
+        .from("material_process_parameters")
+        .insert({
+          process_id: processId,
+          material_id: materialId,
+          ...params,
+        });
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to save material parameters",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    await fetchPricingData();
+    toast({
+      title: "Success",
+      description: "Material parameters saved successfully",
+    });
+  };
+
+  const resetMaterialProcessParams = async (processId: string, materialId: string) => {
+    const existing = getMaterialProcessParam(processId, materialId);
+    if (existing) {
+      const { error } = await supabase
+        .from("material_process_parameters")
+        .delete()
+        .eq("id", existing.id);
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to reset parameters",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      await fetchPricingData();
+      toast({
+        title: "Success",
+        description: "Parameters reset to defaults",
+      });
+    }
+  };
+
   const getCategoryLabel = (category: string) => {
     switch (category) {
       case 'heat_treatment': return 'Heat Treatment';
@@ -1218,7 +1293,6 @@ const PricingSettings = () => {
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="processes">Manufacturing Processes</TabsTrigger>
               <TabsTrigger value="materials">Material Costs</TabsTrigger>
-              <TabsTrigger value="material-process">Material-Process Parameters</TabsTrigger>
               <TabsTrigger value="treatments">Surface Treatments</TabsTrigger>
               <TabsTrigger value="formulas">Pricing Formulas</TabsTrigger>
             </TabsList>
@@ -1410,6 +1484,185 @@ const PricingSettings = () => {
                                   </p>
                                 </div>
                               </div>
+                            </div>
+
+                            {/* Material-Specific Parameters Section */}
+                            <Separator className="my-6" />
+                            <div className="space-y-4">
+                              <h4 className="font-semibold flex items-center gap-2">
+                                Material-Specific Parameters
+                                <Badge variant="secondary">
+                                  {materialProcessParams.filter(p => p.process_id === process.id).length} / {materials.filter(m => m.is_active).length} configured
+                                </Badge>
+                              </h4>
+                              
+                              <div className="mb-6">
+                                <Label>Select Material to Configure</Label>
+                                <Select 
+                                  value={selectedMaterials[process.id] || ""} 
+                                  onValueChange={(value) => setSelectedMaterials({...selectedMaterials, [process.id]: value})}
+                                >
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Choose a material..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {materials.filter(m => m.is_active).map(material => {
+                                      const hasCustomParams = materialProcessParams.some(
+                                        p => p.material_id === material.id && p.process_id === process.id
+                                      );
+                                      
+                                      return (
+                                        <SelectItem key={material.id} value={material.id}>
+                                          <div className="flex items-center gap-2">
+                                            {material.material_name}
+                                            {hasCustomParams && <Badge variant="default" className="ml-2 text-xs">Custom</Badge>}
+                                          </div>
+                                        </SelectItem>
+                                      );
+                                    })}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              {selectedMaterials[process.id] && (() => {
+                                const selectedMaterial = materials.find(m => m.id === selectedMaterials[process.id]);
+                                const currentParams = getMaterialProcessParam(process.id, selectedMaterials[process.id]) || {
+                                  spindle_speed_rpm: null,
+                                  feed_rate_mm_per_min: null,
+                                  depth_of_cut_mm: null,
+                                  cutting_speed_m_per_min: null,
+                                  material_removal_rate_adjustment: 1.0,
+                                  tool_wear_multiplier: 1.0,
+                                  surface_finish_factor: 1.0,
+                                  setup_time_multiplier: 1.0,
+                                  cycle_time_multiplier: 1.0,
+                                };
+                                
+                                const [localParams, setLocalParams] = useState(currentParams);
+
+                                return (
+                                  <div className="bg-muted/50 p-4 rounded-lg space-y-4">
+                                    <div className="flex items-center justify-between mb-4">
+                                      <h5 className="font-medium">Parameters for {selectedMaterial?.material_name}</h5>
+                                      {getMaterialProcessParam(process.id, selectedMaterials[process.id]) ? (
+                                        <Badge variant="default">Using Custom Parameters</Badge>
+                                      ) : (
+                                        <Badge variant="secondary">Using Material Defaults</Badge>
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <div>
+                                        <Label>Spindle Speed (RPM)</Label>
+                                        <Input
+                                          type="number"
+                                          value={localParams.spindle_speed_rpm || ""}
+                                          onChange={(e) => setLocalParams({...localParams, spindle_speed_rpm: Number(e.target.value)})}
+                                          placeholder="Enter spindle speed"
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <Label>Feed Rate (mm/min)</Label>
+                                        <Input
+                                          type="number"
+                                          value={localParams.feed_rate_mm_per_min || ""}
+                                          onChange={(e) => setLocalParams({...localParams, feed_rate_mm_per_min: Number(e.target.value)})}
+                                          placeholder="Enter feed rate"
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <Label>Depth of Cut (mm)</Label>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          value={localParams.depth_of_cut_mm || ""}
+                                          onChange={(e) => setLocalParams({...localParams, depth_of_cut_mm: Number(e.target.value)})}
+                                          placeholder="Enter depth of cut"
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <Label>Cutting Speed (m/min)</Label>
+                                        <Input
+                                          type="number"
+                                          value={localParams.cutting_speed_m_per_min || ""}
+                                          onChange={(e) => setLocalParams({...localParams, cutting_speed_m_per_min: Number(e.target.value)})}
+                                          placeholder="Enter cutting speed"
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <Label>MRR Adjustment</Label>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          value={localParams.material_removal_rate_adjustment || 1.0}
+                                          onChange={(e) => setLocalParams({...localParams, material_removal_rate_adjustment: Number(e.target.value)})}
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <Label>Tool Wear Multiplier</Label>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          value={localParams.tool_wear_multiplier || 1.0}
+                                          onChange={(e) => setLocalParams({...localParams, tool_wear_multiplier: Number(e.target.value)})}
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <Label>Surface Finish Factor</Label>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          value={localParams.surface_finish_factor || 1.0}
+                                          onChange={(e) => setLocalParams({...localParams, surface_finish_factor: Number(e.target.value)})}
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <Label>Setup Time Multiplier</Label>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          value={localParams.setup_time_multiplier || 1.0}
+                                          onChange={(e) => setLocalParams({...localParams, setup_time_multiplier: Number(e.target.value)})}
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <Label>Cycle Time Multiplier</Label>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          value={localParams.cycle_time_multiplier || 1.0}
+                                          onChange={(e) => setLocalParams({...localParams, cycle_time_multiplier: Number(e.target.value)})}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="flex gap-2 pt-4">
+                                      <Button 
+                                        onClick={() => saveMaterialProcessParams(process.id, selectedMaterials[process.id], localParams)}
+                                        className="flex-1"
+                                      >
+                                        Save Parameters
+                                      </Button>
+                                      {getMaterialProcessParam(process.id, selectedMaterials[process.id]) && (
+                                        <Button 
+                                          variant="outline"
+                                          onClick={() => resetMaterialProcessParams(process.id, selectedMaterials[process.id])}
+                                        >
+                                          Reset to Defaults
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                         </AccordionContent>
