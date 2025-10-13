@@ -71,6 +71,12 @@ interface FileWithQuantity {
       discount_applied: string;
     };
     lead_time_days: number;
+    process_breakdown?: Array<{
+      process: string;
+      machining_cost: number;
+      setup_cost: number;
+      estimated_hours: number;
+    }>;
   };
   isAnalyzing?: boolean;
 }
@@ -209,16 +215,19 @@ export const PartUploadForm = () => {
         analysisData = data;
       }
 
-      // Only call pricing calculator if both material and process are selected
+      // Call pricing calculator if material is selected AND processes were detected
       let quoteData = null;
-      if (fileWithQty.material && fileWithQty.process) {
+      if (fileWithQty.material && analysisData.recommended_processes && analysisData.recommended_processes.length > 0) {
         const { data, error: quoteError } = await supabase.functions.invoke('calculate-preliminary-quote', {
           body: {
             volume_cm3: analysisData.volume_cm3,
             surface_area_cm2: analysisData.surface_area_cm2,
             complexity_score: analysisData.complexity_score,
+            part_width_cm: analysisData.bounding_box?.width,
+            part_height_cm: analysisData.bounding_box?.height,
+            part_depth_cm: analysisData.bounding_box?.depth,
             quantity: fileWithQty.quantity,
-            process: fileWithQty.process,
+            processes: analysisData.recommended_processes, // Pass all detected processes
             material: fileWithQty.material,
             finish: 'As-machined'
           }
@@ -353,22 +362,13 @@ export const PartUploadForm = () => {
       i === index ? { ...item, material } : item
     ));
     
-    // Re-analyze if process is also selected
+    // Re-analyze if processes have been detected
     const fileWithQty = files[index];
-    if (fileWithQty && !fileWithQty.isAnalyzing && fileWithQty.process) {
+    if (fileWithQty && 
+        !fileWithQty.isAnalyzing && 
+        fileWithQty.analysis?.recommended_processes && 
+        fileWithQty.analysis.recommended_processes.length > 0) {
       analyzeFile({ ...fileWithQty, material }, index);
-    }
-  };
-
-  const updateFileProcess = (index: number, process: string) => {
-    setFiles(prev => prev.map((item, i) => 
-      i === index ? { ...item, process } : item
-    ));
-    
-    // Re-analyze if material is also selected
-    const fileWithQty = files[index];
-    if (fileWithQty && !fileWithQty.isAnalyzing && fileWithQty.material) {
-      analyzeFile({ ...fileWithQty, process }, index);
     }
   };
 
@@ -903,14 +903,50 @@ export const PartUploadForm = () => {
                                   <span className="text-muted-foreground">Material:</span>
                                   <span className="font-mono">${fileWithQty.quote.breakdown.material_cost.toFixed(2)}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Machining:</span>
-                                  <span className="font-mono">${fileWithQty.quote.breakdown.machining_cost.toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Setup (amortized):</span>
-                                  <span className="font-mono">${fileWithQty.quote.breakdown.setup_cost.toFixed(2)}</span>
-                                </div>
+                                
+                                {/* Show process breakdown if multiple processes */}
+                                {fileWithQty.quote.process_breakdown && fileWithQty.quote.process_breakdown.length > 1 ? (
+                                  <div className="space-y-1 pl-2 border-l-2 border-blue-200">
+                                    <div className="text-xs font-medium text-muted-foreground">Manufacturing Processes:</div>
+                                    {fileWithQty.quote.process_breakdown.map((pb: any, pbIdx: number) => (
+                                      <div key={pbIdx} className="space-y-0.5">
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-blue-600 font-medium">{pb.process}</span>
+                                          <span className="font-mono text-xs">{pb.estimated_hours.toFixed(2)} hrs</span>
+                                        </div>
+                                        <div className="flex justify-between pl-3">
+                                          <span className="text-muted-foreground">• Machining:</span>
+                                          <span className="font-mono">${pb.machining_cost.toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between pl-3">
+                                          <span className="text-muted-foreground">• Setup:</span>
+                                          <span className="font-mono">${pb.setup_cost.toFixed(2)}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                    <Separator className="my-1" />
+                                    <div className="flex justify-between font-medium">
+                                      <span className="text-muted-foreground">Total Machining:</span>
+                                      <span className="font-mono">${fileWithQty.quote.breakdown.machining_cost.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between font-medium">
+                                      <span className="text-muted-foreground">Total Setup:</span>
+                                      <span className="font-mono">${fileWithQty.quote.breakdown.setup_cost.toFixed(2)}</span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Machining:</span>
+                                      <span className="font-mono">${fileWithQty.quote.breakdown.machining_cost.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Setup (amortized):</span>
+                                      <span className="font-mono">${fileWithQty.quote.breakdown.setup_cost.toFixed(2)}</span>
+                                    </div>
+                                  </>
+                                )}
+                                
                                 {fileWithQty.quote.breakdown.finish_cost > 0 && (
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Finish:</span>

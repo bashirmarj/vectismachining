@@ -16,7 +16,8 @@ interface QuoteInputs {
   surface_area_cm2: number;
   complexity_score: number;
   quantity: number;
-  process?: string;
+  processes?: string[]; // Array of process names for multi-process parts
+  process?: string; // Deprecated: use processes instead
   material?: string;
   finish?: string;
   surface_treatments?: string[]; // Array of surface treatment names
@@ -31,6 +32,13 @@ interface MachiningTimeBreakdown {
   tool_change_hours: number;
   positioning_hours: number;
   total_hours: number;
+}
+
+interface ProcessBreakdown {
+  process: string;
+  machining_cost: number;
+  setup_cost: number;
+  estimated_hours: number;
 }
 
 interface QuoteBreakdown {
@@ -54,6 +62,7 @@ interface QuoteResult {
   finish: string;
   machining_time_breakdown?: MachiningTimeBreakdown;
   removed_volume_cm3?: number;
+  process_breakdown?: ProcessBreakdown[]; // Cost breakdown by process
 }
 
 // Helper function: Find best cross-section for linear inch materials
@@ -256,25 +265,14 @@ function calculateMachiningTime(
 async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
   console.log('Calculating quote with inputs:', inputs);
   
-  // Set defaults
-  const processName = inputs.process || 'CNC Machining';
+  // Handle both old (process) and new (processes) input format
+  const processNames = inputs.processes || (inputs.process ? [inputs.process] : ['VMC Machining']);
   const materialName = inputs.material || 'Aluminum 6061';
   const finishName = inputs.finish || 'As-machined';
   
-  // 1. Fetch process rates from database
-  const { data: processData, error: processError } = await supabase
-    .from('manufacturing_processes')
-    .select('*')
-    .eq('name', processName)
-    .eq('is_active', true)
-    .single();
+  console.log(`Multi-process quote: ${processNames.join(', ')}`);
   
-  if (processError || !processData) {
-    console.error('Error fetching process:', processError);
-    throw new Error(`Process "${processName}" not found`);
-  }
-  
-  // 2. Fetch material rates from database
+  // Fetch material data once (shared across all processes)
   const { data: materialData, error: materialError } = await supabase
     .from('material_costs')
     .select('*')
@@ -286,88 +284,41 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
     console.error('Error fetching material:', materialError);
     throw new Error(`Material "${materialName}" not found`);
   }
-
-  // 3. Fetch material-process specific parameters
-  const { data: materialProcessParams } = await supabase
-    .from('material_process_parameters')
-    .select('*')
-    .eq('material_id', materialData.id)
-    .eq('process_id', processData.id)
-    .maybeSingle();
-
-  console.log('Material-process parameters:', materialProcessParams);
-
-  // Use material-process specific parameters if available, otherwise fall back to material defaults
-  const machiningParams = materialProcessParams ? {
-    spindleSpeed: materialProcessParams.spindle_speed_rpm,
-    feedRate: materialProcessParams.feed_rate_mm_per_min,
-    depthOfCut: materialProcessParams.depth_of_cut_mm,
-    cuttingSpeed: materialProcessParams.cutting_speed_m_per_min,
-    materialRemovalRateAdj: materialProcessParams.material_removal_rate_adjustment || 1.0,
-    toolWearMultiplier: materialProcessParams.tool_wear_multiplier || 1.0,
-    setupTimeMultiplier: materialProcessParams.setup_time_multiplier || 1.0,
-  } : {
-    // Fallback to material defaults or process defaults
-    spindleSpeed: materialData.spindle_speed_rpm_max || processData.spindle_speed_rpm || 3000,
-    feedRate: materialData.feed_rate_mm_per_min_max || processData.feed_rate_mm_per_min || 500,
-    depthOfCut: materialData.depth_of_cut_mm_max || processData.depth_of_cut_mm || 2.0,
-    cuttingSpeed: materialData.cutting_speed_m_per_min_max || 100,
-    materialRemovalRateAdj: 1.0,
-    toolWearMultiplier: materialData.tool_life_factor || 1.0,
-    setupTimeMultiplier: 1.0,
-  };
-
-  console.log('Using machining parameters:', machiningParams);
   
-  // 3. Material Cost - calculate based on pricing method
+  // Calculate material cost once (shared across all processes)
   let materialCost = 0;
   
   if (materialData.pricing_method === 'linear_inch') {
-    // For linear inch pricing, find the best cross-section based on part dimensions
     const crossSections = materialData.cross_sections as any[] || [];
     if (crossSections.length > 0 && inputs.part_width_cm && inputs.part_height_cm && inputs.part_depth_cm) {
-      // Convert part dimensions from cm to inches
       const partWidthIn = inputs.part_width_cm / 2.54;
       const partHeightIn = inputs.part_height_cm / 2.54;
       const partDepthIn = inputs.part_depth_cm / 2.54;
       
-      // Find the smallest cross-section that can accommodate the part
-      // Assuming the part needs to fit within the cross-section dimensions
       let bestCrossSection = null;
       let bestCost = Infinity;
       
       for (const cs of crossSections) {
         const isCircular = cs.shape === 'circular';
-        
-        // Check if part can be made from this cross-section (considering rotation)
         const partDims = [partWidthIn, partHeightIn, partDepthIn].sort((a, b) => b - a);
-        
         let fits = false;
         
         if (isCircular) {
-          // For circular cross-sections (round bars), check if part fits within circle diameter
-          // The two largest dimensions must fit diagonally within the circular cross-section
-          const diameter = cs.width; // For circular, width represents diameter
+          const diameter = cs.width;
           const diagonalRequired = Math.sqrt(partDims[0] ** 2 + partDims[1] ** 2);
           fits = diagonalRequired <= diameter;
         } else {
-          // For rectangular cross-sections (flat bars)
           const csDims = [cs.width, cs.thickness].sort((a, b) => b - a);
           fits = partDims[0] <= csDims[0] && partDims[1] <= csDims[1];
         }
         
         if (fits) {
-          // Calculate material needed (length is the third dimension)
           const lengthNeeded = partDims[2];
           const materialCostForCS = lengthNeeded * cs.cost_per_inch * inputs.quantity;
           
           if (materialCostForCS < bestCost) {
             bestCost = materialCostForCS;
-            bestCrossSection = {
-              ...cs,
-              lengthNeeded,
-              totalCost: materialCostForCS
-            };
+            bestCrossSection = { ...cs, lengthNeeded, totalCost: materialCostForCS };
           }
         }
       }
@@ -377,43 +328,31 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
         const shapeLabel = bestCrossSection.shape === 'circular' 
           ? `Ø ${bestCrossSection.width}"`
           : `${bestCrossSection.width}" × ${bestCrossSection.thickness}"`;
-        console.log(`Linear pricing: Selected ${shapeLabel} cross-section, ${bestCrossSection.lengthNeeded.toFixed(2)} inches × $${bestCrossSection.cost_per_inch}/inch = $${materialCost.toFixed(2)} per unit`);
+        console.log(`Linear pricing: ${shapeLabel}, ${bestCrossSection.lengthNeeded.toFixed(2)}" × $${bestCrossSection.cost_per_inch}/in = $${materialCost.toFixed(2)}/unit`);
       } else {
-        // No cross-section fits - use volume-based fallback
-        console.log('No suitable cross-section found, using volume-based fallback');
         materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
       }
     } else if (crossSections.length > 0) {
-      // Fallback to first cross-section if no part dimensions available
       const avgCrossSection = crossSections[0];
-      const crossSectionArea = avgCrossSection.width * avgCrossSection.thickness; // in square inches
-      const estimatedLengthInches = (inputs.volume_cm3 * 0.0610237) / crossSectionArea; // convert cm³ to cubic inches
+      const crossSectionArea = avgCrossSection.width * avgCrossSection.thickness;
+      const estimatedLengthInches = (inputs.volume_cm3 * 0.0610237) / crossSectionArea;
       materialCost = estimatedLengthInches * avgCrossSection.cost_per_inch;
-      console.log(`Linear pricing (no dimensions): ${estimatedLengthInches.toFixed(2)} inches × $${avgCrossSection.cost_per_inch}/inch = $${materialCost.toFixed(2)}`);
     } else {
-      // Fallback to weight-based if no cross-sections defined
       materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
     }
   } else if (materialData.pricing_method === 'sheet') {
-    // Sheet-based pricing with nesting efficiency
     const sheetConfigs = materialData.sheet_configurations as any[] || [];
     const nestingEfficiency = materialData.default_nesting_efficiency || 0.75;
     
     if (sheetConfigs.length > 0 && inputs.part_width_cm && inputs.part_height_cm) {
-      // Find the most economical sheet size
       let bestCost = Infinity;
-      let bestSheetInfo = null;
       
       for (const sheet of sheetConfigs) {
-        // Convert all to cm for consistency
         const sheetWidthCm = sheet.unit === 'inch' ? sheet.width * 2.54 : sheet.width;
         const sheetHeightCm = sheet.unit === 'inch' ? sheet.height * 2.54 : sheet.height;
         
-        // Calculate how many parts fit per sheet (with rotation consideration)
-        const partsPerSheetOption1 = Math.floor(sheetWidthCm / inputs.part_width_cm) * 
-                                     Math.floor(sheetHeightCm / inputs.part_height_cm);
-        const partsPerSheetOption2 = Math.floor(sheetWidthCm / inputs.part_height_cm) * 
-                                     Math.floor(sheetWidthCm / inputs.part_width_cm);
+        const partsPerSheetOption1 = Math.floor(sheetWidthCm / inputs.part_width_cm) * Math.floor(sheetHeightCm / inputs.part_height_cm);
+        const partsPerSheetOption2 = Math.floor(sheetWidthCm / inputs.part_height_cm) * Math.floor(sheetWidthCm / inputs.part_width_cm);
         const partsPerSheet = Math.max(partsPerSheetOption1, partsPerSheetOption2) * nestingEfficiency;
         
         if (partsPerSheet > 0) {
@@ -423,65 +362,126 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
           
           if (costPerPart < bestCost) {
             bestCost = costPerPart;
-            bestSheetInfo = {
-              sheet,
-              partsPerSheet: Math.floor(partsPerSheet),
-              sheetsNeeded,
-              totalCost,
-              utilization: (inputs.quantity / (sheetsNeeded * partsPerSheet)) * 100
-            };
           }
         }
       }
       
-      if (bestSheetInfo) {
-        materialCost = bestSheetInfo.totalCost / inputs.quantity;
-        console.log(`Sheet pricing: ${bestSheetInfo.sheetsNeeded} sheets × $${bestSheetInfo.sheet.cost_per_sheet}/sheet = $${bestSheetInfo.totalCost.toFixed(2)} (${bestSheetInfo.partsPerSheet} parts/sheet, ${bestSheetInfo.utilization.toFixed(1)}% utilization)`);
+      if (bestCost < Infinity) {
+        materialCost = bestCost;
       } else {
-        // Fallback if part is too large for any sheet
-        console.log('Part too large for available sheets, using volume-based fallback');
-        materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
+        materialCost = inputs.surface_area_cm2 * materialData.cost_per_square_cm;
       }
     } else {
-      // Fallback to weight-based if no sheets or part dimensions
-      materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
+      materialCost = inputs.surface_area_cm2 * materialData.cost_per_square_cm;
     }
   } else {
-    // Weight-based pricing (default)
-    materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
+    const volumeInches = inputs.volume_cm3 * 0.0610237;
+    const weightLbs = volumeInches * (materialData.density || 0.1);
+    materialCost = weightLbs * (materialData.price_per_lb || 5);
   }
   
-  // 4. Calculate material removal volume
+  console.log(`Material cost (shared): $${materialCost.toFixed(2)}`);
+  
+  // Calculate removed volume once (shared across processes)
   const removedVolume = calculateRemovedVolume(inputs, materialData);
-
-  // 5. Calculate machining time with detailed breakdown
-  const timeBreakdown = calculateMachiningTime(
-    removedVolume,
-    inputs,
-    processData,
-    materialData,
-    machiningParams
-  );
-
-  // 6. Machining Cost (using detailed time calculation)
-  const machiningCost = timeBreakdown.total_hours * processData.base_rate_per_hour;
-  const estimatedHours = timeBreakdown.total_hours;
   
-  console.log(`Machining: ${timeBreakdown.total_hours.toFixed(2)} hours × $${processData.base_rate_per_hour}/hr = $${machiningCost.toFixed(2)}`);
+  // Process each manufacturing process and calculate individual costs
+  const processBreakdown: ProcessBreakdown[] = [];
+  let totalMachiningCost = 0;
+  let totalSetupCost = 0;
+  let totalEstimatedHours = 0;
+  let maxLeadTimeDays = 0;
   
-  // 7. Setup Cost (amortized over quantity, adjusted by setup time multiplier)
-  const setupTimeMultiplier = machiningParams.setupTimeMultiplier || 1.0;
-  const setupCostPerUnit = (processData.setup_cost * setupTimeMultiplier) / inputs.quantity;
+  for (const processName of processNames) {
+    console.log(`\n=== Calculating for process: ${processName} ===`);
+    
+    // Fetch process data
+    const { data: processData, error: processError } = await supabase
+      .from('manufacturing_processes')
+      .select('*')
+      .eq('name', processName)
+      .eq('is_active', true)
+      .single();
+    
+    if (processError || !processData) {
+      console.error(`Error fetching process "${processName}":`, processError);
+      continue; // Skip this process if not found
+    }
+    
+    // Fetch material-process parameters
+    const { data: materialProcessParams } = await supabase
+      .from('material_process_parameters')
+      .select('*')
+      .eq('material_id', materialData.id)
+      .eq('process_id', processData.id)
+      .maybeSingle();
+    
+    const machiningParams = materialProcessParams ? {
+      spindleSpeed: materialProcessParams.spindle_speed_rpm,
+      feedRate: materialProcessParams.feed_rate_mm_per_min,
+      depthOfCut: materialProcessParams.depth_of_cut_mm,
+      cuttingSpeed: materialProcessParams.cutting_speed_m_per_min,
+      materialRemovalRateAdj: materialProcessParams.material_removal_rate_adjustment || 1.0,
+      toolWearMultiplier: materialProcessParams.tool_wear_multiplier || 1.0,
+      setupTimeMultiplier: materialProcessParams.setup_time_multiplier || 1.0,
+    } : {
+      spindleSpeed: materialData.spindle_speed_rpm_max || processData.spindle_speed_rpm || 3000,
+      feedRate: materialData.feed_rate_mm_per_min_max || processData.feed_rate_mm_per_min || 500,
+      depthOfCut: materialData.depth_of_cut_mm_max || processData.depth_of_cut_mm || 2.0,
+      cuttingSpeed: materialData.cutting_speed_m_per_min_max || 100,
+      materialRemovalRateAdj: 1.0,
+      toolWearMultiplier: materialData.tool_life_factor || 1.0,
+      setupTimeMultiplier: 1.0,
+    };
+    
+    // Calculate machining time for this process
+    const machiningTimeBreakdown = calculateMachiningTime(
+      removedVolume,
+      inputs,
+      processData,
+      materialData,
+      machiningParams
+    );
+    
+    // Calculate costs for this process
+    const baseRatePerHour = Number(processData.base_rate_per_hour);
+    const setupCost = Number(processData.setup_cost) * machiningParams.setupTimeMultiplier;
+    const complexityMultiplier = Number(processData.complexity_multiplier);
+    const adjustedRate = baseRatePerHour * (1 + ((inputs.complexity_score - 5) / 10) * complexityMultiplier);
+    const machiningCost = machiningTimeBreakdown.total_hours * adjustedRate;
+    
+    processBreakdown.push({
+      process: processName,
+      machining_cost: machiningCost,
+      setup_cost: setupCost,
+      estimated_hours: machiningTimeBreakdown.total_hours
+    });
+    
+    totalMachiningCost += machiningCost;
+    totalSetupCost += setupCost;
+    totalEstimatedHours += machiningTimeBreakdown.total_hours;
+    
+    // Lead time: max of all processes
+    const processLeadTime = Math.ceil(machiningTimeBreakdown.total_hours / 8) + 3;
+    maxLeadTimeDays = Math.max(maxLeadTimeDays, processLeadTime);
+    
+    console.log(`${processName}: $${machiningCost.toFixed(2)} machining + $${setupCost.toFixed(2)} setup = $${(machiningCost + setupCost).toFixed(2)}`);
+  }
   
-  // 8. Finish Cost (if applicable)
+  console.log(`\n=== Multi-Process Summary ===`);
+  console.log(`Total processes: ${processNames.length}`);
+  console.log(`Total machining cost: $${totalMachiningCost.toFixed(2)}`);
+  console.log(`Total setup cost: $${totalSetupCost.toFixed(2)}`);
+  console.log(`Total hours: ${totalEstimatedHours.toFixed(2)}`);
+  
+  // Finish Cost (if applicable)
   const finishCost = finishName !== 'As-machined' 
     ? inputs.surface_area_cm2 * 0.05 
     : 0;
   
-  // 9. Surface Treatment Cost (based on surface area)
+  // Surface Treatment Cost (based on surface area)
   let surfaceTreatmentCost = 0;
   if (inputs.surface_treatments && inputs.surface_treatments.length > 0) {
-    // Fetch all requested surface treatments
     const { data: treatments, error: treatmentError } = await supabase
       .from('surface_treatments')
       .select('*')
@@ -497,60 +497,49 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
     }
   }
   
-  // 10. Quantity Discount
+  // Quantity Discount
   let discount = 0;
   if (inputs.quantity >= 1000) discount = 0.20;
   else if (inputs.quantity >= 100) discount = 0.15;
   else if (inputs.quantity >= 50) discount = 0.10;
   else if (inputs.quantity >= 10) discount = 0.05;
   
-  // 11. Calculate final unit price
-  const subtotal = materialCost + machiningCost + setupCostPerUnit + finishCost + surfaceTreatmentCost;
+  // Calculate final unit price
+  const subtotal = materialCost + totalMachiningCost + totalSetupCost + finishCost + surfaceTreatmentCost;
   const unitPrice = subtotal * (1 - discount);
   
   // Apply minimum price floor
-  const finalUnitPrice = Math.max(unitPrice, 10.00); // $10 minimum
+  const finalUnitPrice = Math.max(unitPrice, 10.00);
   
-  // 12. Lead Time (1 day per 8 hours of work, minimum 2 weeks base lead time)
-  const totalHours = estimatedHours * inputs.quantity;
-  const leadTimeDays = Math.max(14, Math.ceil(totalHours / 8) + 2);
+  // Lead Time (based on max process lead time)
+  const leadTimeDays = Math.max(14, maxLeadTimeDays);
   
-  console.log('Quote calculated:', {
-    unit_price: finalUnitPrice,
-    material_cost: materialCost,
-    machining_cost: machiningCost,
-    setup_cost: setupCostPerUnit,
-    surface_treatment_cost: surfaceTreatmentCost,
-    discount
-  });
+  console.log('\n=== Final Quote ===');
+  console.log(`Unit price: $${finalUnitPrice.toFixed(2)}`);
+  console.log(`Total price (${inputs.quantity} units): $${(finalUnitPrice * inputs.quantity).toFixed(2)}`);
+  console.log(`Lead time: ${leadTimeDays} days`);
   
   // Validate quote for unrealistic values
-  validateQuote(inputs, finalUnitPrice, removedVolume, estimatedHours, materialCost);
+  validateQuote(inputs, finalUnitPrice, removedVolume, totalEstimatedHours, materialCost);
   
   return {
     unit_price: Number(finalUnitPrice.toFixed(2)),
     total_price: Number((finalUnitPrice * inputs.quantity).toFixed(2)),
     breakdown: {
       material_cost: Number(materialCost.toFixed(2)),
-      machining_cost: Number(machiningCost.toFixed(2)),
-      setup_cost: Number(setupCostPerUnit.toFixed(2)),
+      machining_cost: Number(totalMachiningCost.toFixed(2)),
+      setup_cost: Number(totalSetupCost.toFixed(2)),
       finish_cost: Number(finishCost.toFixed(2)),
       surface_treatment_cost: Number(surfaceTreatmentCost.toFixed(2)),
       discount_applied: discount > 0 ? `${(discount * 100).toFixed(0)}%` : 'None'
     },
-    estimated_hours: Number(estimatedHours.toFixed(2)),
+    estimated_hours: Number(totalEstimatedHours.toFixed(2)),
     lead_time_days: leadTimeDays,
     confidence: 0.75,
-    process: processName,
+    process: processNames.join(', '), // Show all processes
     material: materialName,
     finish: finishName,
-    machining_time_breakdown: {
-      roughing_hours: Number(timeBreakdown.roughing_hours.toFixed(2)),
-      finishing_hours: Number(timeBreakdown.finishing_hours.toFixed(2)),
-      tool_change_hours: Number(timeBreakdown.tool_change_hours.toFixed(2)),
-      positioning_hours: Number(timeBreakdown.positioning_hours.toFixed(2)),
-      total_hours: Number(timeBreakdown.total_hours.toFixed(2))
-    },
+    process_breakdown: processBreakdown, // Add process breakdown
     removed_volume_cm3: Number(removedVolume.toFixed(2))
   };
 }
