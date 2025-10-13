@@ -319,45 +319,104 @@ function getTriangleArea(tri: Triangle): number {
 function detectRequiredProcesses(features: DetectedFeatures, complexity: number): string[] {
   const processes: string[] = [];
   
-  // 1. Cylindrical parts: Add BOTH CNC Lathe (for OD) AND VMC (for features)
   if (features.is_cylindrical) {
-    // Always add CNC Lathe for cylindrical OD cleanup
+    // Always add CNC Lathe for cylindrical parts (OD machining)
     processes.push('CNC Lathe');
     
-    // Add VMC if part has additional features beyond simple turning
-    if (features.has_keyway || features.has_flat_surfaces || 
-        features.has_internal_holes || complexity > 6) {
+    // Default to adding VMC for most cylindrical parts
+    // Only skip VMC for very simple turned parts (low complexity, no features)
+    const isSimpleTurnedPart = complexity <= 3 && 
+                                !features.has_keyway && 
+                                !features.has_flat_surfaces && 
+                                !features.has_internal_holes &&
+                                !features.requires_precision_boring;
+    
+    if (!isSimpleTurnedPart) {
+      // Most cylindrical parts need VMC for additional operations:
+      // - End face machining, drilling, keyways, flats, threads, etc.
       processes.push('VMC Machining');
     }
   } else {
-    // 2. Non-cylindrical parts: Use VMC
+    // Prismatic parts use VMC
     processes.push('VMC Machining');
   }
   
-  // 3. Add keyway machining if detected
-  if (features.has_keyway) {
-    if (!processes.includes('Key way')) {
-      processes.push('Key way');
-    }
+  // Add keyway process if detected
+  if (features.has_keyway && !processes.includes('Key way')) {
+    processes.push('Key way');
   }
   
-  // 4. Add boring if precision internal holes detected
-  if (features.requires_precision_boring) {
-    if (!processes.includes('VMC Machining')) {
-      processes.push('VMC Machining');
-    }
-  }
-  
-  // Fallback: if no process detected, default to VMC
-  if (processes.length === 0) {
-    processes.push('VMC Machining');
-  }
-  
-  console.log('Detected processes:', processes, 'for features:', features);
-  return processes;
+  // Ensure we always return at least one process
+  return processes.length > 0 ? processes : ['VMC Machining'];
 }
 
-// Analyze STEP/IGES file using occt-import-js
+// STEP/IGES Analysis via External Python Microservice
+async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): Promise<AnalysisResult | null> {
+  const GEOMETRY_SERVICE_URL = Deno.env.get('GEOMETRY_SERVICE_URL');
+  
+  if (!GEOMETRY_SERVICE_URL) {
+    console.warn('GEOMETRY_SERVICE_URL not configured, will fall back to heuristic');
+    return null;
+  }
+  
+  try {
+    console.log(`Calling geometry service at ${GEOMETRY_SERVICE_URL} for ${fileName}`);
+    
+    const formData = new FormData();
+    formData.append('file', new Blob([fileData]), fileName);
+    
+    const response = await fetch(`${GEOMETRY_SERVICE_URL}/analyze-cad`, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      console.error(`Geometry service returned ${response.status}: ${await response.text()}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    console.log(`Geometry service analysis complete: cylindrical=${data.is_cylindrical}, faces=${data.total_faces}`);
+    
+    // Map service response to our result format
+    const detected_features: DetectedFeatures = {
+      is_cylindrical: data.is_cylindrical,
+      has_keyway: false, // Advanced feature detection would require additional logic
+      has_flat_surfaces: data.has_flat_surfaces,
+      has_internal_holes: false, // Would need hole detection in service
+      requires_precision_boring: false,
+      cylindricity_score: data.is_cylindrical ? 0.9 : 0.1,
+      flat_surface_percentage: data.total_faces > 0 ? data.planar_faces / data.total_faces : 0,
+      internal_surface_percentage: 0
+    };
+    
+    const recommended_processes = detectRequiredProcesses(detected_features, data.complexity_score);
+    
+    console.log(`Recommended processes: ${JSON.stringify(recommended_processes)}`);
+    
+    return {
+      volume_cm3: data.volume_cm3,
+      surface_area_cm2: data.surface_area_cm2,
+      complexity_score: data.complexity_score,
+      confidence: data.confidence,
+      method: data.method,
+      part_width_cm: data.part_width_cm,
+      part_height_cm: data.part_height_cm,
+      part_depth_cm: data.part_depth_cm,
+      detected_features,
+      recommended_processes
+    };
+    
+  } catch (error) {
+    console.error('Error calling geometry service:', error);
+    return null;
+  }
+}
+
+// Deprecated: STEP/IGES file parsing using occt-import-js (doesn't work in Deno)
 async function analyzeSTEP(fileData: ArrayBuffer, fileName: string): Promise<AnalysisResult> {
   console.log('Parsing STEP/IGES geometry with OpenCascade...');
   
@@ -669,9 +728,22 @@ const handler = async (req: Request): Promise<Response> => {
         console.error('STL parsing failed, falling back to heuristic:', error);
         analysis = enhancedHeuristic(file_name, file_size);
       }
+    } else if (file_data && (isSTEP || isIGES)) {
+      // Try STEP/IGES analysis via Python microservice
+      console.log(`Attempting geometry service analysis for: ${file_name}`);
+      const serviceResult = await analyzeSTEPViaService(file_data, file_name);
+      
+      if (serviceResult) {
+        analysis = serviceResult;
+        console.log(`Geometry service analysis successful (confidence: ${serviceResult.confidence})`);
+      } else {
+        console.log('Geometry service unavailable, falling back to heuristic (reduced confidence)');
+        analysis = enhancedHeuristic(file_name, file_size);
+        analysis.confidence = 0.3; // Mark low confidence for fallback
+        analysis.method = 'fallback_heuristic';
+      }
     } else {
-      // For STEP/IGES and other formats, use enhanced heuristic
-      // (occt-import-js doesn't work in Deno edge functions)
+      // For other formats or when no file data, use enhanced heuristic
       console.log(`Using enhanced heuristic for: ${file_name}`);
       analysis = enhancedHeuristic(file_name, file_size);
     }
