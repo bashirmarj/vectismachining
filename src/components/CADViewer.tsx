@@ -1,20 +1,41 @@
-import { Canvas, useLoader } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stage, Grid } from '@react-three/drei';
-import { Suspense, useMemo, useEffect } from 'react';
+import { Suspense, useMemo, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
+import { Triangle } from '@/lib/geometryAnalyzer';
 
 interface CADViewerProps {
   file?: File;
   fileUrl?: string;
   fileName: string;
+  triangles?: Triangle[];
 }
 
-function STLModel({ url }: { url: string }) {
-  const geometry = useLoader(STLLoader, url);
+// Component to render triangles directly from geometry data
+function TriangleMeshModel({ triangles }: { triangles: Triangle[] }) {
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    
+    const positions: number[] = [];
+    const normals: number[] = [];
+    
+    for (const tri of triangles) {
+      // Add vertices
+      for (const vertex of tri.vertices) {
+        positions.push(vertex.x, vertex.y, vertex.z);
+        normals.push(tri.normal.x, tri.normal.y, tri.normal.z);
+      }
+    }
+    
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.computeBoundingSphere();
+    
+    return geo;
+  }, [triangles]);
   
   return (
     <mesh geometry={geometry}>
@@ -27,8 +48,12 @@ function STLModel({ url }: { url: string }) {
   );
 }
 
-export function CADViewer({ file, fileUrl, fileName }: CADViewerProps) {
-  const isSTL = fileName.toLowerCase().endsWith('.stl');
+export function CADViewer({ file, fileUrl, fileName, triangles }: CADViewerProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
+  const isRenderableFormat = ['stl', 'step', 'stp', 'iges', 'igs'].includes(fileExtension);
   
   // Create object URL for File objects, cleanup on unmount
   const objectUrl = useMemo(() => {
@@ -61,21 +86,40 @@ export function CADViewer({ file, fileUrl, fileName }: CADViewerProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="h-[500px]">
-        {isSTL && objectUrl ? (
+        {isRenderableFormat && triangles && triangles.length > 0 ? (
           <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
             <Suspense fallback={null}>
               <Stage environment="city" intensity={0.6}>
-                <STLModel url={objectUrl} />
+                <TriangleMeshModel triangles={triangles} />
               </Stage>
               <Grid infiniteGrid />
               <OrbitControls makeDefault />
             </Suspense>
           </Canvas>
+        ) : isLoading ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4">
+            <Loader2 className="h-16 w-16 text-primary animate-spin" />
+            <p className="text-sm text-muted-foreground text-center">
+              Parsing {fileExtension.toUpperCase()} file...
+            </p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4">
+            <Box className="h-16 w-16 text-destructive" />
+            <p className="text-sm text-destructive text-center">
+              {error}
+            </p>
+            <Button variant="outline" onClick={handleDownload}>
+              Download File
+            </Button>
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Box className="h-16 w-16 text-muted-foreground" />
             <p className="text-sm text-muted-foreground text-center">
-              3D preview not available for {fileName.split('.').pop()?.toUpperCase()} files
+              {isRenderableFormat 
+                ? 'Analyzing file to display 3D model...' 
+                : `3D preview not available for ${fileExtension.toUpperCase()} files`}
             </p>
             <Button variant="outline" onClick={handleDownload}>
               Download File

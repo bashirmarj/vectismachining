@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { FeatureTree } from "./FeatureTree";
 import { PartDetailCustomer } from "./PartDetailCustomer";
+import { parseCADFile, Triangle } from "@/lib/geometryAnalyzer";
 
 const countryCodes = [
   { code: "+1", country: "Canada" },
@@ -45,6 +46,7 @@ interface FileWithQuantity {
   quantity: number;
   material?: string;
   process?: string;
+  triangles?: Triangle[];
   analysis?: {
     volume_cm3: number;
     surface_area_cm2: number;
@@ -191,31 +193,42 @@ export const PartUploadForm = () => {
         i === index ? { ...f, isAnalyzing: true } : f
       ));
 
-      const isSTL = fileWithQty.file.name.toLowerCase().endsWith('.stl');
+      const fileName = fileWithQty.file.name.toLowerCase();
+      const isGeometryParseable = fileName.endsWith('.stl') || fileName.endsWith('.step') || 
+                                   fileName.endsWith('.stp') || fileName.endsWith('.iges') || 
+                                   fileName.endsWith('.igs');
+      
       let analysisData;
+      let triangles: Triangle[] | undefined;
 
-      // For STL files, send the actual file for real geometry analysis
-      if (isSTL) {
-        const formData = new FormData();
-        formData.append('file', fileWithQty.file);
-        formData.append('file_name', fileWithQty.file.name);
-        formData.append('quantity', fileWithQty.quantity.toString());
-
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-cad`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: formData,
+      // Try browser-based geometry parsing first for supported formats
+      if (isGeometryParseable) {
+        try {
+          console.log(`Parsing ${fileName} in browser...`);
+          const geometryResult = await parseCADFile(fileWithQty.file);
+          
+          if (geometryResult) {
+            console.log(`Successfully parsed ${fileName} with ${geometryResult.triangle_count} triangles`);
+            analysisData = geometryResult;
+            triangles = geometryResult.triangles;
+            
+            toast({
+              title: "File Parsed Successfully",
+              description: `Extracted ${geometryResult.triangle_count.toLocaleString()} triangles from ${fileName.split('.').pop()?.toUpperCase()} file`,
+            });
           }
-        );
+        } catch (parseError: any) {
+          console.warn('Browser parsing failed, falling back to server:', parseError);
+          toast({
+            title: "Using Heuristic Analysis",
+            description: "Could not parse geometry, using file metadata instead",
+            variant: "default",
+          });
+        }
+      }
 
-        if (!response.ok) throw new Error('Analysis failed');
-        analysisData = await response.json();
-      } else {
-        // For other formats, use metadata-only analysis
+      // Fall back to server-side analysis if browser parsing failed
+      if (!analysisData) {
         const { data, error: analysisError } = await supabase.functions.invoke('analyze-cad', {
           body: {
             file_name: fileWithQty.file.name,
@@ -240,7 +253,7 @@ export const PartUploadForm = () => {
             part_height_cm: analysisData.part_height_cm,
             part_depth_cm: analysisData.part_depth_cm,
             quantity: fileWithQty.quantity,
-            processes: analysisData.recommended_processes, // Pass all detected processes
+            processes: analysisData.recommended_processes,
             material: fileWithQty.material,
             finish: 'As-machined'
           }
@@ -250,10 +263,11 @@ export const PartUploadForm = () => {
         quoteData = data;
       }
 
-      // Update file with analysis and quote
+      // Update file with analysis, triangles, and quote
       setFiles(prev => prev.map((f, i) => 
         i === index ? { 
-          ...f, 
+          ...f,
+          triangles,
           analysis: {
             volume_cm3: analysisData.volume_cm3,
             surface_area_cm2: analysisData.surface_area_cm2,
@@ -279,7 +293,7 @@ export const PartUploadForm = () => {
       } else {
         toast({
           title: "CAD Analysis Complete",
-          description: "Select material and process to see pricing",
+          description: "Select material to see pricing",
         });
       }
     } catch (error: any) {
