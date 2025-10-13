@@ -217,19 +217,38 @@ const PricingSettings = () => {
   const fetchPricingData = async () => {
     setLoading(true);
     try {
-      const [processesResponse, materialsResponse, categoriesResponse, treatmentsResponse, materialProcessParamsResponse] = await Promise.all([
-        supabase.from('manufacturing_processes').select('*').order('name'),
-        supabase.from('material_costs').select('*').order('material_name'),
-        supabase.from('material_categories').select('*').order('display_order'),
-        supabase.from('surface_treatments').select('*').order('category', { ascending: true }).order('name', { ascending: true }),
-        supabase.from('material_process_parameters').select('*'),
-      ]);
+      // Fetch each table individually with specific error handling
+      const processesResponse = await supabase.from('manufacturing_processes').select('*').order('name');
+      if (processesResponse.error) {
+        console.error('Failed to load processes:', processesResponse.error);
+        throw new Error('Failed to load manufacturing processes');
+      }
 
-      if (processesResponse.error) throw processesResponse.error;
-      if (materialsResponse.error) throw materialsResponse.error;
-      if (categoriesResponse.error) throw categoriesResponse.error;
-      if (treatmentsResponse.error) throw treatmentsResponse.error;
-      if (materialProcessParamsResponse.error) throw materialProcessParamsResponse.error;
+      const materialsResponse = await supabase.from('material_costs').select('*').order('material_name');
+      if (materialsResponse.error) {
+        console.error('Failed to load materials:', materialsResponse.error);
+        throw new Error('Failed to load material costs');
+      }
+
+      const categoriesResponse = await supabase.from('material_categories').select('*').order('display_order');
+      if (categoriesResponse.error) {
+        console.error('Failed to load categories:', categoriesResponse.error);
+        throw new Error('Failed to load material categories');
+      }
+
+      const treatmentsResponse = await supabase.from('surface_treatments').select('*').order('category', { ascending: true }).order('name', { ascending: true });
+      if (treatmentsResponse.error) {
+        console.error('Failed to load treatments:', treatmentsResponse.error);
+        throw new Error('Failed to load surface treatments');
+      }
+
+      const materialProcessParamsResponse = await supabase.from('material_process_parameters').select('*');
+      if (materialProcessParamsResponse.error) {
+        console.error('Failed to load material-process parameters:', materialProcessParamsResponse.error);
+        throw new Error('Failed to load material-process parameters');
+      }
+
+      console.log('Loaded parameters:', materialProcessParamsResponse.data?.length || 0);
 
       setProcesses(processesResponse.data || []);
       setCategories(categoriesResponse.data || []);
@@ -251,10 +270,16 @@ const PricingSettings = () => {
         category_id: m.category_id || null
       }));
       setMaterials(parsedMaterials);
+      
+      toast({
+        title: 'Success',
+        description: `Loaded ${materialProcessParamsResponse.data?.length || 0} material-process parameters`,
+      });
     } catch (error: any) {
+      console.error('Pricing data fetch error:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load pricing data',
+        description: error.message || 'Failed to load pricing data',
         variant: 'destructive',
       });
     } finally {
