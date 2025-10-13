@@ -15,6 +15,7 @@ import { Loader2, ArrowLeft, Download, Save, Send, Sparkles } from 'lucide-react
 import { StatusBadge } from '@/components/admin/StatusBadge';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { PartDetailTabs } from '@/components/admin/PartDetailTabs';
 
 interface QuotationData {
   id: string;
@@ -82,6 +83,7 @@ const QuotationDetails = () => {
     notes: null,
     valid_until: null,
   });
+  const [featureTrees, setFeatureTrees] = useState<Map<string, any>>(new Map());
 
   useEffect(() => {
     const checkAdminAndFetchData = async () => {
@@ -137,6 +139,36 @@ const QuotationDetails = () => {
 
       if (!lineItemsError && lineItemsData) {
         setLineItems(lineItemsData);
+
+        // Fetch feature trees for each line item
+        const featureTreesMap = new Map();
+        for (const item of lineItemsData) {
+          const { data: features } = await supabase
+            .from('part_features')
+            .select('*')
+            .eq('line_item_id', item.id);
+          
+          if (features && features.length > 0) {
+            // Reconstruct feature tree from database
+            const orientationMap = new Map();
+            features.forEach(feature => {
+              const arr = orientationMap.get(feature.orientation) || [];
+              arr.push(feature.parameters);
+              orientationMap.set(feature.orientation, arr);
+            });
+            
+            const featureTree = {
+              common_dimensions: [], // Could be extracted from parameters if needed
+              oriented_sections: Array.from(orientationMap.entries()).map(([orientation, features]) => ({
+                orientation,
+                features
+              }))
+            };
+            
+            featureTreesMap.set(item.id, featureTree);
+          }
+        }
+        setFeatureTrees(featureTreesMap);
       }
 
       // Fetch existing quote if available
@@ -176,9 +208,10 @@ const QuotationDetails = () => {
     return { subtotal, taxAmount, totalAmount };
   };
 
-  const updateLineItem = (index: number, field: keyof LineItem, value: any) => {
-    const updated = [...lineItems];
-    updated[index] = { ...updated[index], [field]: value };
+  const updateLineItem = (id: string, field: string, value: any) => {
+    const updated = lineItems.map(item => 
+      item.id === id ? { ...item, [field]: value } : item
+    );
     setLineItems(updated);
 
     // Recalculate totals
@@ -397,16 +430,16 @@ const QuotationDetails = () => {
               <CardTitle>Parts & Pricing</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {lineItems.map((item, index) => (
-                  <div key={item.id} className="border rounded-lg p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{item.file_name}</p>
-                        <p className="text-sm text-muted-foreground">Quantity: {item.quantity}</p>
+                  <div key={item.id} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline">Part {index + 1}</Badge>
+                        <h3 className="font-semibold">{item.file_name}</h3>
                       </div>
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
                         onClick={() => downloadFile(item.file_path, item.file_name)}
                       >
@@ -415,153 +448,11 @@ const QuotationDetails = () => {
                       </Button>
                     </div>
                     
-                    {/* AI Analysis Results */}
-                    {item.preliminary_unit_price && (
-                      <Card className="border-green-500 bg-green-50/50">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="flex items-center gap-2 text-base">
-                            <Sparkles className="h-4 w-4 text-green-600" />
-                            AI-Generated Preliminary Quote
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          {/* Analysis Metrics */}
-                          {(item.estimated_volume_cm3 || item.estimated_complexity_score) && (
-                            <div className="grid grid-cols-3 gap-3">
-                              {item.estimated_volume_cm3 && (
-                                <div>
-                                  <Label className="text-xs text-muted-foreground">Volume</Label>
-                                  <p className="text-lg font-bold">{item.estimated_volume_cm3} cm³</p>
-                                </div>
-                              )}
-                              {item.estimated_surface_area_cm2 && (
-                                <div>
-                                  <Label className="text-xs text-muted-foreground">Surface Area</Label>
-                                  <p className="text-lg font-bold">{item.estimated_surface_area_cm2.toFixed(1)} cm²</p>
-                                </div>
-                              )}
-                              {item.estimated_complexity_score && (
-                                <div>
-                                  <Label className="text-xs text-muted-foreground">Complexity</Label>
-                                  <div className="flex items-center gap-2">
-                                    <p className="text-lg font-bold">{item.estimated_complexity_score}/10</p>
-                                    <Badge variant={item.estimated_complexity_score > 7 ? 'destructive' : 'default'}>
-                                      {item.estimated_complexity_score > 7 ? 'Complex' : item.estimated_complexity_score < 4 ? 'Simple' : 'Medium'}
-                                    </Badge>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          <Separator />
-                          
-                          {/* AI Pricing Breakdown */}
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center bg-green-100 p-3 rounded">
-                              <span className="font-medium">AI Suggested Unit Price:</span>
-                              <span className="text-2xl font-bold text-green-700">
-                                ${item.preliminary_unit_price.toFixed(2)}
-                              </span>
-                            </div>
-                            
-                            {(item.material_cost || item.machining_cost) && (
-                              <div className="text-xs space-y-1 pl-3">
-                                {item.material_cost && (
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Material Cost:</span>
-                                    <span className="font-mono">${item.material_cost.toFixed(2)}</span>
-                                  </div>
-                                )}
-                                {item.machining_cost && (
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Machining Cost ({item.estimated_machine_time_hours?.toFixed(1)}h):</span>
-                                    <span className="font-mono">${item.machining_cost.toFixed(2)}</span>
-                                  </div>
-                                )}
-                                {item.setup_cost && (
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Setup Cost (amortized):</span>
-                                    <span className="font-mono">${item.setup_cost.toFixed(2)}</span>
-                                  </div>
-                                )}
-                                {item.finish_cost && item.finish_cost > 0 && (
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Finish Cost:</span>
-                                    <span className="font-mono">${item.finish_cost.toFixed(2)}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            
-                            <div className="flex gap-2 pt-2">
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => updateLineItem(index, 'unit_price', item.preliminary_unit_price)}
-                              >
-                                Apply AI Price
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => {
-                                  const priceWithMargin = (item.preliminary_unit_price || 0) * 1.1;
-                                  updateLineItem(index, 'unit_price', parseFloat(priceWithMargin.toFixed(2)));
-                                }}
-                              >
-                                Apply +10% Margin
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                    
-                    <Separator />
-                    
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <div>
-                        <Label htmlFor={`unit-price-${index}`}>Unit Price ($)</Label>
-                        <Input
-                          id={`unit-price-${index}`}
-                          type="number"
-                          step="0.01"
-                          value={item.unit_price || ''}
-                          onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || null)}
-                          placeholder="0.00"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor={`lead-time-${index}`}>Lead Time (days)</Label>
-                        <Input
-                          id={`lead-time-${index}`}
-                          type="number"
-                          value={item.lead_time_days || ''}
-                          onChange={(e) => updateLineItem(index, 'lead_time_days', parseInt(e.target.value) || null)}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div>
-                        <Label>Line Total</Label>
-                        <p className="text-lg font-semibold mt-2">
-                          ${((item.unit_price || 0) * item.quantity).toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor={`notes-${index}`}>Notes</Label>
-                      <Textarea
-                        id={`notes-${index}`}
-                        value={item.notes || ''}
-                        onChange={(e) => updateLineItem(index, 'notes', e.target.value)}
-                        placeholder="Material, finish, special requirements..."
-                        rows={2}
-                      />
-                    </div>
+                    <PartDetailTabs
+                      lineItem={item}
+                      featureTree={featureTrees.get(item.id)}
+                      onUpdateLineItem={updateLineItem}
+                    />
                   </div>
                 ))}
               </div>

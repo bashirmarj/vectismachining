@@ -264,6 +264,32 @@ const handler = async (req: Request): Promise<Response> => {
             .eq('id', lineItem.id);
 
           console.log(`Preliminary quote generated for ${file.name}: $${quoteData.unit_price}`);
+
+          // Save detected features to part_features table if available
+          if (analysisData.feature_tree) {
+            const features = analysisData.feature_tree.oriented_sections.flatMap((section: any) => 
+              section.features.map((feature: any) => ({
+                quotation_id: submission.id,
+                line_item_id: lineItem.id,
+                file_name: file.name,
+                feature_type: feature.type,
+                orientation: section.orientation,
+                parameters: feature
+              }))
+            );
+            
+            if (features.length > 0) {
+              const { error: featuresError } = await supabase
+                .from('part_features')
+                .insert(features);
+              
+              if (featuresError) {
+                console.error(`Error saving features for ${file.name}:`, featuresError);
+              } else {
+                console.log(`Saved ${features.length} features for ${file.name}`);
+              }
+            }
+          }
         } catch (error) {
           console.error(`Error processing ${file.name}:`, error);
         }
