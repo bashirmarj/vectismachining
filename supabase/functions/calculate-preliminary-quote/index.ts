@@ -99,9 +99,12 @@ function calculateRemovedVolume(inputs: QuoteInputs, materialData: any): number 
   
   // Use part bounding box + 20% margin for more realistic stock estimation
   const marginFactor = 1.2; // 20% margin for machining allowance
-  const effectiveWidth = (inputs.part_width_cm || 10) * marginFactor;
-  const effectiveHeight = (inputs.part_height_cm || 10) * marginFactor;
-  const effectiveDepth = (inputs.part_depth_cm || 10) * marginFactor;
+  
+  // If dimensions not provided, estimate from volume (cube root for roughly cubic parts)
+  const estimatedDimension = Math.pow(inputs.volume_cm3, 1/3);
+  const effectiveWidth = (inputs.part_width_cm || estimatedDimension) * marginFactor;
+  const effectiveHeight = (inputs.part_height_cm || estimatedDimension) * marginFactor;
+  const effectiveDepth = (inputs.part_depth_cm || estimatedDimension) * marginFactor;
   
   if (materialData.pricing_method === 'linear_inch') {
     // For bar stock: use part bounding box + margin instead of full bar cross-section
