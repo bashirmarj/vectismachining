@@ -1,5 +1,5 @@
 // Browser-based CAD geometry analysis using occt-import-js
-import initOpenCascade, { OpenCascadeInstance } from 'occt-import-js';
+import * as occtimportjs from 'occt-import-js';
 
 export interface Vector3 {
   x: number;
@@ -95,11 +95,11 @@ export interface GeometryAnalysisResult {
   triangles?: Triangle[]; // For 3D rendering
 }
 
-let occtInstance: OpenCascadeInstance | null = null;
-let occtInitializing: Promise<OpenCascadeInstance> | null = null;
+let occtInstance: any = null;
+let occtInitializing: Promise<any> | null = null;
 
 // Initialize OpenCascade WebAssembly with proper configuration
-async function getOCCT(): Promise<OpenCascadeInstance> {
+async function getOCCT(): Promise<any> {
   if (occtInstance) {
     return occtInstance;
   }
@@ -112,7 +112,12 @@ async function getOCCT(): Promise<OpenCascadeInstance> {
   occtInitializing = (async () => {
     try {
       console.log('Initializing OpenCascade WASM...');
-      const instance = await initOpenCascade({
+      
+      // occt-import-js exports a function that returns a promise
+      // In ES6 modules, we need to access it correctly
+      const initFunction = (occtimportjs as any).default || occtimportjs;
+      
+      const instance = await initFunction({
         locateFile: (path: string) => {
           // Help the WASM loader find the right file
           if (path.endsWith('.wasm')) {
@@ -122,6 +127,7 @@ async function getOCCT(): Promise<OpenCascadeInstance> {
           return path;
         }
       });
+      
       console.log('OpenCascade WASM initialized successfully');
       occtInstance = instance;
       occtInitializing = null;
