@@ -3,7 +3,7 @@ FROM continuumio/miniconda3:latest
 WORKDIR /app
 
 # Install pythonOCC via conda (pre-compiled binaries, no building needed)
-RUN conda install -c conda-forge pythonocc-core=7.7.2 -y && \
+RUN conda install -c conda-forge python=3.11 pythonocc-core=7.7.2 -y && \
     conda clean -afy
 
 # Copy requirements and install Flask dependencies via pip
