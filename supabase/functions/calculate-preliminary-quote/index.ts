@@ -84,40 +84,54 @@ function findBestCrossSection(inputs: QuoteInputs, materialData: any): any {
   return sorted[sorted.length - 1];
 }
 
-// Calculate removed material volume
+// Calculate removed material volume with improved stock estimation
 function calculateRemovedVolume(inputs: QuoteInputs, materialData: any): number {
   let stockVolume = 0;
   
+  // Use part bounding box + 20% margin for more realistic stock estimation
+  const marginFactor = 1.2; // 20% margin for machining allowance
+  const effectiveWidth = (inputs.part_width_cm || 10) * marginFactor;
+  const effectiveHeight = (inputs.part_height_cm || 10) * marginFactor;
+  const effectiveDepth = (inputs.part_depth_cm || 10) * marginFactor;
+  
   if (materialData.pricing_method === 'linear_inch') {
-    // For bar stock: calculate from selected cross-section
-    const bestCrossSection = findBestCrossSection(inputs, materialData);
-    if (bestCrossSection) {
-      if (bestCrossSection.shape === 'circular') {
-        const radiusCm = (bestCrossSection.width * 2.54) / 2;
-        const lengthCm = inputs.part_depth_cm || 10;
-        stockVolume = Math.PI * radiusCm * radiusCm * lengthCm;
-      } else {
-        const widthCm = bestCrossSection.width * 2.54;
-        const thicknessCm = bestCrossSection.thickness * 2.54;
-        const lengthCm = inputs.part_depth_cm || 10;
-        stockVolume = widthCm * thicknessCm * lengthCm;
-      }
-    }
+    // For bar stock: use part bounding box + margin instead of full bar cross-section
+    // This gives a more realistic estimate of actual material needed
+    stockVolume = effectiveWidth * effectiveHeight * effectiveDepth;
+    
+    console.log(`📦 Linear inch stock: ${effectiveWidth.toFixed(2)} × ${effectiveHeight.toFixed(2)} × ${effectiveDepth.toFixed(2)} cm = ${stockVolume.toFixed(2)} cm³`);
   } else if (materialData.pricing_method === 'sheet') {
     // For sheet stock: calculate from part bounding box + thickness
     const sheetThicknessCm = 0.5; // Default, should come from selected sheet
-    stockVolume = (inputs.part_width_cm || 10) * 
-                  (inputs.part_height_cm || 10) * 
-                  sheetThicknessCm;
+    stockVolume = effectiveWidth * effectiveHeight * sheetThicknessCm;
+    
+    console.log(`📄 Sheet stock: ${effectiveWidth.toFixed(2)} × ${effectiveHeight.toFixed(2)} × ${sheetThicknessCm} cm = ${stockVolume.toFixed(2)} cm³`);
   } else {
-    // Fallback: estimate stock as 1.5x part volume
-    stockVolume = inputs.volume_cm3 * 1.5;
+    // Weight-based: use bounding box + margin for consistency
+    stockVolume = effectiveWidth * effectiveHeight * effectiveDepth;
+    
+    console.log(`⚖️ Weight-based stock: ${effectiveWidth.toFixed(2)} × ${effectiveHeight.toFixed(2)} × ${effectiveDepth.toFixed(2)} cm = ${stockVolume.toFixed(2)} cm³`);
+  }
+  
+  // Cap maximum stock at 3× part volume to prevent unrealistic waste calculations
+  const maxAllowedStock = inputs.volume_cm3 * 3;
+  if (stockVolume > maxAllowedStock) {
+    console.log(`⚠️ Stock volume ${stockVolume.toFixed(2)} cm³ exceeds 3× part volume (${maxAllowedStock.toFixed(2)} cm³), capping to prevent unrealistic waste`);
+    stockVolume = maxAllowedStock;
   }
   
   // Material removed = Stock volume - Part volume (minimum 20% of part volume)
   const removedVolume = Math.max(stockVolume - inputs.volume_cm3, inputs.volume_cm3 * 0.2);
   
-  console.log(`Material removal: Stock ${stockVolume.toFixed(2)} cm³ - Part ${inputs.volume_cm3.toFixed(2)} cm³ = ${removedVolume.toFixed(2)} cm³ removed`);
+  // Calculate waste percentage for logging
+  const wastePercentage = ((removedVolume / stockVolume) * 100).toFixed(1);
+  
+  console.log(`📊 Stock Calculation Summary:
+  • Pricing Method: ${materialData.pricing_method}
+  • Stock Volume: ${stockVolume.toFixed(2)} cm³
+  • Part Volume: ${inputs.volume_cm3.toFixed(2)} cm³
+  • Removed Volume: ${removedVolume.toFixed(2)} cm³
+  • Waste Percentage: ${wastePercentage}%`);
   
   return removedVolume;
 }
@@ -143,6 +157,45 @@ function calculateMRR(machiningParams: any, materialData: any): number {
   console.log(`MRR Calculation: ${feedRate} mm/min × ${depthOfCut} mm × ${widthOfCut} mm × ${machinabilityRating} machinability × ${materialRemovalAdj} process adj = ${mrrCm3PerMin.toFixed(2)} cm³/min`);
   
   return mrrCm3PerMin;
+}
+
+// Validate quote for unrealistic values
+function validateQuote(
+  inputs: QuoteInputs, 
+  unitPrice: number, 
+  removedVolume: number, 
+  estimatedHours: number,
+  materialCost: number
+): void {
+  const warnings: string[] = [];
+  
+  // Check 1: Excessive waste (removed volume > 5× part volume)
+  const wasteRatio = removedVolume / inputs.volume_cm3;
+  if (wasteRatio > 5) {
+    warnings.push(`⚠️ High waste ratio: ${wasteRatio.toFixed(1)}× part volume removed`);
+  }
+  
+  // Check 2: Unrealistic machining time (> 10 hours for single part)
+  if (estimatedHours > 10) {
+    warnings.push(`⚠️ High machining time: ${estimatedHours.toFixed(2)} hours (verify complexity)`);
+  }
+  
+  // Check 3: Material cost seems very high per cm³
+  const materialCostPerCm3 = materialCost / inputs.volume_cm3;
+  if (materialCostPerCm3 > 2.0) {
+    warnings.push(`⚠️ High material cost per cm³: $${materialCostPerCm3.toFixed(2)}/cm³`);
+  }
+  
+  // Check 4: Very high unit price (might indicate calculation error)
+  if (unitPrice > 1000) {
+    warnings.push(`⚠️ Very high unit price: $${unitPrice.toFixed(2)} (verify all inputs)`);
+  }
+  
+  if (warnings.length > 0) {
+    console.log('🚨 Quote Validation Warnings:\n' + warnings.join('\n'));
+  } else {
+    console.log('✅ Quote validation passed - all values within expected ranges');
+  }
 }
 
 // Calculate detailed machining time breakdown
@@ -470,6 +523,9 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
     surface_treatment_cost: surfaceTreatmentCost,
     discount
   });
+  
+  // Validate quote for unrealistic values
+  validateQuote(inputs, finalUnitPrice, removedVolume, estimatedHours, materialCost);
   
   return {
     unit_price: Number(finalUnitPrice.toFixed(2)),
