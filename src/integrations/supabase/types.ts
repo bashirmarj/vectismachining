@@ -277,6 +277,54 @@ export type Database = {
           },
         ]
       }
+      part_features: {
+        Row: {
+          created_at: string | null
+          feature_type: string
+          file_name: string
+          id: string
+          line_item_id: string | null
+          orientation: string | null
+          parameters: Json
+          quotation_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          feature_type: string
+          file_name: string
+          id?: string
+          line_item_id?: string | null
+          orientation?: string | null
+          parameters: Json
+          quotation_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          feature_type?: string
+          file_name?: string
+          id?: string
+          line_item_id?: string | null
+          orientation?: string | null
+          parameters?: Json
+          quotation_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "part_features_line_item_id_fkey"
+            columns: ["line_item_id"]
+            isOneToOne: false
+            referencedRelation: "quote_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "part_features_quotation_id_fkey"
+            columns: ["quotation_id"]
+            isOneToOne: false
+            referencedRelation: "quotation_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null

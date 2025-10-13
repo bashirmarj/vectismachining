@@ -23,6 +23,63 @@ interface DetectedFeatures {
   internal_surface_percentage: number;
 }
 
+interface DetectedHole {
+  type: 'hole';
+  diameter_mm: number;
+  depth_mm: number;
+  through: boolean;
+  position: [number, number, number];
+  axis: [number, number, number];
+  orientation: string;
+}
+
+interface DetectedGroove {
+  type: 'groove';
+  inner_diameter_mm: number;
+  outer_diameter_mm: number;
+  depth_mm: number;
+  location: 'external' | 'internal';
+  orientation: string;
+}
+
+interface DetectedFlat {
+  type: 'flat';
+  orientation: string;
+  area_mm2: number;
+  width_mm: number;
+  length_mm: number;
+}
+
+interface PrimaryDimensions {
+  major_diameter_mm?: number;
+  minor_diameter_mm?: number;
+  length_mm: number;
+  width_mm?: number;
+  height_mm?: number;
+  primary_axis: 'X' | 'Y' | 'Z';
+}
+
+interface DetailedFeatures {
+  holes: DetectedHole[];
+  grooves: DetectedGroove[];
+  flat_surfaces: DetectedFlat[];
+  primary_dimensions: PrimaryDimensions;
+}
+
+interface OrientedSection {
+  orientation: string;
+  features: Array<DetectedHole | DetectedGroove | DetectedFlat>;
+}
+
+interface FeatureTree {
+  common_dimensions: Array<{
+    label: string;
+    value: number;
+    unit: string;
+  }>;
+  oriented_sections: OrientedSection[];
+}
+
 interface AnalysisResult {
   volume_cm3: number;
   surface_area_cm2: number;
@@ -36,6 +93,8 @@ interface AnalysisResult {
   feature_count?: number;
   detected_features?: DetectedFeatures;
   recommended_processes?: string[];
+  detailed_features?: DetailedFeatures;
+  feature_tree?: FeatureTree;
 }
 
 interface Vector3 {
@@ -386,8 +445,8 @@ async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): P
       is_cylindrical: data.is_cylindrical,
       has_keyway: false, // Advanced feature detection would require additional logic
       has_flat_surfaces: data.has_flat_surfaces,
-      has_internal_holes: false, // Would need hole detection in service
-      requires_precision_boring: false,
+      has_internal_holes: data.detected_features?.holes?.length > 0,
+      requires_precision_boring: data.detected_features?.holes?.some((h: any) => !h.through),
       cylindricity_score: data.is_cylindrical ? 0.9 : 0.1,
       flat_surface_percentage: data.total_faces > 0 ? data.planar_faces / data.total_faces : 0,
       internal_surface_percentage: 0
@@ -396,6 +455,20 @@ async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): P
     const recommended_processes = detectRequiredProcesses(detected_features, data.complexity_score);
     
     console.log(`Recommended processes: ${JSON.stringify(recommended_processes)}`);
+    
+    // Build detailed features structure
+    const detailed_features: DetailedFeatures | undefined = data.detected_features ? {
+      holes: data.detected_features.holes || [],
+      grooves: data.detected_features.grooves || [],
+      flat_surfaces: data.detected_features.flat_surfaces || [],
+      primary_dimensions: data.detected_features.primary_dimensions || {
+        length_mm: (data.part_depth_cm || 0) * 10,
+        primary_axis: 'Z' as 'X' | 'Y' | 'Z'
+      }
+    } : undefined;
+    
+    // Build feature tree organized by orientation
+    const feature_tree: FeatureTree | undefined = detailed_features ? buildFeatureTree(detailed_features) : undefined;
     
     return {
       volume_cm3: data.volume_cm3,
@@ -407,13 +480,81 @@ async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): P
       part_height_cm: data.part_height_cm,
       part_depth_cm: data.part_depth_cm,
       detected_features,
-      recommended_processes
+      recommended_processes,
+      detailed_features,
+      feature_tree
     };
     
   } catch (error) {
     console.error('Error calling geometry service:', error);
     return null;
   }
+}
+
+function buildFeatureTree(features: DetailedFeatures): FeatureTree {
+  const common_dimensions: Array<{label: string; value: number; unit: string}> = [];
+  
+  // Add primary dimensions
+  const dims = features.primary_dimensions;
+  if (dims.major_diameter_mm) {
+    common_dimensions.push({
+      label: 'Major Diameter',
+      value: dims.major_diameter_mm,
+      unit: 'mm'
+    });
+  }
+  if (dims.length_mm) {
+    common_dimensions.push({
+      label: 'Length',
+      value: dims.length_mm,
+      unit: 'mm'
+    });
+  }
+  if (dims.width_mm) {
+    common_dimensions.push({
+      label: 'Width',
+      value: dims.width_mm,
+      unit: 'mm'
+    });
+  }
+  if (dims.height_mm) {
+    common_dimensions.push({
+      label: 'Height',
+      value: dims.height_mm,
+      unit: 'mm'
+    });
+  }
+  
+  // Group features by orientation
+  const orientationMap = new Map<string, Array<DetectedHole | DetectedGroove | DetectedFlat>>();
+  
+  features.holes.forEach(hole => {
+    const arr = orientationMap.get(hole.orientation) || [];
+    arr.push(hole);
+    orientationMap.set(hole.orientation, arr);
+  });
+  
+  features.grooves.forEach(groove => {
+    const arr = orientationMap.get(groove.orientation) || [];
+    arr.push(groove);
+    orientationMap.set(groove.orientation, arr);
+  });
+  
+  features.flat_surfaces.forEach(flat => {
+    const arr = orientationMap.get(flat.orientation) || [];
+    arr.push(flat);
+    orientationMap.set(flat.orientation, arr);
+  });
+  
+  const oriented_sections: OrientedSection[] = Array.from(orientationMap.entries()).map(([orientation, features]) => ({
+    orientation,
+    features
+  }));
+  
+  return {
+    common_dimensions,
+    oriented_sections
+  };
 }
 
 // Deprecated: STEP/IGES file parsing using occt-import-js (doesn't work in Deno)

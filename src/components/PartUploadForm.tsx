@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { FeatureTree } from "./FeatureTree";
 
 const countryCodes = [
   { code: "+1", country: "Canada" },
@@ -58,6 +59,17 @@ interface FileWithQuantity {
       requires_precision_boring: boolean;
     };
     recommended_processes?: string[];
+    feature_tree?: {
+      common_dimensions: Array<{
+        label: string;
+        value: number;
+        unit: string;
+      }>;
+      oriented_sections: Array<{
+        orientation: string;
+        features: any[];
+      }>;
+    };
   };
   quote?: {
     unit_price: number;
@@ -249,7 +261,8 @@ export const PartUploadForm = () => {
             method: analysisData.method,
             triangle_count: analysisData.triangle_count,
             detected_features: analysisData.detected_features,
-            recommended_processes: analysisData.recommended_processes
+            recommended_processes: analysisData.recommended_processes,
+            feature_tree: analysisData.feature_tree
           },
           quote: quoteData,
           isAnalyzing: false 
@@ -963,6 +976,16 @@ export const PartUploadForm = () => {
                               </Alert>
                             </CardContent>
                           </Card>
+                        )}
+                        
+                        {/* Feature Tree Display */}
+                        {fileWithQty.analysis?.feature_tree && (
+                          <div className="mt-3">
+                            <FeatureTree 
+                              partName={fileWithQty.file.name}
+                              featureTree={fileWithQty.analysis.feature_tree}
+                            />
+                          </div>
                         )}
                       </div>
                     ))}
