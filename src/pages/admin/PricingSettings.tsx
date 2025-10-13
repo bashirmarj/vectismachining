@@ -89,6 +89,21 @@ interface SurfaceTreatment {
   is_active: boolean;
 }
 
+interface MaterialProcessParameter {
+  id: string;
+  material_id: string;
+  process_id: string;
+  spindle_speed_rpm: number | null;
+  feed_rate_mm_per_min: number | null;
+  depth_of_cut_mm: number | null;
+  cutting_speed_m_per_min: number | null;
+  material_removal_rate_adjustment: number;
+  tool_wear_multiplier: number;
+  surface_finish_factor: number;
+  setup_time_multiplier: number;
+  cycle_time_multiplier: number;
+}
+
 const PricingSettings = () => {
   // Helper function to convert decimal to fraction
   const decimalToFraction = (decimal: number): string => {
@@ -147,6 +162,7 @@ const PricingSettings = () => {
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
   const [materials, setMaterials] = useState<MaterialCost[]>([]);
   const [treatments, setTreatments] = useState<SurfaceTreatment[]>([]);
+  const [materialProcessParams, setMaterialProcessParams] = useState<MaterialProcessParameter[]>([]);
   const [activeTab, setActiveTab] = useState<string>('');
   const [selectedCrossSections, setSelectedCrossSections] = useState<Record<string, number>>({});
   const [editingTreatmentId, setEditingTreatmentId] = useState<string | null>(null);
@@ -199,21 +215,24 @@ const PricingSettings = () => {
   const fetchPricingData = async () => {
     setLoading(true);
     try {
-      const [processesResponse, materialsResponse, categoriesResponse, treatmentsResponse] = await Promise.all([
+      const [processesResponse, materialsResponse, categoriesResponse, treatmentsResponse, materialProcessParamsResponse] = await Promise.all([
         supabase.from('manufacturing_processes').select('*').order('name'),
         supabase.from('material_costs').select('*').order('material_name'),
         supabase.from('material_categories').select('*').order('display_order'),
         supabase.from('surface_treatments').select('*').order('category', { ascending: true }).order('name', { ascending: true }),
+        supabase.from('material_process_parameters').select('*'),
       ]);
 
       if (processesResponse.error) throw processesResponse.error;
       if (materialsResponse.error) throw materialsResponse.error;
       if (categoriesResponse.error) throw categoriesResponse.error;
       if (treatmentsResponse.error) throw treatmentsResponse.error;
+      if (materialProcessParamsResponse.error) throw materialProcessParamsResponse.error;
 
       setProcesses(processesResponse.data || []);
       setCategories(categoriesResponse.data || []);
       setTreatments((treatmentsResponse.data as SurfaceTreatment[]) || []);
+      setMaterialProcessParams((materialProcessParamsResponse.data as MaterialProcessParameter[]) || []);
       
       // Parse finish_options and cross_sections from JSONB to array
       const parsedMaterials = (materialsResponse.data || []).map(m => ({
@@ -1199,6 +1218,7 @@ const PricingSettings = () => {
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="processes">Manufacturing Processes</TabsTrigger>
               <TabsTrigger value="materials">Material Costs</TabsTrigger>
+              <TabsTrigger value="material-process">Material-Process Parameters</TabsTrigger>
               <TabsTrigger value="treatments">Surface Treatments</TabsTrigger>
               <TabsTrigger value="formulas">Pricing Formulas</TabsTrigger>
             </TabsList>
@@ -2232,6 +2252,132 @@ const PricingSettings = () => {
                         </>
                       )}
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Material-Process Parameters Tab */}
+            <TabsContent value="material-process" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Material-Process Parameters</CardTitle>
+                  <CardDescription>
+                    View and manage material-specific machining parameters for each manufacturing process. 
+                    These parameters are used to calculate accurate quote estimates.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    {/* Process Selector */}
+                    <div>
+                      <Label>Select Manufacturing Process</Label>
+                      <Select defaultValue={processes[0]?.id}>
+                        <SelectTrigger className="w-[300px]">
+                          <SelectValue placeholder="Select a process" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {processes.filter(p => p.is_active).map(process => (
+                            <SelectItem key={process.id} value={process.id}>
+                              {process.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Parameters Grid */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-muted">
+                            <tr>
+                              <th className="text-left p-3 font-semibold">Material</th>
+                              <th className="text-center p-3 font-semibold">Spindle Speed (RPM)</th>
+                              <th className="text-center p-3 font-semibold">Feed Rate (mm/min)</th>
+                              <th className="text-center p-3 font-semibold">Depth of Cut (mm)</th>
+                              <th className="text-center p-3 font-semibold">Cutting Speed (m/min)</th>
+                              <th className="text-center p-3 font-semibold">MRR Adj.</th>
+                              <th className="text-center p-3 font-semibold">Tool Wear</th>
+                              <th className="text-center p-3 font-semibold">Setup Time</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {materials.filter(m => m.is_active).map(material => {
+                              const param = materialProcessParams.find(p => 
+                                p.material_id === material.id && p.process_id === processes[0]?.id
+                              );
+                              
+                              return (
+                                <tr key={material.id} className="border-t hover:bg-muted/50">
+                                  <td className="p-3 font-medium">{material.material_name}</td>
+                                  <td className="p-3 text-center">
+                                    {param?.spindle_speed_rpm ? (
+                                      <span className="text-green-600 font-semibold">{param.spindle_speed_rpm}</span>
+                                    ) : (
+                                      <span className="text-muted-foreground">Default</span>
+                                    )}
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    {param?.feed_rate_mm_per_min ? (
+                                      <span className="text-green-600 font-semibold">{param.feed_rate_mm_per_min}</span>
+                                    ) : (
+                                      <span className="text-muted-foreground">Default</span>
+                                    )}
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    {param?.depth_of_cut_mm ? (
+                                      <span className="text-green-600 font-semibold">{param.depth_of_cut_mm}</span>
+                                    ) : (
+                                      <span className="text-muted-foreground">Default</span>
+                                    )}
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    {param?.cutting_speed_m_per_min ? (
+                                      <span className="text-green-600 font-semibold">{param.cutting_speed_m_per_min}</span>
+                                    ) : (
+                                      <span className="text-muted-foreground">Default</span>
+                                    )}
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    <span className={param ? "text-green-600 font-semibold" : "text-muted-foreground"}>
+                                      {param?.material_removal_rate_adjustment?.toFixed(2) || "1.00"}x
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    <span className={param ? "text-green-600 font-semibold" : "text-muted-foreground"}>
+                                      {param?.tool_wear_multiplier?.toFixed(2) || "1.00"}x
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    <span className={param ? "text-green-600 font-semibold" : "text-muted-foreground"}>
+                                      {param?.setup_time_multiplier?.toFixed(2) || "1.00"}x
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-blue-900 mb-2">Industry Data Applied</h4>
+                      <p className="text-sm text-blue-800">
+                        The material-process parameters shown above are based on industry-standard machining data 
+                        for each material-process combination. Green values indicate optimized parameters that provide 
+                        more accurate quote calculations. "Default" means the system will use generic fallback values.
+                      </p>
+                      <p className="text-sm text-blue-800 mt-2">
+                        <strong>Key metrics:</strong>
+                      </p>
+                      <ul className="text-sm text-blue-800 list-disc list-inside mt-1 space-y-1">
+                        <li><strong>MRR Adj</strong>: Material Removal Rate adjustment (higher = faster machining)</li>
+                        <li><strong>Tool Wear</strong>: Tool wear multiplier (higher = more tool changes needed)</li>
+                        <li><strong>Setup Time</strong>: Setup time multiplier (higher = longer setup required)</li>
+                      </ul>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

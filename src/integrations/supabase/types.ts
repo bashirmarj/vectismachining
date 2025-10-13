@@ -211,6 +211,72 @@ export type Database = {
           },
         ]
       }
+      material_process_parameters: {
+        Row: {
+          created_at: string | null
+          cutting_speed_m_per_min: number | null
+          cycle_time_multiplier: number | null
+          depth_of_cut_mm: number | null
+          feed_rate_mm_per_min: number | null
+          id: string
+          material_id: string
+          material_removal_rate_adjustment: number | null
+          process_id: string
+          setup_time_multiplier: number | null
+          spindle_speed_rpm: number | null
+          surface_finish_factor: number | null
+          tool_wear_multiplier: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          cutting_speed_m_per_min?: number | null
+          cycle_time_multiplier?: number | null
+          depth_of_cut_mm?: number | null
+          feed_rate_mm_per_min?: number | null
+          id?: string
+          material_id: string
+          material_removal_rate_adjustment?: number | null
+          process_id: string
+          setup_time_multiplier?: number | null
+          spindle_speed_rpm?: number | null
+          surface_finish_factor?: number | null
+          tool_wear_multiplier?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          cutting_speed_m_per_min?: number | null
+          cycle_time_multiplier?: number | null
+          depth_of_cut_mm?: number | null
+          feed_rate_mm_per_min?: number | null
+          id?: string
+          material_id?: string
+          material_removal_rate_adjustment?: number | null
+          process_id?: string
+          setup_time_multiplier?: number | null
+          spindle_speed_rpm?: number | null
+          surface_finish_factor?: number | null
+          tool_wear_multiplier?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_process_parameters_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "material_costs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "material_process_parameters_process_id_fkey"
+            columns: ["process_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturing_processes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null

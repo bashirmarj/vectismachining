@@ -122,24 +122,25 @@ function calculateRemovedVolume(inputs: QuoteInputs, materialData: any): number 
   return removedVolume;
 }
 
-// Calculate Material Removal Rate (MRR)
-function calculateMRR(processData: any, materialData: any): number {
+// Calculate Material Removal Rate (MRR) using material-process specific parameters
+function calculateMRR(machiningParams: any, materialData: any): number {
   // MRR = Feed Rate × Depth of Cut × Width of Cut
-  const feedRate = processData.feed_rate_mm_per_min || 500;
-  const depthOfCut = processData.depth_of_cut_mm || 2.0;
+  const feedRate = machiningParams.feedRate || 500;
+  const depthOfCut = machiningParams.depthOfCut || 2.0;
   const widthOfCut = depthOfCut * 1.5; // Typical step-over
   
   // Base MRR in mm³/min
   const baseMRR = feedRate * depthOfCut * widthOfCut;
   
-  // Adjust for material machinability
+  // Adjust for material machinability and material-process specific adjustment
   const machinabilityRating = materialData.machinability_rating || 1.0;
-  const adjustedMRR = baseMRR * machinabilityRating;
+  const materialRemovalAdj = machiningParams.materialRemovalRateAdj || 1.0;
+  const adjustedMRR = baseMRR * machinabilityRating * materialRemovalAdj;
   
   // Convert mm³/min to cm³/min
   const mrrCm3PerMin = adjustedMRR / 1000;
   
-  console.log(`MRR Calculation: ${feedRate} mm/min × ${depthOfCut} mm × ${widthOfCut} mm × ${machinabilityRating} machinability = ${mrrCm3PerMin.toFixed(2)} cm³/min`);
+  console.log(`MRR Calculation: ${feedRate} mm/min × ${depthOfCut} mm × ${widthOfCut} mm × ${machinabilityRating} machinability × ${materialRemovalAdj} process adj = ${mrrCm3PerMin.toFixed(2)} cm³/min`);
   
   return mrrCm3PerMin;
 }
@@ -149,9 +150,10 @@ function calculateMachiningTime(
   removedVolume: number,
   inputs: QuoteInputs,
   processData: any,
-  materialData: any
+  materialData: any,
+  machiningParams: any
 ): MachiningTimeBreakdown {
-  const mrr = calculateMRR(processData, materialData);
+  const mrr = calculateMRR(machiningParams, materialData);
   
   // Split into roughing (80% of volume) and finishing (20% + surface area)
   const roughingVolume = removedVolume * 0.80;
@@ -168,8 +170,9 @@ function calculateMachiningTime(
   const complexityMultiplier = 1 + ((inputs.complexity_score - 5) / 10);
   const surfaceFinishingMinutes = (inputs.surface_area_cm2 / 50) * complexityMultiplier;
   
-  // Tool changes: estimate 1 change per 50 cm³ removed
-  const toolChanges = Math.ceil(removedVolume / 50);
+  // Tool changes: estimate 1 change per 50 cm³ removed, adjusted by tool wear multiplier
+  const toolWearMultiplier = machiningParams.toolWearMultiplier || 1.0;
+  const toolChanges = Math.ceil((removedVolume / 50) * toolWearMultiplier);
   const toolChangeMinutes = toolChanges * (processData.tool_change_time_minutes || 2.0);
   
   // Non-cutting time (positioning, measuring): 20% overhead
@@ -230,6 +233,38 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
     console.error('Error fetching material:', materialError);
     throw new Error(`Material "${materialName}" not found`);
   }
+
+  // 3. Fetch material-process specific parameters
+  const { data: materialProcessParams } = await supabase
+    .from('material_process_parameters')
+    .select('*')
+    .eq('material_id', materialData.id)
+    .eq('process_id', processData.id)
+    .maybeSingle();
+
+  console.log('Material-process parameters:', materialProcessParams);
+
+  // Use material-process specific parameters if available, otherwise fall back to material defaults
+  const machiningParams = materialProcessParams ? {
+    spindleSpeed: materialProcessParams.spindle_speed_rpm,
+    feedRate: materialProcessParams.feed_rate_mm_per_min,
+    depthOfCut: materialProcessParams.depth_of_cut_mm,
+    cuttingSpeed: materialProcessParams.cutting_speed_m_per_min,
+    materialRemovalRateAdj: materialProcessParams.material_removal_rate_adjustment || 1.0,
+    toolWearMultiplier: materialProcessParams.tool_wear_multiplier || 1.0,
+    setupTimeMultiplier: materialProcessParams.setup_time_multiplier || 1.0,
+  } : {
+    // Fallback to material defaults or process defaults
+    spindleSpeed: materialData.spindle_speed_rpm_max || processData.spindle_speed_rpm || 3000,
+    feedRate: materialData.feed_rate_mm_per_min_max || processData.feed_rate_mm_per_min || 500,
+    depthOfCut: materialData.depth_of_cut_mm_max || processData.depth_of_cut_mm || 2.0,
+    cuttingSpeed: materialData.cutting_speed_m_per_min_max || 100,
+    materialRemovalRateAdj: 1.0,
+    toolWearMultiplier: materialData.tool_life_factor || 1.0,
+    setupTimeMultiplier: 1.0,
+  };
+
+  console.log('Using machining parameters:', machiningParams);
   
   // 3. Material Cost - calculate based on pricing method
   let materialCost = 0;
@@ -371,7 +406,8 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
     removedVolume,
     inputs,
     processData,
-    materialData
+    materialData,
+    machiningParams
   );
 
   // 6. Machining Cost (using detailed time calculation)
@@ -380,8 +416,9 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
   
   console.log(`Machining: ${timeBreakdown.total_hours.toFixed(2)} hours × $${processData.base_rate_per_hour}/hr = $${machiningCost.toFixed(2)}`);
   
-  // 7. Setup Cost (amortized over quantity)
-  const setupCostPerUnit = processData.setup_cost / inputs.quantity;
+  // 7. Setup Cost (amortized over quantity, adjusted by setup time multiplier)
+  const setupTimeMultiplier = machiningParams.setupTimeMultiplier || 1.0;
+  const setupCostPerUnit = (processData.setup_cost * setupTimeMultiplier) / inputs.quantity;
   
   // 8. Finish Cost (if applicable)
   const finishCost = finishName !== 'As-machined' 
