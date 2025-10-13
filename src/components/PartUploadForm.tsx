@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Upload, File, CheckCircle2, AlertCircle, ChevronsUpDown, Check, Zap, Info, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +50,14 @@ interface FileWithQuantity {
     confidence?: number;
     method?: string;
     triangle_count?: number;
+    detected_features?: {
+      is_cylindrical: boolean;
+      has_keyway: boolean;
+      has_flat_surfaces: boolean;
+      has_internal_holes: boolean;
+      requires_precision_boring: boolean;
+    };
+    recommended_processes?: string[];
   };
   quote?: {
     unit_price: number;
@@ -229,7 +238,9 @@ export const PartUploadForm = () => {
             complexity_score: analysisData.complexity_score,
             confidence: analysisData.confidence,
             method: analysisData.method,
-            triangle_count: analysisData.triangle_count
+            triangle_count: analysisData.triangle_count,
+            detected_features: analysisData.detected_features,
+            recommended_processes: analysisData.recommended_processes
           },
           quote: quoteData,
           isAnalyzing: false 
@@ -795,51 +806,23 @@ export const PartUploadForm = () => {
                             </Popover>
                           </div>
 
-                          {/* Process Selection */}
-                          <div className="flex items-center gap-2">
-                            <Label htmlFor={`process-${index}`} className="text-xs whitespace-nowrap">Process: *</Label>
-                            <Popover open={processOpen === index} onOpenChange={(open) => setProcessOpen(open ? index : null)}>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  aria-expanded={processOpen === index}
-                                  className="flex-1 justify-between h-8 text-xs"
-                                >
-                                  {fileWithQty.process || "Select process"}
-                                  <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[300px] p-0 bg-background z-50">
-                                <Command>
-                                  <CommandInput placeholder="Search process..." className="h-9" />
-                                  <CommandList>
-                                    <CommandEmpty>No process found.</CommandEmpty>
-                                    <CommandGroup>
-                                      {processes.map((process) => (
-                                        <CommandItem
-                                          key={process}
-                                          value={process}
-                                          onSelect={() => {
-                                            updateFileProcess(index, process);
-                                            setProcessOpen(null);
-                                          }}
-                                        >
-                                          <Check
-                                            className={cn(
-                                              "mr-2 h-4 w-4",
-                                              fileWithQty.process === process ? "opacity-100" : "opacity-0"
-                                            )}
-                                          />
-                                          {process}
-                                        </CommandItem>
-                                      ))}
-                                    </CommandGroup>
-                                  </CommandList>
-                                </Command>
-                              </PopoverContent>
-                            </Popover>
-                          </div>
+                          {/* Detected Processes (Read-only) */}
+                          {fileWithQty.analysis?.recommended_processes && fileWithQty.analysis.recommended_processes.length > 0 && (
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Detected Manufacturing Processes:</Label>
+                              <div className="flex flex-wrap gap-1.5">
+                                {fileWithQty.analysis.recommended_processes.map((process, pIdx) => (
+                                  <Badge 
+                                    key={pIdx} 
+                                    variant="secondary"
+                                    className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200"
+                                  >
+                                    {process}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                         
                         {/* Instant Quote Preview */}
