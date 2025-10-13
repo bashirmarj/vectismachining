@@ -139,6 +139,24 @@ const Admin = () => {
             </div>
           </CardHeader>
           <CardContent>
+            {/* Admin Actions */}
+            <div className="flex gap-2 mb-6">
+              <Button
+                variant="outline"
+                onClick={() => navigate('/admin/pricing-settings')}
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                Pricing Settings
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate('/admin/surface-treatments')}
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                Surface Treatments
+              </Button>
+            </div>
+            
             {/* Filters */}
             <div className="flex gap-4 mb-6">
               <div className="flex-1 relative">

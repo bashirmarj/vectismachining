@@ -19,6 +19,7 @@ interface QuoteInputs {
   process?: string;
   material?: string;
   finish?: string;
+  surface_treatments?: string[]; // Array of surface treatment names
   part_width_cm?: number;
   part_height_cm?: number;
   part_depth_cm?: number;
@@ -37,6 +38,7 @@ interface QuoteBreakdown {
   machining_cost: number;
   setup_cost: number;
   finish_cost: number;
+  surface_treatment_cost: number;
   discount_applied: string;
 }
 
@@ -386,21 +388,40 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
     ? inputs.surface_area_cm2 * 0.05 
     : 0;
   
-  // 9. Quantity Discount
+  // 9. Surface Treatment Cost (based on surface area)
+  let surfaceTreatmentCost = 0;
+  if (inputs.surface_treatments && inputs.surface_treatments.length > 0) {
+    // Fetch all requested surface treatments
+    const { data: treatments, error: treatmentError } = await supabase
+      .from('surface_treatments')
+      .select('*')
+      .in('name', inputs.surface_treatments)
+      .eq('is_active', true);
+    
+    if (!treatmentError && treatments) {
+      for (const treatment of treatments) {
+        const treatmentCost = inputs.surface_area_cm2 * treatment.cost_per_cm2;
+        surfaceTreatmentCost += treatmentCost;
+        console.log(`Surface treatment "${treatment.name}": ${inputs.surface_area_cm2.toFixed(2)} cm² × $${treatment.cost_per_cm2}/cm² = $${treatmentCost.toFixed(2)}`);
+      }
+    }
+  }
+  
+  // 10. Quantity Discount
   let discount = 0;
   if (inputs.quantity >= 1000) discount = 0.20;
   else if (inputs.quantity >= 100) discount = 0.15;
   else if (inputs.quantity >= 50) discount = 0.10;
   else if (inputs.quantity >= 10) discount = 0.05;
   
-  // 10. Calculate final unit price
-  const subtotal = materialCost + machiningCost + setupCostPerUnit + finishCost;
+  // 11. Calculate final unit price
+  const subtotal = materialCost + machiningCost + setupCostPerUnit + finishCost + surfaceTreatmentCost;
   const unitPrice = subtotal * (1 - discount);
   
   // Apply minimum price floor
   const finalUnitPrice = Math.max(unitPrice, 10.00); // $10 minimum
   
-  // 11. Lead Time (simple formula: 1 day per 8 hours of work, min 5 days)
+  // 12. Lead Time (simple formula: 1 day per 8 hours of work, min 5 days)
   const totalHours = estimatedHours * inputs.quantity;
   const leadTimeDays = Math.max(5, Math.ceil(totalHours / 8) + 2);
   
@@ -409,6 +430,7 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
     material_cost: materialCost,
     machining_cost: machiningCost,
     setup_cost: setupCostPerUnit,
+    surface_treatment_cost: surfaceTreatmentCost,
     discount
   });
   
@@ -420,6 +442,7 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
       machining_cost: Number(machiningCost.toFixed(2)),
       setup_cost: Number(setupCostPerUnit.toFixed(2)),
       finish_cost: Number(finishCost.toFixed(2)),
+      surface_treatment_cost: Number(surfaceTreatmentCost.toFixed(2)),
       discount_applied: discount > 0 ? `${(discount * 100).toFixed(0)}%` : 'None'
     },
     estimated_hours: Number(estimatedHours.toFixed(2)),

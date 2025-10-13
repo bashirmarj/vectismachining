@@ -56,6 +56,7 @@ interface FileWithQuantity {
       machining_cost: number;
       setup_cost: number;
       finish_cost: number;
+      surface_treatment_cost: number;
       discount_applied: string;
     };
     lead_time_days: number;

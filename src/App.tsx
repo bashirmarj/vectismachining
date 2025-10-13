@@ -18,6 +18,7 @@ import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import QuotationDetails from "./pages/admin/QuotationDetails";
 import PricingSettings from "./pages/admin/PricingSettings";
+import SurfaceTreatmentSettings from "./pages/admin/SurfaceTreatmentSettings";
 import AdminSetup from "./pages/admin/AdminSetup";
 import NotFound from "./pages/NotFound";
 
@@ -45,6 +46,7 @@ const App = () => (
             <Route path="/admin" element={<Admin />} />
             <Route path="/admin/quotations/:id" element={<QuotationDetails />} />
             <Route path="/admin/pricing-settings" element={<PricingSettings />} />
+            <Route path="/admin/surface-treatments" element={<SurfaceTreatmentSettings />} />
             <Route path="/admin/setup" element={<AdminSetup />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

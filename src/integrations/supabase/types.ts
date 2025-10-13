@@ -422,6 +422,39 @@ export type Database = {
           },
         ]
       }
+      surface_treatments: {
+        Row: {
+          category: string
+          cost_per_cm2: number
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          cost_per_cm2?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          cost_per_cm2?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
