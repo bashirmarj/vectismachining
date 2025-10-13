@@ -44,6 +44,9 @@ interface FileWithQuantity {
     volume_cm3: number;
     surface_area_cm2: number;
     complexity_score: number;
+    confidence?: number;
+    method?: string;
+    triangle_count?: number;
   };
   quote?: {
     unit_price: number;
@@ -123,16 +126,42 @@ export const PartUploadForm = () => {
         i === index ? { ...f, isAnalyzing: true } : f
       ));
 
-      // Call analyze-cad function
-      const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze-cad', {
-        body: {
-          file_name: fileWithQty.file.name,
-          file_size: fileWithQty.file.size,
-          quantity: fileWithQty.quantity
-        }
-      });
+      const isSTL = fileWithQty.file.name.toLowerCase().endsWith('.stl');
+      let analysisData;
 
-      if (analysisError) throw analysisError;
+      // For STL files, send the actual file for real geometry analysis
+      if (isSTL) {
+        const formData = new FormData();
+        formData.append('file', fileWithQty.file);
+        formData.append('file_name', fileWithQty.file.name);
+        formData.append('quantity', fileWithQty.quantity.toString());
+
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-cad`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: formData,
+          }
+        );
+
+        if (!response.ok) throw new Error('Analysis failed');
+        analysisData = await response.json();
+      } else {
+        // For other formats, use metadata-only analysis
+        const { data, error: analysisError } = await supabase.functions.invoke('analyze-cad', {
+          body: {
+            file_name: fileWithQty.file.name,
+            file_size: fileWithQty.file.size,
+            quantity: fileWithQty.quantity
+          }
+        });
+
+        if (analysisError) throw analysisError;
+        analysisData = data;
+      }
 
       // Call pricing calculator
       const { data: quoteData, error: quoteError } = await supabase.functions.invoke('calculate-preliminary-quote', {
@@ -156,16 +185,20 @@ export const PartUploadForm = () => {
           analysis: {
             volume_cm3: analysisData.volume_cm3,
             surface_area_cm2: analysisData.surface_area_cm2,
-            complexity_score: analysisData.complexity_score
+            complexity_score: analysisData.complexity_score,
+            confidence: analysisData.confidence,
+            method: analysisData.method,
+            triangle_count: analysisData.triangle_count
           },
           quote: quoteData,
           isAnalyzing: false 
         } : f
       ));
 
+      const confidenceText = analysisData.confidence >= 0.85 ? 'Real geometry analyzed' : 'Estimated from file';
       toast({
         title: "Analysis Complete",
-        description: `Preliminary quote: $${quoteData.unit_price.toFixed(2)}/unit`,
+        description: `${confidenceText} • Preliminary quote: $${quoteData.unit_price.toFixed(2)}/unit`,
       });
     } catch (error: any) {
       console.error('Error analyzing file:', error);
@@ -658,12 +691,30 @@ export const PartUploadForm = () => {
                         {fileWithQty.quote && !fileWithQty.isAnalyzing && (
                           <Card className="border-blue-500">
                             <CardHeader className="pb-3">
-                              <CardTitle className="flex items-center gap-2 text-base">
-                                <Zap className="h-4 w-4 text-blue-500" />
-                                Preliminary Estimate
+                              <CardTitle className="flex items-center justify-between text-base">
+                                <div className="flex items-center gap-2">
+                                  <Zap className="h-4 w-4 text-blue-500" />
+                                  Preliminary Estimate
+                                </div>
+                                {fileWithQty.analysis && (
+                                  <span className={`text-xs px-2 py-1 rounded ${
+                                    (fileWithQty.analysis.confidence || 0) >= 0.85 
+                                      ? 'bg-green-100 text-green-700' 
+                                      : 'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {(fileWithQty.analysis.confidence || 0) >= 0.85 
+                                      ? '✓ Real geometry' 
+                                      : '⚠ Estimated'}
+                                  </span>
+                                )}
                               </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-3">
+                              {fileWithQty.analysis?.triangle_count && (
+                                <div className="text-xs text-muted-foreground border-b pb-2">
+                                  <span>STL Analysis: {fileWithQty.analysis.triangle_count.toLocaleString()} triangles • {(fileWithQty.analysis.confidence! * 100).toFixed(0)}% confidence</span>
+                                </div>
+                              )}
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
                                   <Label className="text-xs text-muted-foreground">Unit Price</Label>
