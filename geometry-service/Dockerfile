@@ -19,8 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY app.py .
 
-# Expose port
+# Expose port (Render provides $PORT dynamically)
 EXPOSE 5000
 
-# Run with gunicorn for production
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "app:app"]
+# Run with gunicorn for production - uses $PORT from Render
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 app:app
