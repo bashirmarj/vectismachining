@@ -478,6 +478,7 @@ export type Database = {
           machining_cost: number | null
           material_cost: number | null
           material_type: string | null
+          mesh_id: string | null
           notes: string | null
           part_depth_cm: number | null
           part_height_cm: number | null
@@ -504,6 +505,7 @@ export type Database = {
           machining_cost?: number | null
           material_cost?: number | null
           material_type?: string | null
+          mesh_id?: string | null
           notes?: string | null
           part_depth_cm?: number | null
           part_height_cm?: number | null
@@ -530,6 +532,7 @@ export type Database = {
           machining_cost?: number | null
           material_cost?: number | null
           material_type?: string | null
+          mesh_id?: string | null
           notes?: string | null
           part_depth_cm?: number | null
           part_height_cm?: number | null
@@ -542,6 +545,13 @@ export type Database = {
           unit_price?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "quote_line_items_mesh_id_fkey"
+            columns: ["mesh_id"]
+            isOneToOne: false
+            referencedRelation: "cad_meshes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "quote_line_items_quotation_id_fkey"
             columns: ["quotation_id"]

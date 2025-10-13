@@ -244,23 +244,31 @@ const handler = async (req: Request): Promise<Response> => {
 
           const quoteData = await quoteResponse.json();
 
-          // Update line item with preliminary pricing
+          // Update line item with preliminary pricing and mesh_id
+          const updateData: any = {
+            estimated_volume_cm3: analysisData.volume_cm3,
+            estimated_surface_area_cm2: analysisData.surface_area_cm2,
+            estimated_complexity_score: analysisData.complexity_score,
+            preliminary_unit_price: quoteData.unit_price,
+            material_cost: quoteData.breakdown.material_cost,
+            machining_cost: quoteData.breakdown.machining_cost,
+            setup_cost: quoteData.breakdown.setup_cost,
+            finish_cost: quoteData.breakdown.finish_cost,
+            selected_process: quoteData.process,
+            material_type: quoteData.material,
+            finish_type: quoteData.finish,
+            estimated_machine_time_hours: quoteData.estimated_hours
+          };
+          
+          // Add mesh_id if available from analysis
+          if (analysisData.mesh_id) {
+            updateData.mesh_id = analysisData.mesh_id;
+            console.log(`✅ Linking mesh_id ${analysisData.mesh_id} to line item ${lineItem.id}`);
+          }
+          
           await supabase
             .from('quote_line_items')
-            .update({
-              estimated_volume_cm3: analysisData.volume_cm3,
-              estimated_surface_area_cm2: analysisData.surface_area_cm2,
-              estimated_complexity_score: analysisData.complexity_score,
-              preliminary_unit_price: quoteData.unit_price,
-              material_cost: quoteData.breakdown.material_cost,
-              machining_cost: quoteData.breakdown.machining_cost,
-              setup_cost: quoteData.breakdown.setup_cost,
-              finish_cost: quoteData.breakdown.finish_cost,
-              selected_process: quoteData.process,
-              material_type: quoteData.material,
-              finish_type: quoteData.finish,
-              estimated_machine_time_hours: quoteData.estimated_hours
-            })
+            .update(updateData)
             .eq('id', lineItem.id);
 
           console.log(`Preliminary quote generated for ${file.name}: $${quoteData.unit_price}`);

@@ -29,6 +29,7 @@ interface PartDetailTabsProps {
     material_type: string | null;
     finish_type: string | null;
     estimated_machine_time_hours: number | null;
+    mesh_id: string | null;
   };
   featureTree?: {
     common_dimensions: Array<{ label: string; value: number; unit: string }>;
@@ -68,6 +69,7 @@ export function PartDetailTabs({ lineItem, featureTree, onUpdateLineItem }: Part
         <CADViewer 
           fileUrl={fileUrl}
           fileName={lineItem.file_name}
+          meshId={lineItem.mesh_id || undefined}
         />
       </TabsContent>
 

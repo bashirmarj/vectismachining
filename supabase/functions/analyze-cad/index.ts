@@ -422,13 +422,15 @@ function detectRequiredProcesses(features: DetectedFeatures, complexity: number)
 async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): Promise<AnalysisResult | null> {
   const GEOMETRY_SERVICE_URL = Deno.env.get('GEOMETRY_SERVICE_URL');
   
+  console.log(`🔍 GEOMETRY_SERVICE_URL configured: ${GEOMETRY_SERVICE_URL ? 'YES - ' + GEOMETRY_SERVICE_URL : 'NO'}`);
+  
   if (!GEOMETRY_SERVICE_URL) {
-    console.warn('GEOMETRY_SERVICE_URL not configured, will fall back to heuristic');
+    console.error('❌ GEOMETRY_SERVICE_URL not configured - cannot parse STEP/IGES geometry');
     return null;
   }
   
   try {
-    console.log(`Calling geometry service at ${GEOMETRY_SERVICE_URL} for ${fileName}`);
+    console.log(`📞 Calling geometry service at ${GEOMETRY_SERVICE_URL}/analyze-cad for ${fileName}`);
     
     const formData = new FormData();
     formData.append('file', new Blob([fileData]), fileName);
@@ -438,16 +440,23 @@ async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): P
       body: formData,
       headers: {
         'Accept': 'application/json'
-      }
+      },
+      signal: AbortSignal.timeout(45000) // 45 second timeout for complex models
     });
     
     if (!response.ok) {
-      console.error(`Geometry service returned ${response.status}: ${await response.text()}`);
+      const errorText = await response.text();
+      console.error(`❌ Geometry service returned ${response.status}: ${errorText}`);
       return null;
     }
     
     const data = await response.json();
-    console.log(`Geometry service analysis complete: cylindrical=${data.is_cylindrical}, faces=${data.total_faces}`);
+    console.log(`✅ Geometry service analysis complete:`, {
+      cylindrical: data.is_cylindrical,
+      faces: data.total_faces,
+      hasMeshData: !!data.mesh_data,
+      triangleCount: data.mesh_data?.triangle_count
+    });
     
     // Map service response to our result format
     const detected_features: DetectedFeatures = {
@@ -482,7 +491,11 @@ async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): P
     // Store mesh data in database if available
     let mesh_id: string | undefined;
     if (data.mesh_data && data.mesh_data.vertices && data.mesh_data.vertices.length > 0) {
+      console.log(`💾 Storing mesh data: ${data.mesh_data.triangle_count} triangles`);
       mesh_id = await storeMeshData(data.mesh_data, fileName, fileData);
+      console.log(`✅ Mesh stored with ID: ${mesh_id}`);
+    } else {
+      console.log(`⚠️ No mesh data available to store`);
     }
     
     return {
@@ -498,7 +511,8 @@ async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): P
       recommended_processes,
       detailed_features,
       mesh_id,
-      feature_tree
+      feature_tree,
+      triangle_count: data.mesh_data?.triangle_count
     };
     
   } catch (error) {
@@ -947,15 +961,18 @@ const handler = async (req: Request): Promise<Response> => {
         analysis = enhancedHeuristic(file_name, file_size);
       }
     } else if (file_data && (isSTEP || isIGES)) {
-      // Try STEP/IGES analysis via Python microservice
-      console.log(`Attempting geometry service analysis for: ${file_name}`);
+      // ALWAYS try STEP/IGES analysis via Python microservice
+      console.log(`🔧 Attempting geometry service analysis for: ${file_name}`);
       const serviceResult = await analyzeSTEPViaService(file_data, file_name);
       
-      if (serviceResult) {
+      if (serviceResult && serviceResult.mesh_id) {
         analysis = serviceResult;
-        console.log(`Geometry service analysis successful (confidence: ${serviceResult.confidence})`);
+        console.log(`✅ Geometry service analysis successful with mesh_id: ${serviceResult.mesh_id}`);
+      } else if (serviceResult) {
+        analysis = serviceResult;
+        console.log(`⚠️ Geometry service analysis successful but no mesh data`);
       } else {
-        console.log('Geometry service unavailable, falling back to heuristic (reduced confidence)');
+        console.log('❌ Geometry service unavailable, falling back to heuristic (reduced confidence)');
         analysis = enhancedHeuristic(file_name, file_size);
         analysis.confidence = 0.3; // Mark low confidence for fallback
         analysis.method = 'fallback_heuristic';

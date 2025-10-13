@@ -51,6 +51,7 @@ interface LineItem {
   material_type: string | null;
   finish_type: string | null;
   estimated_machine_time_hours: number | null;
+  mesh_id: string | null;
 }
 
 interface Quote {
