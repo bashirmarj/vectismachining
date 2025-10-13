@@ -94,56 +94,113 @@ function findBestCrossSection(inputs: QuoteInputs, materialData: any): any {
 }
 
 // Calculate removed material volume with improved stock estimation
-function calculateRemovedVolume(inputs: QuoteInputs, materialData: any): number {
+function calculateRemovedVolume(inputs: QuoteInputs, materialData: any, processes: string[]): number {
   let stockVolume = 0;
   
-  // Use part bounding box + 20% margin for more realistic stock estimation
-  const marginFactor = 1.2; // 20% margin for machining allowance
+  // Cleanup allowance: 1/8" (0.3175 cm) per plane
+  const cleanupAllowancePerPlane = 0.3175; // 1/8" = 0.3175 cm
   
-  // If dimensions not provided, estimate from volume (cube root for roughly cubic parts)
+  // Get part dimensions
   const estimatedDimension = Math.pow(inputs.volume_cm3, 1/3);
-  const effectiveWidth = (inputs.part_width_cm || estimatedDimension) * marginFactor;
-  const effectiveHeight = (inputs.part_height_cm || estimatedDimension) * marginFactor;
-  const effectiveDepth = (inputs.part_depth_cm || estimatedDimension) * marginFactor;
+  const partWidth = inputs.part_width_cm || estimatedDimension;
+  const partHeight = inputs.part_height_cm || estimatedDimension;
+  const partDepth = inputs.part_depth_cm || estimatedDimension;
   
-  if (materialData.pricing_method === 'linear_inch') {
-    // For bar stock: use part bounding box + margin instead of full bar cross-section
-    // This gives a more realistic estimate of actual material needed
-    stockVolume = effectiveWidth * effectiveHeight * effectiveDepth;
+  // Check if this is a cylindrical part (CNC Lathe process)
+  const isCylindricalPart = processes.includes('CNC Lathe');
+  
+  if (isCylindricalPart) {
+    // ===== CYLINDRICAL PARTS (Bar Stock) =====
     
-    console.log(`📦 Linear inch stock: ${effectiveWidth.toFixed(2)} × ${effectiveHeight.toFixed(2)} × ${effectiveDepth.toFixed(2)} cm = ${stockVolume.toFixed(2)} cm³`);
-  } else if (materialData.pricing_method === 'sheet') {
-    // For sheet stock: calculate from part bounding box + thickness
-    const sheetThicknessCm = 0.5; // Default, should come from selected sheet
-    stockVolume = effectiveWidth * effectiveHeight * sheetThicknessCm;
+    // Determine diameter and length from bounding box
+    const partDiameter = Math.min(partWidth, partHeight);
+    const partLength = Math.max(partWidth, partHeight, partDepth);
     
-    console.log(`📄 Sheet stock: ${effectiveWidth.toFixed(2)} × ${effectiveHeight.toFixed(2)} × ${sheetThicknessCm} cm = ${stockVolume.toFixed(2)} cm³`);
+    // Calculate required stock dimensions with cleanup allowance
+    const requiredStockDiameter = partDiameter + cleanupAllowancePerPlane; // +1/8" on OD
+    const requiredStockLength = partLength + (2 * cleanupAllowancePerPlane); // +1/8" each end
+    
+    // Convert to inches for size table lookup
+    const requiredDiameterInches = requiredStockDiameter / 2.54;
+    
+    // Try to find available circular stock size
+    let actualStockDiameter = requiredStockDiameter;
+    let foundInSizeTable = false;
+    
+    if (materialData.cross_sections && materialData.cross_sections.length > 0) {
+      // Filter circular cross-sections only
+      const circularSections = materialData.cross_sections.filter((cs: any) => cs.shape === 'circular');
+      
+      if (circularSections.length > 0) {
+        // Find smallest available size that fits
+        const availableSizes = circularSections
+          .map((cs: any) => cs.width) // width in inches
+          .sort((a: number, b: number) => a - b);
+        
+        const matchingSize = availableSizes.find((size: number) => size >= requiredDiameterInches);
+        
+        if (matchingSize) {
+          actualStockDiameter = matchingSize * 2.54; // Convert back to cm
+          foundInSizeTable = true;
+          console.log(`✅ Found matching circular stock: Ø${matchingSize}" (Ø${actualStockDiameter.toFixed(2)} cm)`);
+        } else {
+          console.log(`⚠️ Required Ø${requiredDiameterInches.toFixed(3)}" exceeds largest available Ø${availableSizes[availableSizes.length - 1]}" - using calculated dimensions`);
+        }
+      }
+    }
+    
+    if (!foundInSizeTable) {
+      console.log(`ℹ️ No size table available or no match found - using calculated dimensions`);
+    }
+    
+    // Calculate circular stock volume: V = π × r² × L
+    const stockRadius = actualStockDiameter / 2;
+    stockVolume = Math.PI * Math.pow(stockRadius, 2) * requiredStockLength;
+    
+    console.log(`🔵 Cylindrical Stock (Bar):`);
+    console.log(`   Part: Ø${partDiameter.toFixed(2)} cm × ${partLength.toFixed(2)} cm (${inputs.volume_cm3.toFixed(2)} cm³)`);
+    console.log(`   Stock: Ø${actualStockDiameter.toFixed(2)} cm × ${requiredStockLength.toFixed(2)} cm (${stockVolume.toFixed(2)} cm³)`);
+    console.log(`   Cleanup allowance: ${cleanupAllowancePerPlane} cm (1/8") per plane`);
+    
   } else {
-    // Weight-based: use bounding box + margin for consistency
-    stockVolume = effectiveWidth * effectiveHeight * effectiveDepth;
+    // ===== PRISMATIC PARTS (Rectangular Stock) =====
     
-    console.log(`⚖️ Weight-based stock: ${effectiveWidth.toFixed(2)} × ${effectiveHeight.toFixed(2)} × ${effectiveDepth.toFixed(2)} cm = ${stockVolume.toFixed(2)} cm³`);
+    // Calculate required stock dimensions with cleanup allowance
+    const requiredStockWidth = partWidth + (2 * cleanupAllowancePerPlane);
+    const requiredStockHeight = partHeight + (2 * cleanupAllowancePerPlane);
+    const requiredStockDepth = partDepth + (2 * cleanupAllowancePerPlane);
+    
+    // For prismatic parts, size table matching is more complex (would need rectangular sections)
+    // For now, just use calculated dimensions
+    // Future enhancement: match against rectangular cross-sections if available
+    
+    if (materialData.pricing_method === 'linear_inch') {
+      stockVolume = requiredStockWidth * requiredStockHeight * requiredStockDepth;
+    } else if (materialData.pricing_method === 'sheet') {
+      // For sheet stock, use material's sheet_configurations if available
+      const sheetThicknessCm = 0.5; // Default, should come from selected sheet
+      stockVolume = requiredStockWidth * requiredStockHeight * sheetThicknessCm;
+    } else if (materialData.pricing_method === 'weight') {
+      stockVolume = requiredStockWidth * requiredStockHeight * requiredStockDepth;
+    }
+    
+    console.log(`📦 Rectangular Stock:`);
+    console.log(`   Part: ${partWidth.toFixed(2)} × ${partHeight.toFixed(2)} × ${partDepth.toFixed(2)} cm (${inputs.volume_cm3.toFixed(2)} cm³)`);
+    console.log(`   Stock: ${requiredStockWidth.toFixed(2)} × ${requiredStockHeight.toFixed(2)} × ${requiredStockDepth.toFixed(2)} cm (${stockVolume.toFixed(2)} cm³)`);
+    console.log(`   Cleanup allowance: ${cleanupAllowancePerPlane} cm (1/8") per plane`);
   }
   
-  // Cap maximum stock at 3× part volume to prevent unrealistic waste calculations
-  const maxAllowedStock = inputs.volume_cm3 * 3;
-  if (stockVolume > maxAllowedStock) {
-    console.log(`⚠️ Stock volume ${stockVolume.toFixed(2)} cm³ exceeds 3× part volume (${maxAllowedStock.toFixed(2)} cm³), capping to prevent unrealistic waste`);
-    stockVolume = maxAllowedStock;
-  }
+  // Calculate removed volume
+  const removedVolume = Math.max(0, stockVolume - inputs.volume_cm3);
   
-  // Material removed = Stock volume - Part volume (minimum 20% of part volume)
-  const removedVolume = Math.max(stockVolume - inputs.volume_cm3, inputs.volume_cm3 * 0.2);
+  // Calculate waste percentage for validation
+  const wastePercentage = stockVolume > 0 ? ((removedVolume / stockVolume) * 100) : 0;
   
-  // Calculate waste percentage for logging
-  const wastePercentage = ((removedVolume / stockVolume) * 100).toFixed(1);
-  
-  console.log(`📊 Stock Calculation Summary:
-  • Pricing Method: ${materialData.pricing_method}
-  • Stock Volume: ${stockVolume.toFixed(2)} cm³
-  • Part Volume: ${inputs.volume_cm3.toFixed(2)} cm³
-  • Removed Volume: ${removedVolume.toFixed(2)} cm³
-  • Waste Percentage: ${wastePercentage}%`);
+  console.log(`🔧 Material Removal Summary:`);
+  console.log(`   Stock Volume: ${stockVolume.toFixed(2)} cm³`);
+  console.log(`   Part Volume: ${inputs.volume_cm3.toFixed(2)} cm³`);
+  console.log(`   Removed Volume: ${removedVolume.toFixed(2)} cm³`);
+  console.log(`   Waste Percentage: ${wastePercentage.toFixed(1)}%`);
   
   return removedVolume;
 }
@@ -390,7 +447,7 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
   console.log(`Material cost (shared): $${materialCost.toFixed(2)}`);
   
   // Calculate removed volume once (shared across processes)
-  const removedVolume = calculateRemovedVolume(inputs, materialData);
+  const removedVolume = calculateRemovedVolume(inputs, materialData, processNames);
   
   // Process each manufacturing process and calculate individual costs
   const processBreakdown: ProcessBreakdown[] = [];
