@@ -164,6 +164,7 @@ const PricingSettings = () => {
   const [treatments, setTreatments] = useState<SurfaceTreatment[]>([]);
   const [materialProcessParams, setMaterialProcessParams] = useState<MaterialProcessParameter[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<Record<string, string>>({});
+  const [localParamsState, setLocalParamsState] = useState<Record<string, Partial<MaterialProcessParameter>>>({});
   const [activeTab, setActiveTab] = useState<string>('');
   const [selectedCrossSections, setSelectedCrossSections] = useState<Record<string, number>>({});
   const [editingTreatmentId, setEditingTreatmentId] = useState<string | null>(null);
@@ -1500,7 +1501,28 @@ const PricingSettings = () => {
                                 <Label>Select Material to Configure</Label>
                                 <Select 
                                   value={selectedMaterials[process.id] || ""} 
-                                  onValueChange={(value) => setSelectedMaterials({...selectedMaterials, [process.id]: value})}
+                                  onValueChange={(value) => {
+                                    setSelectedMaterials({...selectedMaterials, [process.id]: value});
+                                    // Initialize local params when material is selected
+                                    const key = `${process.id}-${value}`;
+                                    if (!localParamsState[key]) {
+                                      const existingParams = getMaterialProcessParam(process.id, value);
+                                      setLocalParamsState({
+                                        ...localParamsState,
+                                        [key]: existingParams || {
+                                          spindle_speed_rpm: null,
+                                          feed_rate_mm_per_min: null,
+                                          depth_of_cut_mm: null,
+                                          cutting_speed_m_per_min: null,
+                                          material_removal_rate_adjustment: 1.0,
+                                          tool_wear_multiplier: 1.0,
+                                          surface_finish_factor: 1.0,
+                                          setup_time_multiplier: 1.0,
+                                          cycle_time_multiplier: 1.0,
+                                        }
+                                      });
+                                    }
+                                  }}
                                 >
                                   <SelectTrigger className="w-full">
                                     <SelectValue placeholder="Choose a material..." />
@@ -1526,7 +1548,8 @@ const PricingSettings = () => {
 
                               {selectedMaterials[process.id] && (() => {
                                 const selectedMaterial = materials.find(m => m.id === selectedMaterials[process.id]);
-                                const currentParams = getMaterialProcessParam(process.id, selectedMaterials[process.id]) || {
+                                const key = `${process.id}-${selectedMaterials[process.id]}`;
+                                const localParams = localParamsState[key] || {
                                   spindle_speed_rpm: null,
                                   feed_rate_mm_per_min: null,
                                   depth_of_cut_mm: null,
@@ -1537,8 +1560,13 @@ const PricingSettings = () => {
                                   setup_time_multiplier: 1.0,
                                   cycle_time_multiplier: 1.0,
                                 };
-                                
-                                const [localParams, setLocalParams] = useState(currentParams);
+
+                                const updateLocalParam = (field: keyof MaterialProcessParameter, value: number | null) => {
+                                  setLocalParamsState({
+                                    ...localParamsState,
+                                    [key]: { ...localParams, [field]: value }
+                                  });
+                                };
 
                                 return (
                                   <div className="bg-muted/50 p-4 rounded-lg space-y-4">
@@ -1557,7 +1585,7 @@ const PricingSettings = () => {
                                         <Input
                                           type="number"
                                           value={localParams.spindle_speed_rpm || ""}
-                                          onChange={(e) => setLocalParams({...localParams, spindle_speed_rpm: Number(e.target.value)})}
+                                          onChange={(e) => updateLocalParam('spindle_speed_rpm', Number(e.target.value) || null)}
                                           placeholder="Enter spindle speed"
                                         />
                                       </div>
@@ -1567,7 +1595,7 @@ const PricingSettings = () => {
                                         <Input
                                           type="number"
                                           value={localParams.feed_rate_mm_per_min || ""}
-                                          onChange={(e) => setLocalParams({...localParams, feed_rate_mm_per_min: Number(e.target.value)})}
+                                          onChange={(e) => updateLocalParam('feed_rate_mm_per_min', Number(e.target.value) || null)}
                                           placeholder="Enter feed rate"
                                         />
                                       </div>
@@ -1578,7 +1606,7 @@ const PricingSettings = () => {
                                           type="number"
                                           step="0.1"
                                           value={localParams.depth_of_cut_mm || ""}
-                                          onChange={(e) => setLocalParams({...localParams, depth_of_cut_mm: Number(e.target.value)})}
+                                          onChange={(e) => updateLocalParam('depth_of_cut_mm', Number(e.target.value) || null)}
                                           placeholder="Enter depth of cut"
                                         />
                                       </div>
@@ -1588,7 +1616,7 @@ const PricingSettings = () => {
                                         <Input
                                           type="number"
                                           value={localParams.cutting_speed_m_per_min || ""}
-                                          onChange={(e) => setLocalParams({...localParams, cutting_speed_m_per_min: Number(e.target.value)})}
+                                          onChange={(e) => updateLocalParam('cutting_speed_m_per_min', Number(e.target.value) || null)}
                                           placeholder="Enter cutting speed"
                                         />
                                       </div>
@@ -1599,7 +1627,7 @@ const PricingSettings = () => {
                                           type="number"
                                           step="0.1"
                                           value={localParams.material_removal_rate_adjustment || 1.0}
-                                          onChange={(e) => setLocalParams({...localParams, material_removal_rate_adjustment: Number(e.target.value)})}
+                                          onChange={(e) => updateLocalParam('material_removal_rate_adjustment', Number(e.target.value))}
                                         />
                                       </div>
 
@@ -1609,7 +1637,7 @@ const PricingSettings = () => {
                                           type="number"
                                           step="0.1"
                                           value={localParams.tool_wear_multiplier || 1.0}
-                                          onChange={(e) => setLocalParams({...localParams, tool_wear_multiplier: Number(e.target.value)})}
+                                          onChange={(e) => updateLocalParam('tool_wear_multiplier', Number(e.target.value))}
                                         />
                                       </div>
 
@@ -1619,7 +1647,7 @@ const PricingSettings = () => {
                                           type="number"
                                           step="0.1"
                                           value={localParams.surface_finish_factor || 1.0}
-                                          onChange={(e) => setLocalParams({...localParams, surface_finish_factor: Number(e.target.value)})}
+                                          onChange={(e) => updateLocalParam('surface_finish_factor', Number(e.target.value))}
                                         />
                                       </div>
 
@@ -1629,7 +1657,7 @@ const PricingSettings = () => {
                                           type="number"
                                           step="0.1"
                                           value={localParams.setup_time_multiplier || 1.0}
-                                          onChange={(e) => setLocalParams({...localParams, setup_time_multiplier: Number(e.target.value)})}
+                                          onChange={(e) => updateLocalParam('setup_time_multiplier', Number(e.target.value))}
                                         />
                                       </div>
 
@@ -1639,7 +1667,7 @@ const PricingSettings = () => {
                                           type="number"
                                           step="0.1"
                                           value={localParams.cycle_time_multiplier || 1.0}
-                                          onChange={(e) => setLocalParams({...localParams, cycle_time_multiplier: Number(e.target.value)})}
+                                          onChange={(e) => updateLocalParam('cycle_time_multiplier', Number(e.target.value))}
                                         />
                                       </div>
                                     </div>
@@ -2505,132 +2533,6 @@ const PricingSettings = () => {
                         </>
                       )}
                     </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Material-Process Parameters Tab */}
-            <TabsContent value="material-process" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Material-Process Parameters</CardTitle>
-                  <CardDescription>
-                    View and manage material-specific machining parameters for each manufacturing process. 
-                    These parameters are used to calculate accurate quote estimates.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
-                    {/* Process Selector */}
-                    <div>
-                      <Label>Select Manufacturing Process</Label>
-                      <Select defaultValue={processes[0]?.id}>
-                        <SelectTrigger className="w-[300px]">
-                          <SelectValue placeholder="Select a process" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {processes.filter(p => p.is_active).map(process => (
-                            <SelectItem key={process.id} value={process.id}>
-                              {process.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Parameters Grid */}
-                    <div className="border rounded-lg overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead className="bg-muted">
-                            <tr>
-                              <th className="text-left p-3 font-semibold">Material</th>
-                              <th className="text-center p-3 font-semibold">Spindle Speed (RPM)</th>
-                              <th className="text-center p-3 font-semibold">Feed Rate (mm/min)</th>
-                              <th className="text-center p-3 font-semibold">Depth of Cut (mm)</th>
-                              <th className="text-center p-3 font-semibold">Cutting Speed (m/min)</th>
-                              <th className="text-center p-3 font-semibold">MRR Adj.</th>
-                              <th className="text-center p-3 font-semibold">Tool Wear</th>
-                              <th className="text-center p-3 font-semibold">Setup Time</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {materials.filter(m => m.is_active).map(material => {
-                              const param = materialProcessParams.find(p => 
-                                p.material_id === material.id && p.process_id === processes[0]?.id
-                              );
-                              
-                              return (
-                                <tr key={material.id} className="border-t hover:bg-muted/50">
-                                  <td className="p-3 font-medium">{material.material_name}</td>
-                                  <td className="p-3 text-center">
-                                    {param?.spindle_speed_rpm ? (
-                                      <span className="text-green-600 font-semibold">{param.spindle_speed_rpm}</span>
-                                    ) : (
-                                      <span className="text-muted-foreground">Default</span>
-                                    )}
-                                  </td>
-                                  <td className="p-3 text-center">
-                                    {param?.feed_rate_mm_per_min ? (
-                                      <span className="text-green-600 font-semibold">{param.feed_rate_mm_per_min}</span>
-                                    ) : (
-                                      <span className="text-muted-foreground">Default</span>
-                                    )}
-                                  </td>
-                                  <td className="p-3 text-center">
-                                    {param?.depth_of_cut_mm ? (
-                                      <span className="text-green-600 font-semibold">{param.depth_of_cut_mm}</span>
-                                    ) : (
-                                      <span className="text-muted-foreground">Default</span>
-                                    )}
-                                  </td>
-                                  <td className="p-3 text-center">
-                                    {param?.cutting_speed_m_per_min ? (
-                                      <span className="text-green-600 font-semibold">{param.cutting_speed_m_per_min}</span>
-                                    ) : (
-                                      <span className="text-muted-foreground">Default</span>
-                                    )}
-                                  </td>
-                                  <td className="p-3 text-center">
-                                    <span className={param ? "text-green-600 font-semibold" : "text-muted-foreground"}>
-                                      {param?.material_removal_rate_adjustment?.toFixed(2) || "1.00"}x
-                                    </span>
-                                  </td>
-                                  <td className="p-3 text-center">
-                                    <span className={param ? "text-green-600 font-semibold" : "text-muted-foreground"}>
-                                      {param?.tool_wear_multiplier?.toFixed(2) || "1.00"}x
-                                    </span>
-                                  </td>
-                                  <td className="p-3 text-center">
-                                    <span className={param ? "text-green-600 font-semibold" : "text-muted-foreground"}>
-                                      {param?.setup_time_multiplier?.toFixed(2) || "1.00"}x
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <h4 className="font-semibold text-blue-900 mb-2">Industry Data Applied</h4>
-                      <p className="text-sm text-blue-800">
-                        The material-process parameters shown above are based on industry-standard machining data 
-                        for each material-process combination. Green values indicate optimized parameters that provide 
-                        more accurate quote calculations. "Default" means the system will use generic fallback values.
-                      </p>
-                      <p className="text-sm text-blue-800 mt-2">
-                        <strong>Key metrics:</strong>
-                      </p>
-                      <ul className="text-sm text-blue-800 list-disc list-inside mt-1 space-y-1">
-                        <li><strong>MRR Adj</strong>: Material Removal Rate adjustment (higher = faster machining)</li>
-                        <li><strong>Tool Wear</strong>: Tool wear multiplier (higher = more tool changes needed)</li>
-                        <li><strong>Setup Time</strong>: Setup time multiplier (higher = longer setup required)</li>
-                      </ul>
-                    </div>
                   </div>
                 </CardContent>
               </Card>
