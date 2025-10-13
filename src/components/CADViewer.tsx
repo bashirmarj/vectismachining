@@ -1,17 +1,40 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stage, Grid } from '@react-three/drei';
-import { Suspense } from 'react';
+import { Suspense, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface CADViewerProps {
-  fileUrl: string;
+  file?: File;
+  fileUrl?: string;
   fileName: string;
 }
 
-export function CADViewer({ fileUrl, fileName }: CADViewerProps) {
+export function CADViewer({ file, fileUrl, fileName }: CADViewerProps) {
   const isSTL = fileName.toLowerCase().endsWith('.stl');
+  
+  // Create object URL for File objects, cleanup on unmount
+  const objectUrl = useMemo(() => {
+    if (file) {
+      return URL.createObjectURL(file);
+    }
+    return fileUrl;
+  }, [file, fileUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (file && objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [file, objectUrl]);
+
+  const handleDownload = () => {
+    if (objectUrl) {
+      window.open(objectUrl, '_blank');
+    }
+  };
   
   return (
     <Card className="h-full">
@@ -24,7 +47,11 @@ export function CADViewer({ fileUrl, fileName }: CADViewerProps) {
       <CardContent className="h-[500px]">
         {isSTL ? (
           <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
-            <Suspense fallback={<Loader2 className="h-8 w-8 animate-spin" />}>
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            }>
               <Stage environment="city" intensity={0.6}>
                 {/* STL loader placeholder - displays a sample cube */}
                 <mesh>
@@ -42,7 +69,7 @@ export function CADViewer({ fileUrl, fileName }: CADViewerProps) {
             <p className="text-sm text-muted-foreground text-center">
               3D preview not available for {fileName.split('.').pop()?.toUpperCase()} files
             </p>
-            <Button variant="outline" onClick={() => window.open(fileUrl, '_blank')}>
+            <Button variant="outline" onClick={handleDownload}>
               Download File
             </Button>
           </div>
