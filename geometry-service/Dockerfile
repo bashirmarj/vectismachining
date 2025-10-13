@@ -1,25 +1,14 @@
-FROM python:3.11
+FROM continuumio/miniconda3:latest
 
 WORKDIR /app
 
-# Install system dependencies for pythonOCC
-RUN apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-        libgl1-mesa-glx \
-        libglu1-mesa \
-        libxrender1 \
-        libxext6 \
-        libsm6 \
-        libice6 \
-        build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Install pythonOCC via conda (pre-compiled binaries, no building needed)
+RUN conda install -c conda-forge pythonocc-core=7.7.2 -y && \
+    conda clean -afy
 
-# Copy requirements and install Python dependencies
+# Copy requirements and install Flask dependencies via pip
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --timeout 300 -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app.py .
