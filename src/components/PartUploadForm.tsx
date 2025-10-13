@@ -41,6 +41,7 @@ interface FileWithQuantity {
   file: File;
   quantity: number;
   material?: string;
+  process?: string;
   analysis?: {
     volume_cm3: number;
     surface_area_cm2: number;
@@ -78,12 +79,14 @@ export const PartUploadForm = () => {
   const [uploading, setUploading] = useState(false);
   const [open, setOpen] = useState(false);
   const [materialOpen, setMaterialOpen] = useState<number | null>(null);
+  const [processOpen, setProcessOpen] = useState<number | null>(null);
   const [materials, setMaterials] = useState<string[]>([]);
+  const [processes, setProcesses] = useState<string[]>([]);
   const [rateLimitRemaining, setRateLimitRemaining] = useState<number | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const { toast } = useToast();
 
-  // Load available materials on mount
+  // Load available materials and processes on mount
   useEffect(() => {
     const fetchMaterials = async () => {
       const { data } = await supabase
@@ -96,7 +99,21 @@ export const PartUploadForm = () => {
         setMaterials(data.map(m => m.material_name));
       }
     };
+
+    const fetchProcesses = async () => {
+      const { data } = await supabase
+        .from('manufacturing_processes')
+        .select('name')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (data) {
+        setProcesses(data.map(p => p.name));
+      }
+    };
+
     fetchMaterials();
+    fetchProcesses();
   }, []);
 
   // Load rate limit state from localStorage on mount
@@ -183,16 +200,16 @@ export const PartUploadForm = () => {
         analysisData = data;
       }
 
-      // Only call pricing calculator if material is selected
+      // Only call pricing calculator if both material and process are selected
       let quoteData = null;
-      if (fileWithQty.material) {
+      if (fileWithQty.material && fileWithQty.process) {
         const { data, error: quoteError } = await supabase.functions.invoke('calculate-preliminary-quote', {
           body: {
             volume_cm3: analysisData.volume_cm3,
             surface_area_cm2: analysisData.surface_area_cm2,
             complexity_score: analysisData.complexity_score,
             quantity: fileWithQty.quantity,
-            process: 'CNC Machining',
+            process: fileWithQty.process,
             material: fileWithQty.material,
             finish: 'As-machined'
           }
@@ -228,7 +245,7 @@ export const PartUploadForm = () => {
       } else {
         toast({
           title: "CAD Analysis Complete",
-          description: "Please select a material to see pricing",
+          description: "Select material and process to see pricing",
         });
       }
     } catch (error: any) {
@@ -270,7 +287,7 @@ export const PartUploadForm = () => {
         return;
       }
       
-      const filesWithQuantity = selectedFiles.map(file => ({ file, quantity: 1, material: undefined }));
+      const filesWithQuantity = selectedFiles.map(file => ({ file, quantity: 1, material: undefined, process: undefined }));
       const newFiles = [...files, ...filesWithQuantity];
       setFiles(newFiles);
       
@@ -313,9 +330,9 @@ export const PartUploadForm = () => {
       i === index ? { ...item, quantity: newQuantity } : item
     ));
     
-    // Re-analyze with new quantity
+    // Re-analyze with new quantity if both material and process selected
     const fileWithQty = files[index];
-    if (fileWithQty && !fileWithQty.isAnalyzing && fileWithQty.material) {
+    if (fileWithQty && !fileWithQty.isAnalyzing && fileWithQty.material && fileWithQty.process) {
       analyzeFile({ ...fileWithQty, quantity: newQuantity }, index);
     }
   };
@@ -325,10 +342,22 @@ export const PartUploadForm = () => {
       i === index ? { ...item, material } : item
     ));
     
-    // Re-analyze with selected material
+    // Re-analyze if process is also selected
     const fileWithQty = files[index];
-    if (fileWithQty && !fileWithQty.isAnalyzing) {
+    if (fileWithQty && !fileWithQty.isAnalyzing && fileWithQty.process) {
       analyzeFile({ ...fileWithQty, material }, index);
+    }
+  };
+
+  const updateFileProcess = (index: number, process: string) => {
+    setFiles(prev => prev.map((item, i) => 
+      i === index ? { ...item, process } : item
+    ));
+    
+    // Re-analyze if material is also selected
+    const fileWithQty = files[index];
+    if (fileWithQty && !fileWithQty.isAnalyzing && fileWithQty.material) {
+      analyzeFile({ ...fileWithQty, process }, index);
     }
   };
 
@@ -731,7 +760,7 @@ export const PartUploadForm = () => {
                                   aria-expanded={materialOpen === index}
                                   className="flex-1 justify-between h-8 text-xs"
                                 >
-                                  {fileWithQty.material || "Select material for accurate pricing"}
+                                  {fileWithQty.material || "Select material"}
                                   <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
                                 </Button>
                               </PopoverTrigger>
@@ -757,6 +786,52 @@ export const PartUploadForm = () => {
                                             )}
                                           />
                                           {material}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+
+                          {/* Process Selection */}
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor={`process-${index}`} className="text-xs whitespace-nowrap">Process: *</Label>
+                            <Popover open={processOpen === index} onOpenChange={(open) => setProcessOpen(open ? index : null)}>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  aria-expanded={processOpen === index}
+                                  className="flex-1 justify-between h-8 text-xs"
+                                >
+                                  {fileWithQty.process || "Select process"}
+                                  <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[300px] p-0 bg-background z-50">
+                                <Command>
+                                  <CommandInput placeholder="Search process..." className="h-9" />
+                                  <CommandList>
+                                    <CommandEmpty>No process found.</CommandEmpty>
+                                    <CommandGroup>
+                                      {processes.map((process) => (
+                                        <CommandItem
+                                          key={process}
+                                          value={process}
+                                          onSelect={() => {
+                                            updateFileProcess(index, process);
+                                            setProcessOpen(null);
+                                          }}
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              fileWithQty.process === process ? "opacity-100" : "opacity-0"
+                                            )}
+                                          />
+                                          {process}
                                         </CommandItem>
                                       ))}
                                     </CommandGroup>
