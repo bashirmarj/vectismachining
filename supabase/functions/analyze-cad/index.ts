@@ -961,7 +961,7 @@ const handler = async (req: Request): Promise<Response> => {
         analysis = enhancedHeuristic(file_name, file_size);
       }
     } else if (file_data && (isSTEP || isIGES)) {
-      // ALWAYS try STEP/IGES analysis via Python microservice
+      // STEP/IGES: Always call Python microservice for accurate geometry analysis
       console.log(`🔧 Attempting geometry service analysis for: ${file_name}`);
       const serviceResult = await analyzeSTEPViaService(file_data, file_name);
       
