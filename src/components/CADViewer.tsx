@@ -6,8 +6,6 @@ import { Loader2, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
-// @ts-ignore - occt-import-js has no type definitions
-import occtimportjs from 'occt-import-js';
 
 interface CADViewerProps {
   file?: File;
@@ -82,11 +80,14 @@ export function CADViewer({ file, fileUrl, fileName, meshId }: CADViewerProps) {
           throw new Error('No file source provided');
         }
         
-        // Initialize occt-import-js
+        // Initialize occt-import-js using dynamic import (WASM module)
+        console.log(`📖 Parsing ${fileExtension.toUpperCase()} geometry...`);
+        const occtModule = await import('occt-import-js');
+        // @ts-ignore
+        const occtimportjs = occtModule.default || occtModule;
         const occt = await occtimportjs();
         
         // Parse STEP or IGES file
-        console.log(`📖 Parsing ${fileExtension.toUpperCase()} geometry...`);
         const result = isSTEP 
           ? occt.ReadStepFile(fileBuffer, null)
           : occt.ReadIgesFile(fileBuffer, null);
