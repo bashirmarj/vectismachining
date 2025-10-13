@@ -96,13 +96,44 @@ export interface GeometryAnalysisResult {
 }
 
 let occtInstance: OpenCascadeInstance | null = null;
+let occtInitializing: Promise<OpenCascadeInstance> | null = null;
 
-// Initialize OpenCascade WebAssembly
+// Initialize OpenCascade WebAssembly with proper configuration
 async function getOCCT(): Promise<OpenCascadeInstance> {
-  if (!occtInstance) {
-    occtInstance = await initOpenCascade();
+  if (occtInstance) {
+    return occtInstance;
   }
-  return occtInstance;
+  
+  // If already initializing, wait for that promise
+  if (occtInitializing) {
+    return occtInitializing;
+  }
+  
+  occtInitializing = (async () => {
+    try {
+      console.log('Initializing OpenCascade WASM...');
+      const instance = await initOpenCascade({
+        locateFile: (path: string) => {
+          // Help the WASM loader find the right file
+          if (path.endsWith('.wasm')) {
+            // Use node_modules path for development
+            return `/node_modules/occt-import-js/dist/${path}`;
+          }
+          return path;
+        }
+      });
+      console.log('OpenCascade WASM initialized successfully');
+      occtInstance = instance;
+      occtInitializing = null;
+      return instance;
+    } catch (error) {
+      occtInitializing = null;
+      console.error('OpenCascade initialization failed:', error);
+      throw new Error('Failed to initialize 3D engine. Please refresh the page and try again.');
+    }
+  })();
+  
+  return occtInitializing;
 }
 
 // Parse STEP/IGES file using occt-import-js
@@ -130,24 +161,37 @@ async function parseSTLFile(file: File): Promise<GeometryAnalysisResult> {
 
 // Parse STEP/IGES file using OpenCascade
 async function parseSTEPIGESFile(file: File): Promise<GeometryAnalysisResult> {
+  console.log(`Starting STEP/IGES parsing for ${file.name}...`);
+  
   const occt = await getOCCT();
   const arrayBuffer = await file.arrayBuffer();
   const uint8Array = new Uint8Array(arrayBuffer);
+  
+  console.log(`File loaded: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
   
   // Read the CAD file
   const fileType = file.name.toLowerCase().endsWith('.step') || file.name.toLowerCase().endsWith('.stp') 
     ? 'step' : 'iges';
   
+  console.log(`Parsing as ${fileType.toUpperCase()}...`);
+  
   let result;
-  if (fileType === 'step') {
-    result = occt.ReadStepFile(uint8Array, null);
-  } else {
-    result = occt.ReadIgesFile(uint8Array, null);
+  try {
+    if (fileType === 'step') {
+      result = occt.ReadStepFile(uint8Array, null);
+    } else {
+      result = occt.ReadIgesFile(uint8Array, null);
+    }
+  } catch (error) {
+    console.error('OCCT parsing error:', error);
+    throw new Error(`Failed to parse ${fileType.toUpperCase()} file: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
   
   if (!result.success || !result.meshes || result.meshes.length === 0) {
-    throw new Error('Failed to parse CAD file');
+    throw new Error(`No valid geometry found in ${fileType.toUpperCase()} file`);
   }
+  
+  console.log(`Successfully read ${fileType.toUpperCase()}, found ${result.meshes.length} mesh(es)`);
   
   // Convert OCCT mesh to our triangle format
   const triangles: Triangle[] = [];

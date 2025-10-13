@@ -55,6 +55,9 @@ export function CADViewer({ file, fileUrl, fileName, triangles }: CADViewerProps
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isRenderableFormat = ['stl', 'step', 'stp', 'iges', 'igs'].includes(fileExtension);
   
+  // Determine if we have valid 3D data to display
+  const hasValidModel = triangles && triangles.length > 0;
+  
   // Create object URL for File objects, cleanup on unmount
   const objectUrl = useMemo(() => {
     if (file) {
@@ -86,7 +89,7 @@ export function CADViewer({ file, fileUrl, fileName, triangles }: CADViewerProps
         </CardTitle>
       </CardHeader>
       <CardContent className="h-[500px]">
-        {isRenderableFormat && triangles && triangles.length > 0 ? (
+        {hasValidModel ? (
           <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
             <Suspense fallback={null}>
               <Stage environment="city" intensity={0.6}>
@@ -96,18 +99,15 @@ export function CADViewer({ file, fileUrl, fileName, triangles }: CADViewerProps
               <OrbitControls makeDefault />
             </Suspense>
           </Canvas>
-        ) : isLoading ? (
+        ) : isRenderableFormat ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
-            <Loader2 className="h-16 w-16 text-primary animate-spin" />
+            <Box className="h-16 w-16 text-muted-foreground" />
             <p className="text-sm text-muted-foreground text-center">
-              Parsing {fileExtension.toUpperCase()} file...
+              3D preview unavailable
             </p>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <Box className="h-16 w-16 text-destructive" />
-            <p className="text-sm text-destructive text-center">
-              {error}
+            <p className="text-xs text-muted-foreground text-center max-w-md">
+              The file analysis is complete and you can proceed with quoting. 
+              3D visualization requires browser support for complex CAD files.
             </p>
             <Button variant="outline" onClick={handleDownload}>
               Download File
@@ -117,9 +117,7 @@ export function CADViewer({ file, fileUrl, fileName, triangles }: CADViewerProps
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Box className="h-16 w-16 text-muted-foreground" />
             <p className="text-sm text-muted-foreground text-center">
-              {isRenderableFormat 
-                ? 'Analyzing file to display 3D model...' 
-                : `3D preview not available for ${fileExtension.toUpperCase()} files`}
+              3D preview not available for {fileExtension.toUpperCase()} files
             </p>
             <Button variant="outline" onClick={handleDownload}>
               Download File
