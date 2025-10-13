@@ -110,13 +110,20 @@ export type Database = {
       material_costs: {
         Row: {
           category_id: string | null
+          chip_load_per_tooth: number | null
           cost_per_cubic_cm: number
           cost_per_square_cm: number
           created_at: string | null
           cross_sections: Json | null
           cutting_speed_m_per_min: number | null
+          cutting_speed_m_per_min_max: number | null
+          cutting_speed_m_per_min_min: number | null
           default_nesting_efficiency: number | null
           density: number | null
+          depth_of_cut_mm_max: number | null
+          depth_of_cut_mm_min: number | null
+          feed_rate_mm_per_min_max: number | null
+          feed_rate_mm_per_min_min: number | null
           finish_options: Json | null
           hardness_brinell: number | null
           id: string
@@ -125,17 +132,29 @@ export type Database = {
           material_name: string
           price_per_lb: number | null
           pricing_method: string | null
+          recommended_coolant: string | null
           sheet_configurations: Json | null
+          spindle_speed_rpm_max: number | null
+          spindle_speed_rpm_min: number | null
+          tool_life_factor: number | null
+          work_hardening_factor: number | null
         }
         Insert: {
           category_id?: string | null
+          chip_load_per_tooth?: number | null
           cost_per_cubic_cm: number
           cost_per_square_cm: number
           created_at?: string | null
           cross_sections?: Json | null
           cutting_speed_m_per_min?: number | null
+          cutting_speed_m_per_min_max?: number | null
+          cutting_speed_m_per_min_min?: number | null
           default_nesting_efficiency?: number | null
           density?: number | null
+          depth_of_cut_mm_max?: number | null
+          depth_of_cut_mm_min?: number | null
+          feed_rate_mm_per_min_max?: number | null
+          feed_rate_mm_per_min_min?: number | null
           finish_options?: Json | null
           hardness_brinell?: number | null
           id?: string
@@ -144,17 +163,29 @@ export type Database = {
           material_name: string
           price_per_lb?: number | null
           pricing_method?: string | null
+          recommended_coolant?: string | null
           sheet_configurations?: Json | null
+          spindle_speed_rpm_max?: number | null
+          spindle_speed_rpm_min?: number | null
+          tool_life_factor?: number | null
+          work_hardening_factor?: number | null
         }
         Update: {
           category_id?: string | null
+          chip_load_per_tooth?: number | null
           cost_per_cubic_cm?: number
           cost_per_square_cm?: number
           created_at?: string | null
           cross_sections?: Json | null
           cutting_speed_m_per_min?: number | null
+          cutting_speed_m_per_min_max?: number | null
+          cutting_speed_m_per_min_min?: number | null
           default_nesting_efficiency?: number | null
           density?: number | null
+          depth_of_cut_mm_max?: number | null
+          depth_of_cut_mm_min?: number | null
+          feed_rate_mm_per_min_max?: number | null
+          feed_rate_mm_per_min_min?: number | null
           finish_options?: Json | null
           hardness_brinell?: number | null
           id?: string
@@ -163,7 +194,12 @@ export type Database = {
           material_name?: string
           price_per_lb?: number | null
           pricing_method?: string | null
+          recommended_coolant?: string | null
           sheet_configurations?: Json | null
+          spindle_speed_rpm_max?: number | null
+          spindle_speed_rpm_min?: number | null
+          tool_life_factor?: number | null
+          work_hardening_factor?: number | null
         }
         Relationships: [
           {
