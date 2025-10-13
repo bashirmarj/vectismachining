@@ -223,9 +223,9 @@ export const PartUploadForm = () => {
             volume_cm3: analysisData.volume_cm3,
             surface_area_cm2: analysisData.surface_area_cm2,
             complexity_score: analysisData.complexity_score,
-            part_width_cm: analysisData.bounding_box?.width,
-            part_height_cm: analysisData.bounding_box?.height,
-            part_depth_cm: analysisData.bounding_box?.depth,
+            part_width_cm: analysisData.part_width_cm,
+            part_height_cm: analysisData.part_height_cm,
+            part_depth_cm: analysisData.part_depth_cm,
             quantity: fileWithQty.quantity,
             processes: analysisData.recommended_processes, // Pass all detected processes
             material: fileWithQty.material,

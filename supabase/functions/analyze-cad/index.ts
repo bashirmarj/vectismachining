@@ -318,32 +318,37 @@ function getTriangleArea(tri: Triangle): number {
 function detectRequiredProcesses(features: DetectedFeatures, complexity: number): string[] {
   const processes: string[] = [];
   
-  // 1. Check if cylindrical (base process for lathe work)
+  // 1. ALWAYS add CNC Lathe for cylindrical parts (for OD cleanup)
   if (features.is_cylindrical) {
     processes.push('CNC Lathe');
   }
   
-  // 2. Check for keyway
+  // 2. Add keyway machining if detected
   if (features.has_keyway) {
     processes.push('Key way');
   }
   
-  // 3. Check for flat surfaces or if not cylindrical (needs milling)
-  if (features.has_flat_surfaces || (!features.is_cylindrical && features.flat_surface_percentage > 0.1)) {
+  // 3. Add VMC if:
+  //    - Has significant flat surfaces (>20% of total area)
+  //    - OR has keyway (needs milling after lathe)
+  //    - OR is non-cylindrical part
+  if (features.has_flat_surfaces || 
+      features.has_keyway || 
+      (!features.is_cylindrical && features.flat_surface_percentage > 0.1)) {
     processes.push('VMC Machining');
   }
   
-  // 4. Check for precision internal holes
+  // 4. Add boring if precision internal holes detected
   if (features.requires_precision_boring) {
     processes.push('Boring Station');
   }
   
-  // Fallback: if no process detected or only keyway, default to VMC
-  if (processes.length === 0 || (processes.length === 1 && processes[0] === 'Key way')) {
+  // Fallback: if no process detected, default to VMC
+  if (processes.length === 0) {
     processes.push('VMC Machining');
   }
   
-  console.log('Detected processes:', processes);
+  console.log('Detected processes:', processes, 'for features:', features);
   return processes;
 }
 
@@ -442,8 +447,22 @@ function enhancedHeuristic(fileName: string, fileSize: number): AnalysisResult {
   const part_height_cm = Number((cubeSide * (0.8 + Math.random() * 0.6)).toFixed(2));
   const part_depth_cm = Number((cubeSide * (0.7 + Math.random() * 0.7)).toFixed(2));
   
-  // Heuristic feature detection based on filename patterns
-  const is_cylindrical = lowerName.match(/shaft|pulley|cylinder|rod|tube|bearing|bushing/i) !== null;
+  // Heuristic feature detection - use BOTH geometry and filename patterns
+  // Detect cylindrical features from aspect ratios
+  const aspectRatios = [
+    part_width_cm / part_height_cm,
+    part_width_cm / part_depth_cm,
+    part_height_cm / part_depth_cm
+  ].sort();
+
+  // If two dimensions are similar and one is elongated, likely cylindrical
+  const crossSectionRatio = aspectRatios[1] / aspectRatios[0]; // Ratio of middle to smallest
+  const lengthRatio = aspectRatios[2] / aspectRatios[0]; // Ratio of largest to smallest
+
+  const is_cylindrical_by_geometry = crossSectionRatio < 1.3 && lengthRatio > 1.5;
+  const is_cylindrical_by_filename = lowerName.match(/shaft|pulley|cylinder|rod|tube|bearing|bushing|sleeve/i) !== null;
+  
+  const is_cylindrical = is_cylindrical_by_geometry || is_cylindrical_by_filename;
   const has_keyway = lowerName.match(/keyway|key|slot|groove/i) !== null;
   const has_flat_surfaces = lowerName.match(/bracket|plate|block|housing|mount/i) !== null;
   
