@@ -511,9 +511,9 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
   // Apply minimum price floor
   const finalUnitPrice = Math.max(unitPrice, 10.00); // $10 minimum
   
-  // 12. Lead Time (simple formula: 1 day per 8 hours of work, min 5 days)
+  // 12. Lead Time (1 day per 8 hours of work, minimum 2 weeks base lead time)
   const totalHours = estimatedHours * inputs.quantity;
-  const leadTimeDays = Math.max(5, Math.ceil(totalHours / 8) + 2);
+  const leadTimeDays = Math.max(14, Math.ceil(totalHours / 8) + 2);
   
   console.log('Quote calculated:', {
     unit_price: finalUnitPrice,
