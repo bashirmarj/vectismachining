@@ -40,6 +40,7 @@ const countryCodes = [
 interface FileWithQuantity {
   file: File;
   quantity: number;
+  material?: string;
   analysis?: {
     volume_cm3: number;
     surface_area_cm2: number;
@@ -76,9 +77,27 @@ export const PartUploadForm = () => {
   const [drawingFiles, setDrawingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [materialOpen, setMaterialOpen] = useState<number | null>(null);
+  const [materials, setMaterials] = useState<string[]>([]);
   const [rateLimitRemaining, setRateLimitRemaining] = useState<number | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const { toast } = useToast();
+
+  // Load available materials on mount
+  useEffect(() => {
+    const fetchMaterials = async () => {
+      const { data } = await supabase
+        .from('material_costs')
+        .select('material_name')
+        .eq('is_active', true)
+        .order('material_name');
+      
+      if (data) {
+        setMaterials(data.map(m => m.material_name));
+      }
+    };
+    fetchMaterials();
+  }, []);
 
   // Load rate limit state from localStorage on mount
   useEffect(() => {
@@ -164,20 +183,24 @@ export const PartUploadForm = () => {
         analysisData = data;
       }
 
-      // Call pricing calculator
-      const { data: quoteData, error: quoteError } = await supabase.functions.invoke('calculate-preliminary-quote', {
-        body: {
-          volume_cm3: analysisData.volume_cm3,
-          surface_area_cm2: analysisData.surface_area_cm2,
-          complexity_score: analysisData.complexity_score,
-          quantity: fileWithQty.quantity,
-          process: 'CNC Machining',
-          material: 'Aluminum 6061',
-          finish: 'As-machined'
-        }
-      });
+      // Only call pricing calculator if material is selected
+      let quoteData = null;
+      if (fileWithQty.material) {
+        const { data, error: quoteError } = await supabase.functions.invoke('calculate-preliminary-quote', {
+          body: {
+            volume_cm3: analysisData.volume_cm3,
+            surface_area_cm2: analysisData.surface_area_cm2,
+            complexity_score: analysisData.complexity_score,
+            quantity: fileWithQty.quantity,
+            process: 'CNC Machining',
+            material: fileWithQty.material,
+            finish: 'As-machined'
+          }
+        });
 
-      if (quoteError) throw quoteError;
+        if (quoteError) throw quoteError;
+        quoteData = data;
+      }
 
       // Update file with analysis and quote
       setFiles(prev => prev.map((f, i) => 
@@ -196,11 +219,18 @@ export const PartUploadForm = () => {
         } : f
       ));
 
-      const confidenceText = analysisData.confidence >= 0.85 ? 'Real geometry analyzed' : 'Estimated from file';
-      toast({
-        title: "Analysis Complete",
-        description: `${confidenceText} • Preliminary quote: $${quoteData.unit_price.toFixed(2)}/unit`,
-      });
+      if (quoteData) {
+        const confidenceText = analysisData.confidence >= 0.85 ? 'Real geometry analyzed' : 'Estimated from file';
+        toast({
+          title: "Analysis Complete",
+          description: `${confidenceText} • Preliminary quote: $${quoteData.unit_price.toFixed(2)}/unit`,
+        });
+      } else {
+        toast({
+          title: "CAD Analysis Complete",
+          description: "Please select a material to see pricing",
+        });
+      }
     } catch (error: any) {
       console.error('Error analyzing file:', error);
       setFiles(prev => prev.map((f, i) => 
@@ -240,7 +270,7 @@ export const PartUploadForm = () => {
         return;
       }
       
-      const filesWithQuantity = selectedFiles.map(file => ({ file, quantity: 1 }));
+      const filesWithQuantity = selectedFiles.map(file => ({ file, quantity: 1, material: undefined }));
       const newFiles = [...files, ...filesWithQuantity];
       setFiles(newFiles);
       
@@ -285,8 +315,20 @@ export const PartUploadForm = () => {
     
     // Re-analyze with new quantity
     const fileWithQty = files[index];
-    if (fileWithQty && !fileWithQty.isAnalyzing) {
+    if (fileWithQty && !fileWithQty.isAnalyzing && fileWithQty.material) {
       analyzeFile({ ...fileWithQty, quantity: newQuantity }, index);
+    }
+  };
+
+  const updateFileMaterial = (index: number, material: string) => {
+    setFiles(prev => prev.map((item, i) => 
+      i === index ? { ...item, material } : item
+    ));
+    
+    // Re-analyze with selected material
+    const fileWithQty = files[index];
+    if (fileWithQty && !fileWithQty.isAnalyzing) {
+      analyzeFile({ ...fileWithQty, material }, index);
     }
   };
 
@@ -640,40 +682,88 @@ export const PartUploadForm = () => {
                   <div className="w-full space-y-3">
                     {files.map((fileWithQty, index) => (
                       <div key={index} className="space-y-2">
-                        <div className="flex items-center justify-between gap-3 p-3 bg-primary/5 rounded">
-                          <div className="flex items-center gap-3 flex-1">
-                            <File className="h-6 w-6 text-primary flex-shrink-0" />
-                            <div className="text-left flex-1">
-                              <p className="font-medium text-sm">{fileWithQty.file.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {(fileWithQty.file.size / 1024 / 1024).toFixed(2)} MB
-                              </p>
+                         <div className="p-3 bg-primary/5 rounded space-y-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 flex-1">
+                              <File className="h-6 w-6 text-primary flex-shrink-0" />
+                              <div className="text-left flex-1">
+                                <p className="font-medium text-sm">{fileWithQty.file.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {(fileWithQty.file.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2">
+                                <Label htmlFor={`qty-${index}`} className="text-xs whitespace-nowrap">Qty:</Label>
+                                <Input
+                                  id={`qty-${index}`}
+                                  type="number"
+                                  min="1"
+                                  value={fileWithQty.quantity}
+                                  onChange={(e) => updateFileQuantity(index, parseInt(e.target.value) || 1)}
+                                  className="w-20 h-8"
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  removeFile(index);
+                                }}
+                                className="h-8 w-8 p-0"
+                              >
+                                ×
+                              </Button>
                             </div>
                           </div>
+                          
+                          {/* Material Selection */}
                           <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2">
-                              <Label htmlFor={`qty-${index}`} className="text-xs whitespace-nowrap">Qty:</Label>
-                              <Input
-                                id={`qty-${index}`}
-                                type="number"
-                                min="1"
-                                value={fileWithQty.quantity}
-                                onChange={(e) => updateFileQuantity(index, parseInt(e.target.value) || 1)}
-                                className="w-20 h-8"
-                              />
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                removeFile(index);
-                              }}
-                              className="h-8 w-8 p-0"
-                            >
-                              ×
-                            </Button>
+                            <Label htmlFor={`material-${index}`} className="text-xs whitespace-nowrap">Material: *</Label>
+                            <Popover open={materialOpen === index} onOpenChange={(open) => setMaterialOpen(open ? index : null)}>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  aria-expanded={materialOpen === index}
+                                  className="flex-1 justify-between h-8 text-xs"
+                                >
+                                  {fileWithQty.material || "Select material for accurate pricing"}
+                                  <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[300px] p-0 bg-background z-50">
+                                <Command>
+                                  <CommandInput placeholder="Search material..." className="h-9" />
+                                  <CommandList>
+                                    <CommandEmpty>No material found.</CommandEmpty>
+                                    <CommandGroup>
+                                      {materials.map((material) => (
+                                        <CommandItem
+                                          key={material}
+                                          value={material}
+                                          onSelect={() => {
+                                            updateFileMaterial(index, material);
+                                            setMaterialOpen(null);
+                                          }}
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              fileWithQty.material === material ? "opacity-100" : "opacity-0"
+                                            )}
+                                          />
+                                          {material}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
                           </div>
                         </div>
                         
