@@ -375,8 +375,12 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
       materialCost = inputs.surface_area_cm2 * materialData.cost_per_square_cm;
     }
   } else {
+    // Weight-based pricing: Convert density from g/cm³ (database) to lb/in³
+    // Conversion factor: 1 g/cm³ = 0.0361273 lb/in³
+    const densityLbPerIn3 = (materialData.density || 2.7) * 0.0361273;
+    
     const volumeInches = inputs.volume_cm3 * 0.0610237;
-    const weightLbs = volumeInches * (materialData.density || 0.1);
+    const weightLbs = volumeInches * densityLbPerIn3;
     materialCost = weightLbs * (materialData.price_per_lb || 5);
   }
   
