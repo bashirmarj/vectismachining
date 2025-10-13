@@ -24,6 +24,13 @@ interface QuoteInputs {
   part_width_cm?: number;
   part_height_cm?: number;
   part_depth_cm?: number;
+  detected_features?: {
+    is_cylindrical?: boolean;
+    has_keyway?: boolean;
+    has_flat_surfaces?: boolean;
+    has_internal_holes?: boolean;
+    requires_precision_boring?: boolean;
+  };
 }
 
 interface MachiningTimeBreakdown {
@@ -273,7 +280,8 @@ function calculateMachiningTime(
   inputs: QuoteInputs,
   processData: any,
   materialData: any,
-  machiningParams: any
+  machiningParams: any,
+  detectedFeatures?: any
 ): MachiningTimeBreakdown {
   const mrr = calculateMRR(machiningParams, materialData);
   
@@ -301,7 +309,45 @@ function calculateMachiningTime(
   const cuttingTimeMinutes = roughingMinutes + finishingMinutes + surfaceFinishingMinutes;
   const positioningMinutes = cuttingTimeMinutes * 0.20;
   
-  const totalMinutes = cuttingTimeMinutes + toolChangeMinutes + positioningMinutes;
+  let totalMinutes = cuttingTimeMinutes + toolChangeMinutes + positioningMinutes;
+  
+  // Add feature-specific time bonuses for VMC operations
+  if (processData.name === 'VMC Machining' && detectedFeatures) {
+    let featureTimeMinutes = 0;
+    
+    // Side boring / through holes (most time-consuming)
+    if (detectedFeatures.requires_precision_boring || detectedFeatures.has_internal_holes) {
+      const boringTime = 45; // Base: 45 minutes for drilling + boring + finishing
+      featureTimeMinutes += boringTime;
+      console.log(`  + Side boring/internal holes: ${boringTime} min`);
+    }
+    
+    // Keyway milling
+    if (detectedFeatures.has_keyway) {
+      const keywayTime = 20; // Keyway cutting is slow and precise
+      featureTimeMinutes += keywayTime;
+      console.log(`  + Keyway milling: ${keywayTime} min`);
+    }
+    
+    // Flat surface face milling (if cylindrical + flat surfaces)
+    if (detectedFeatures.is_cylindrical && detectedFeatures.has_flat_surfaces) {
+      const flatMillingTime = 15; // Face milling flat spots on cylindrical parts
+      featureTimeMinutes += flatMillingTime;
+      console.log(`  + Flat surface milling: ${flatMillingTime} min`);
+    }
+    
+    // High complexity adjustment (additional setups, measurements)
+    if (inputs.complexity_score >= 7) {
+      const complexityBonus = (inputs.complexity_score - 6) * 5; // +5 min per complexity point above 6
+      featureTimeMinutes += complexityBonus;
+      console.log(`  + High complexity adjustment: ${complexityBonus} min`);
+    }
+    
+    if (featureTimeMinutes > 0) {
+      console.log(`  Total feature time adjustment: ${featureTimeMinutes} min`);
+      totalMinutes += featureTimeMinutes;
+    }
+  }
   
   const breakdown: MachiningTimeBreakdown = {
     roughing_hours: roughingMinutes / 60,
@@ -504,7 +550,8 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
       inputs,
       processData,
       materialData,
-      machiningParams
+      machiningParams,
+      inputs.detected_features
     );
     
     // Calculate costs for this process
