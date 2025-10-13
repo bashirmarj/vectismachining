@@ -319,29 +319,33 @@ function getTriangleArea(tri: Triangle): number {
 function detectRequiredProcesses(features: DetectedFeatures, complexity: number): string[] {
   const processes: string[] = [];
   
-  // 1. ALWAYS add CNC Lathe for cylindrical parts (for OD cleanup)
+  // 1. Cylindrical parts: Add BOTH CNC Lathe (for OD) AND VMC (for features)
   if (features.is_cylindrical) {
+    // Always add CNC Lathe for cylindrical OD cleanup
     processes.push('CNC Lathe');
-  }
-  
-  // 2. Add keyway machining if detected
-  if (features.has_keyway) {
-    processes.push('Key way');
-  }
-  
-  // 3. Add VMC if:
-  //    - Has significant flat surfaces (>20% of total area)
-  //    - OR has keyway (needs milling after lathe)
-  //    - OR is non-cylindrical part
-  if (features.has_flat_surfaces || 
-      features.has_keyway || 
-      (!features.is_cylindrical && features.flat_surface_percentage > 0.1)) {
+    
+    // Add VMC if part has additional features beyond simple turning
+    if (features.has_keyway || features.has_flat_surfaces || 
+        features.has_internal_holes || complexity > 6) {
+      processes.push('VMC Machining');
+    }
+  } else {
+    // 2. Non-cylindrical parts: Use VMC
     processes.push('VMC Machining');
+  }
+  
+  // 3. Add keyway machining if detected
+  if (features.has_keyway) {
+    if (!processes.includes('Key way')) {
+      processes.push('Key way');
+    }
   }
   
   // 4. Add boring if precision internal holes detected
   if (features.requires_precision_boring) {
-    processes.push('Boring Station');
+    if (!processes.includes('VMC Machining')) {
+      processes.push('VMC Machining');
+    }
   }
   
   // Fallback: if no process detected, default to VMC
@@ -554,28 +558,30 @@ function enhancedHeuristic(fileName: string, fileSize: number): AnalysisResult {
   
   complexity = Math.max(1, Math.min(10, complexity));
   
-  // Better dimension estimation
+  // Deterministic dimension estimation (no randomness)
   const cubeSide = Math.pow(estimatedVolume, 1/3);
-  const variationFactor = 0.6 + (Math.random() * 0.8); // More realistic variation
-  const part_width_cm = Number((cubeSide * variationFactor).toFixed(2));
-  const part_height_cm = Number((cubeSide * (0.8 + Math.random() * 0.6)).toFixed(2));
-  const part_depth_cm = Number((cubeSide * (0.7 + Math.random() * 0.7)).toFixed(2));
+  const part_width_cm = Number((cubeSide * 1.0).toFixed(2));
+  const part_height_cm = Number((cubeSide * 0.97).toFixed(2));
+  const part_depth_cm = Number((cubeSide * 1.12).toFixed(2));
   
-  // Heuristic feature detection - use BOTH geometry and filename patterns
-  // Detect cylindrical features from aspect ratios
+  // Enhanced cylindrical detection with broader filename patterns
+  const cylindricalKeywords = /shaft|pulley|cylinder|rod|tube|bearing|bushing|sleeve|piston|pin|bolt|axle|spindle/i;
+  const is_cylindrical_by_filename = cylindricalKeywords.test(lowerName);
+  
+  // Geometry-based detection (aspect ratios)
+  const dimensions = [part_width_cm, part_height_cm, part_depth_cm].sort((a, b) => a - b);
   const aspectRatios = [
-    part_width_cm / part_height_cm,
-    part_width_cm / part_depth_cm,
-    part_height_cm / part_depth_cm
-  ].sort();
-
-  // If two dimensions are similar and one is elongated, likely cylindrical
-  const crossSectionRatio = aspectRatios[1] / aspectRatios[0]; // Ratio of middle to smallest
-  const lengthRatio = aspectRatios[2] / aspectRatios[0]; // Ratio of largest to smallest
-
-  const is_cylindrical_by_geometry = crossSectionRatio < 1.3 && lengthRatio > 1.5;
-  const is_cylindrical_by_filename = lowerName.match(/shaft|pulley|cylinder|rod|tube|bearing|bushing|sleeve/i) !== null;
+    dimensions[1] / dimensions[0],  // middle/smallest
+    dimensions[2] / dimensions[0],  // largest/smallest
+    dimensions[2] / dimensions[1]   // largest/middle
+  ];
   
+  // If two dimensions are similar and one is elongated, likely cylindrical
+  const crossSectionRatio = aspectRatios[0]; // Should be ~1.0 for circular cross-section
+  const lengthRatio = aspectRatios[1]; // Should be >1.5 for elongated shape
+  const is_cylindrical_by_geometry = crossSectionRatio < 1.3 && lengthRatio > 1.5;
+  
+  // Accept as cylindrical if EITHER condition is met
   const is_cylindrical = is_cylindrical_by_geometry || is_cylindrical_by_filename;
   const has_keyway = lowerName.match(/keyway|key|slot|groove/i) !== null;
   const has_flat_surfaces = lowerName.match(/bracket|plate|block|housing|mount/i) !== null;
@@ -594,6 +600,7 @@ function enhancedHeuristic(fileName: string, fileSize: number): AnalysisResult {
   const recommended_processes = detectRequiredProcesses(detected_features, complexity);
   
   console.log(`Enhanced Heuristic - Volume: ${estimatedVolume.toFixed(2)}cm³, Surface: ${estimatedSurfaceArea.toFixed(2)}cm², Complexity: ${complexity}/10`);
+  console.log(`Cylindrical detection: filename=${is_cylindrical_by_filename}, geometry=${is_cylindrical_by_geometry}, final=${is_cylindrical}`);
   console.log(`Heuristic Features:`, detected_features);
   console.log(`Recommended processes:`, recommended_processes);
   
@@ -601,7 +608,7 @@ function enhancedHeuristic(fileName: string, fileSize: number): AnalysisResult {
     volume_cm3: Number(estimatedVolume.toFixed(2)),
     surface_area_cm2: Number(estimatedSurfaceArea.toFixed(2)),
     complexity_score: complexity,
-    confidence: 0.7,
+    confidence: 0.75,
     method: 'enhanced_heuristic',
     part_width_cm,
     part_height_cm,
@@ -655,28 +662,17 @@ const handler = async (req: Request): Promise<Response> => {
     const isIGES = lowerName.endsWith('.iges') || lowerName.endsWith('.igs');
     
     // Use appropriate parser based on file type
-    if (file_data) {
-      if (isSTL) {
-        try {
-          analysis = await analyzeSTL(file_data);
-        } catch (error) {
-          console.error('STL parsing failed, falling back to heuristic:', error);
-          analysis = enhancedHeuristic(file_name, file_size);
-        }
-      } else if (isSTEP || isIGES) {
-        try {
-          analysis = await analyzeSTEP(file_data, file_name);
-        } catch (error) {
-          console.error('STEP/IGES parsing failed, falling back to heuristic:', error);
-          analysis = enhancedHeuristic(file_name, file_size);
-        }
-      } else {
-        // Unsupported format, use heuristic
-        console.log('Unsupported file format, using heuristic estimation');
+    if (file_data && isSTL) {
+      try {
+        analysis = await analyzeSTL(file_data);
+      } catch (error) {
+        console.error('STL parsing failed, falling back to heuristic:', error);
         analysis = enhancedHeuristic(file_name, file_size);
       }
     } else {
-      // No file data provided, use heuristic
+      // For STEP/IGES and other formats, use enhanced heuristic
+      // (occt-import-js doesn't work in Deno edge functions)
+      console.log(`Using enhanced heuristic for: ${file_name}`);
       analysis = enhancedHeuristic(file_name, file_size);
     }
     
