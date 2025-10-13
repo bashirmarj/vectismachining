@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-explicit-any
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 
 const corsHeaders = {
@@ -352,6 +353,119 @@ function detectRequiredProcesses(features: DetectedFeatures, complexity: number)
   return processes;
 }
 
+// Analyze STEP/IGES file using occt-import-js
+async function analyzeSTEP(fileData: ArrayBuffer, fileName: string): Promise<AnalysisResult> {
+  console.log('Parsing STEP/IGES geometry with OpenCascade...');
+  
+  try {
+    // Dynamically import occt-import-js
+    const { default: initOpenCascade } = await import('npm:occt-import-js@0.0.12');
+    const occt: any = await initOpenCascade();
+    
+    // Read the file based on extension
+    const lowerName = fileName.toLowerCase();
+    const isSTEP = lowerName.endsWith('.step') || lowerName.endsWith('.stp');
+    
+    const fileBuffer = new Uint8Array(fileData);
+    let result;
+    
+    if (isSTEP) {
+      result = occt.ReadStepFile(fileBuffer, null);
+    } else {
+      result = occt.ReadIgesFile(fileBuffer, null);
+    }
+    
+    if (!result.success) {
+      throw new Error('Failed to parse STEP/IGES file');
+    }
+    
+    // Get bounding box
+    const shapes = result.shapes;
+    if (!shapes || shapes.length === 0) {
+      throw new Error('No shapes found in file');
+    }
+    
+    // Combine all shapes to get overall bounding box
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let totalVolume = 0;
+    let totalSurfaceArea = 0;
+    
+    for (const shape of shapes) {
+      const bbox = shape.BoundingBox;
+      minX = Math.min(minX, bbox.xmin);
+      minY = Math.min(minY, bbox.ymin);
+      minZ = Math.min(minZ, bbox.zmin);
+      maxX = Math.max(maxX, bbox.xmax);
+      maxY = Math.max(maxY, bbox.ymax);
+      maxZ = Math.max(maxZ, bbox.zmax);
+      
+      // Get mesh for volume/surface calculations
+      if (shape.mesh) {
+        totalVolume += shape.mesh.attributes.volume || 0;
+        totalSurfaceArea += shape.mesh.attributes.surfaceArea || 0;
+      }
+    }
+    
+    // Convert from mm to cm
+    const part_width_cm = Number(((maxX - minX) / 10).toFixed(2));
+    const part_height_cm = Number(((maxY - minY) / 10).toFixed(2));
+    const part_depth_cm = Number(((maxZ - minZ) / 10).toFixed(2));
+    const volume_cm3 = Number((totalVolume / 1000).toFixed(2)); // mm³ to cm³
+    const surface_area_cm2 = Number((totalSurfaceArea / 100).toFixed(2)); // mm² to cm²
+    
+    // Detect features from geometry
+    const dimensions = [part_width_cm, part_height_cm, part_depth_cm].sort((a, b) => a - b);
+    const aspectRatios = [
+      dimensions[1] / dimensions[0],
+      dimensions[2] / dimensions[0],
+      dimensions[2] / dimensions[1]
+    ];
+    
+    // Cylindrical detection: two similar dimensions, one elongated
+    const crossSectionRatio = aspectRatios[0]; // Should be ~1.0 for circular cross-section
+    const lengthRatio = aspectRatios[1]; // Should be >1.5 for elongated shape
+    const is_cylindrical_by_geometry = crossSectionRatio < 1.3 && lengthRatio > 1.5;
+    const is_cylindrical_by_filename = lowerName.match(/shaft|pulley|cylinder|rod|tube|bearing|bushing|sleeve|piston/i) !== null;
+    const is_cylindrical = is_cylindrical_by_geometry || is_cylindrical_by_filename;
+    
+    const detected_features: DetectedFeatures = {
+      is_cylindrical,
+      has_keyway: lowerName.match(/keyway|key|slot|groove/i) !== null,
+      has_flat_surfaces: !is_cylindrical,
+      has_internal_holes: lowerName.match(/housing|bearing|bushing/i) !== null,
+      requires_precision_boring: false,
+      cylindricity_score: is_cylindrical ? 0.9 : 0,
+      flat_surface_percentage: is_cylindrical ? 0.1 : 0.5,
+      internal_surface_percentage: 0
+    };
+    
+    const complexity = Math.min(Math.round(5 + (shapes.length - 1) * 0.5), 10);
+    const recommended_processes = detectRequiredProcesses(detected_features, complexity);
+    
+    console.log(`STEP/IGES Analysis - Volume: ${volume_cm3}cm³, Surface: ${surface_area_cm2}cm², Complexity: ${complexity}/10`);
+    console.log(`Dimensions: ${part_width_cm} × ${part_height_cm} × ${part_depth_cm} cm`);
+    console.log(`Features:`, detected_features);
+    console.log(`Recommended processes:`, recommended_processes);
+    
+    return {
+      volume_cm3,
+      surface_area_cm2,
+      complexity_score: complexity,
+      confidence: 0.95,
+      method: 'occt_geometry_parsing',
+      part_width_cm,
+      part_height_cm,
+      part_depth_cm,
+      detected_features,
+      recommended_processes
+    };
+  } catch (error) {
+    console.error('STEP/IGES parsing error:', error);
+    throw error;
+  }
+}
+
 // Analyze STL file
 async function analyzeSTL(fileData: ArrayBuffer): Promise<AnalysisResult> {
   console.log('Parsing STL geometry...');
@@ -535,17 +649,34 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`CAD Analysis request for: ${file_name} (${file_size} bytes)`);
     
     let analysis: AnalysisResult;
+    const lowerName = file_name.toLowerCase();
+    const isSTL = lowerName.endsWith('.stl');
+    const isSTEP = lowerName.endsWith('.step') || lowerName.endsWith('.stp');
+    const isIGES = lowerName.endsWith('.iges') || lowerName.endsWith('.igs');
     
-    // Use real STL parsing if we have the file data and it's an STL
-    if (file_data && file_name.toLowerCase().endsWith('.stl')) {
-      try {
-        analysis = await analyzeSTL(file_data);
-      } catch (error) {
-        console.error('STL parsing failed, falling back to heuristic:', error);
+    // Use appropriate parser based on file type
+    if (file_data) {
+      if (isSTL) {
+        try {
+          analysis = await analyzeSTL(file_data);
+        } catch (error) {
+          console.error('STL parsing failed, falling back to heuristic:', error);
+          analysis = enhancedHeuristic(file_name, file_size);
+        }
+      } else if (isSTEP || isIGES) {
+        try {
+          analysis = await analyzeSTEP(file_data, file_name);
+        } catch (error) {
+          console.error('STEP/IGES parsing failed, falling back to heuristic:', error);
+          analysis = enhancedHeuristic(file_name, file_size);
+        }
+      } else {
+        // Unsupported format, use heuristic
+        console.log('Unsupported file format, using heuristic estimation');
         analysis = enhancedHeuristic(file_name, file_size);
       }
     } else {
-      // Use enhanced heuristic for other formats or when no file data
+      // No file data provided, use heuristic
       analysis = enhancedHeuristic(file_name, file_size);
     }
     
