@@ -31,6 +31,7 @@ interface PartDetailCustomerProps {
       complexity_score: number;
       confidence?: number;
       method?: string;
+      recommended_processes?: string[];
       feature_tree?: {
         common_dimensions: Array<{
           label: string;
@@ -158,7 +159,7 @@ export function PartDetailCustomer({
             </TabsContent>
 
             <TabsContent value="features" className="mt-4">
-              {hasFeatures ? (
+              {hasAnalysis ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-3">
                     <StatCard 
@@ -174,16 +175,31 @@ export function PartDetailCustomer({
                       value={file.analysis.complexity_score.toString()}
                     />
                   </div>
-                  <FeatureTree 
-                    partName={file.file.name}
-                    featureTree={file.analysis.feature_tree}
-                  />
+                  
+                  {hasFeatures ? (
+                    <FeatureTree 
+                      partName={file.file.name}
+                      featureTree={file.analysis.feature_tree}
+                    />
+                  ) : (
+                    <Card className="border-dashed">
+                      <CardContent className="pt-6 text-center">
+                        <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
+                        <p className="text-sm font-medium mb-1">
+                          Advanced feature detection unavailable
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Submit your file for detailed manual engineering review.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <AlertCircle className="h-12 w-12 text-muted-foreground mb-3" />
                   <p className="text-sm text-muted-foreground">
-                    No detailed features detected for this file type
+                    No analysis available yet
                   </p>
                 </div>
               )}
@@ -229,6 +245,23 @@ export function PartDetailCustomer({
                         </p>
                       </div>
                     </div>
+
+                    {file.analysis?.recommended_processes && file.analysis.recommended_processes.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm">Recommended Manufacturing Processes</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap gap-2">
+                            {file.analysis.recommended_processes.map((process, idx) => (
+                              <Badge key={idx} variant="secondary">
+                                {process}
+                              </Badge>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     <Card>
                       <CardHeader>
