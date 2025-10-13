@@ -24,6 +24,14 @@ interface QuoteInputs {
   part_depth_cm?: number;
 }
 
+interface MachiningTimeBreakdown {
+  roughing_hours: number;
+  finishing_hours: number;
+  tool_change_hours: number;
+  positioning_hours: number;
+  total_hours: number;
+}
+
 interface QuoteBreakdown {
   material_cost: number;
   machining_cost: number;
@@ -42,6 +50,149 @@ interface QuoteResult {
   process: string;
   material: string;
   finish: string;
+  machining_time_breakdown?: MachiningTimeBreakdown;
+  removed_volume_cm3?: number;
+}
+
+// Helper function: Find best cross-section for linear inch materials
+function findBestCrossSection(inputs: QuoteInputs, materialData: any): any {
+  if (!materialData.cross_sections || materialData.cross_sections.length === 0) {
+    return null;
+  }
+
+  const partWidthInches = (inputs.part_width_cm || 10) / 2.54;
+  const partHeightInches = (inputs.part_height_cm || 10) / 2.54;
+  const maxDimension = Math.max(partWidthInches, partHeightInches);
+
+  // Find smallest cross-section that fits the part
+  const sorted = [...materialData.cross_sections].sort((a: any, b: any) => {
+    const aSize = a.shape === 'circular' ? a.width : Math.max(a.width, a.thickness);
+    const bSize = b.shape === 'circular' ? b.width : Math.max(b.width, b.thickness);
+    return aSize - bSize;
+  });
+
+  for (const cs of sorted) {
+    const csSize = cs.shape === 'circular' ? cs.width : Math.max(cs.width, cs.thickness);
+    if (csSize >= maxDimension) {
+      return cs;
+    }
+  }
+
+  // If none fit, return largest available
+  return sorted[sorted.length - 1];
+}
+
+// Calculate removed material volume
+function calculateRemovedVolume(inputs: QuoteInputs, materialData: any): number {
+  let stockVolume = 0;
+  
+  if (materialData.pricing_method === 'linear_inch') {
+    // For bar stock: calculate from selected cross-section
+    const bestCrossSection = findBestCrossSection(inputs, materialData);
+    if (bestCrossSection) {
+      if (bestCrossSection.shape === 'circular') {
+        const radiusCm = (bestCrossSection.width * 2.54) / 2;
+        const lengthCm = inputs.part_depth_cm || 10;
+        stockVolume = Math.PI * radiusCm * radiusCm * lengthCm;
+      } else {
+        const widthCm = bestCrossSection.width * 2.54;
+        const thicknessCm = bestCrossSection.thickness * 2.54;
+        const lengthCm = inputs.part_depth_cm || 10;
+        stockVolume = widthCm * thicknessCm * lengthCm;
+      }
+    }
+  } else if (materialData.pricing_method === 'sheet') {
+    // For sheet stock: calculate from part bounding box + thickness
+    const sheetThicknessCm = 0.5; // Default, should come from selected sheet
+    stockVolume = (inputs.part_width_cm || 10) * 
+                  (inputs.part_height_cm || 10) * 
+                  sheetThicknessCm;
+  } else {
+    // Fallback: estimate stock as 1.5x part volume
+    stockVolume = inputs.volume_cm3 * 1.5;
+  }
+  
+  // Material removed = Stock volume - Part volume (minimum 20% of part volume)
+  const removedVolume = Math.max(stockVolume - inputs.volume_cm3, inputs.volume_cm3 * 0.2);
+  
+  console.log(`Material removal: Stock ${stockVolume.toFixed(2)} cm³ - Part ${inputs.volume_cm3.toFixed(2)} cm³ = ${removedVolume.toFixed(2)} cm³ removed`);
+  
+  return removedVolume;
+}
+
+// Calculate Material Removal Rate (MRR)
+function calculateMRR(processData: any, materialData: any): number {
+  // MRR = Feed Rate × Depth of Cut × Width of Cut
+  const feedRate = processData.feed_rate_mm_per_min || 500;
+  const depthOfCut = processData.depth_of_cut_mm || 2.0;
+  const widthOfCut = depthOfCut * 1.5; // Typical step-over
+  
+  // Base MRR in mm³/min
+  const baseMRR = feedRate * depthOfCut * widthOfCut;
+  
+  // Adjust for material machinability
+  const machinabilityRating = materialData.machinability_rating || 1.0;
+  const adjustedMRR = baseMRR * machinabilityRating;
+  
+  // Convert mm³/min to cm³/min
+  const mrrCm3PerMin = adjustedMRR / 1000;
+  
+  console.log(`MRR Calculation: ${feedRate} mm/min × ${depthOfCut} mm × ${widthOfCut} mm × ${machinabilityRating} machinability = ${mrrCm3PerMin.toFixed(2)} cm³/min`);
+  
+  return mrrCm3PerMin;
+}
+
+// Calculate detailed machining time breakdown
+function calculateMachiningTime(
+  removedVolume: number,
+  inputs: QuoteInputs,
+  processData: any,
+  materialData: any
+): MachiningTimeBreakdown {
+  const mrr = calculateMRR(processData, materialData);
+  
+  // Split into roughing (80% of volume) and finishing (20% + surface area)
+  const roughingVolume = removedVolume * 0.80;
+  const finishingVolume = removedVolume * 0.20;
+  
+  // Roughing: Use full MRR
+  const roughingMinutes = roughingVolume / mrr;
+  
+  // Finishing: Use 30% of MRR (slower, more precise cuts)
+  const finishingMRR = mrr * 0.30;
+  const finishingMinutes = finishingVolume / finishingMRR;
+  
+  // Add time for surface finishing based on surface area
+  const complexityMultiplier = 1 + ((inputs.complexity_score - 5) / 10);
+  const surfaceFinishingMinutes = (inputs.surface_area_cm2 / 50) * complexityMultiplier;
+  
+  // Tool changes: estimate 1 change per 50 cm³ removed
+  const toolChanges = Math.ceil(removedVolume / 50);
+  const toolChangeMinutes = toolChanges * (processData.tool_change_time_minutes || 2.0);
+  
+  // Non-cutting time (positioning, measuring): 20% overhead
+  const cuttingTimeMinutes = roughingMinutes + finishingMinutes + surfaceFinishingMinutes;
+  const positioningMinutes = cuttingTimeMinutes * 0.20;
+  
+  const totalMinutes = cuttingTimeMinutes + toolChangeMinutes + positioningMinutes;
+  
+  const breakdown: MachiningTimeBreakdown = {
+    roughing_hours: roughingMinutes / 60,
+    finishing_hours: (finishingMinutes + surfaceFinishingMinutes) / 60,
+    tool_change_hours: toolChangeMinutes / 60,
+    positioning_hours: positioningMinutes / 60,
+    total_hours: totalMinutes / 60
+  };
+  
+  console.log('Machining time breakdown:', {
+    roughing: `${breakdown.roughing_hours.toFixed(2)} hrs`,
+    finishing: `${breakdown.finishing_hours.toFixed(2)} hrs`,
+    tool_changes: `${breakdown.tool_change_hours.toFixed(2)} hrs`,
+    positioning: `${breakdown.positioning_hours.toFixed(2)} hrs`,
+    total: `${breakdown.total_hours.toFixed(2)} hrs`
+  });
+  
+  return breakdown;
 }
 
 async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
@@ -172,7 +323,7 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
         const partsPerSheetOption1 = Math.floor(sheetWidthCm / inputs.part_width_cm) * 
                                      Math.floor(sheetHeightCm / inputs.part_height_cm);
         const partsPerSheetOption2 = Math.floor(sheetWidthCm / inputs.part_height_cm) * 
-                                     Math.floor(sheetHeightCm / inputs.part_width_cm);
+                                     Math.floor(sheetWidthCm / inputs.part_width_cm);
         const partsPerSheet = Math.max(partsPerSheetOption1, partsPerSheetOption2) * nestingEfficiency;
         
         if (partsPerSheet > 0) {
@@ -210,37 +361,46 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
     materialCost = inputs.volume_cm3 * materialData.cost_per_cubic_cm;
   }
   
-  // 4. Machining Time Estimation
-  // Formula: surface_area / cutting_speed × complexity_multiplier
-  const complexityMultiplier = 1 + ((inputs.complexity_score - 5) / 10);
-  const estimatedHours = (inputs.surface_area_cm2 / 100) * complexityMultiplier * processData.complexity_multiplier;
+  // 4. Calculate material removal volume
+  const removedVolume = calculateRemovedVolume(inputs, materialData);
+
+  // 5. Calculate machining time with detailed breakdown
+  const timeBreakdown = calculateMachiningTime(
+    removedVolume,
+    inputs,
+    processData,
+    materialData
+  );
+
+  // 6. Machining Cost (using detailed time calculation)
+  const machiningCost = timeBreakdown.total_hours * processData.base_rate_per_hour;
+  const estimatedHours = timeBreakdown.total_hours;
   
-  // 5. Machining Cost
-  const machiningCost = estimatedHours * processData.base_rate_per_hour;
+  console.log(`Machining: ${timeBreakdown.total_hours.toFixed(2)} hours × $${processData.base_rate_per_hour}/hr = $${machiningCost.toFixed(2)}`);
   
-  // 6. Setup Cost (amortized over quantity)
+  // 7. Setup Cost (amortized over quantity)
   const setupCostPerUnit = processData.setup_cost / inputs.quantity;
   
-  // 7. Finish Cost (if applicable)
+  // 8. Finish Cost (if applicable)
   const finishCost = finishName !== 'As-machined' 
     ? inputs.surface_area_cm2 * 0.05 
     : 0;
   
-  // 8. Quantity Discount
+  // 9. Quantity Discount
   let discount = 0;
   if (inputs.quantity >= 1000) discount = 0.20;
   else if (inputs.quantity >= 100) discount = 0.15;
   else if (inputs.quantity >= 50) discount = 0.10;
   else if (inputs.quantity >= 10) discount = 0.05;
   
-  // 9. Calculate final unit price
+  // 10. Calculate final unit price
   const subtotal = materialCost + machiningCost + setupCostPerUnit + finishCost;
   const unitPrice = subtotal * (1 - discount);
   
   // Apply minimum price floor
   const finalUnitPrice = Math.max(unitPrice, 10.00); // $10 minimum
   
-  // 10. Lead Time (simple formula: 1 day per 8 hours of work, min 5 days)
+  // 11. Lead Time (simple formula: 1 day per 8 hours of work, min 5 days)
   const totalHours = estimatedHours * inputs.quantity;
   const leadTimeDays = Math.max(5, Math.ceil(totalHours / 8) + 2);
   
@@ -267,7 +427,15 @@ async function calculateQuote(inputs: QuoteInputs): Promise<QuoteResult> {
     confidence: 0.75,
     process: processName,
     material: materialName,
-    finish: finishName
+    finish: finishName,
+    machining_time_breakdown: {
+      roughing_hours: Number(timeBreakdown.roughing_hours.toFixed(2)),
+      finishing_hours: Number(timeBreakdown.finishing_hours.toFixed(2)),
+      tool_change_hours: Number(timeBreakdown.tool_change_hours.toFixed(2)),
+      positioning_hours: Number(timeBreakdown.positioning_hours.toFixed(2)),
+      total_hours: Number(timeBreakdown.total_hours.toFixed(2))
+    },
+    removed_volume_cm3: Number(removedVolume.toFixed(2))
   };
 }
 

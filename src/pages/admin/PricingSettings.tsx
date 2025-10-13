@@ -28,6 +28,11 @@ interface ManufacturingProcess {
   setup_cost: number;
   complexity_multiplier: number;
   is_active: boolean;
+  feed_rate_mm_per_min?: number;
+  spindle_speed_rpm?: number;
+  depth_of_cut_mm?: number;
+  tool_change_time_minutes?: number;
+  rapid_feed_rate_mm_per_min?: number;
 }
 
 interface CrossSection {
@@ -68,6 +73,9 @@ interface MaterialCost {
   default_nesting_efficiency?: number;
   category_id?: string | null;
   price_per_lb?: number;
+  machinability_rating?: number;
+  hardness_brinell?: number;
+  cutting_speed_m_per_min?: number;
 }
 
 const PricingSettings = () => {
