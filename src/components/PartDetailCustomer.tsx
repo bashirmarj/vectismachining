@@ -4,7 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CADViewer } from "./CADViewer";
 import { FeatureTree } from "./FeatureTree";
-import { Triangle } from "@/lib/geometryAnalyzer";
 import { 
   Package, 
   Layers, 
@@ -26,7 +25,7 @@ interface PartDetailCustomerProps {
     quantity: number;
     material?: string;
     process?: string;
-    triangles?: Triangle[];
+    meshId?: string;
     analysis?: {
       volume_cm3: number;
       surface_area_cm2: number;
@@ -157,7 +156,7 @@ export function PartDetailCustomer({
               <CADViewer 
                 file={file.file}
                 fileName={file.file.name}
-                triangles={file.triangles}
+                meshId={file.meshId}
               />
             </TabsContent>
 

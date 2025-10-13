@@ -19,6 +19,9 @@ from OCC.Core.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane, GeomAbs_Circle
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
 from OCC.Core.gp import gp_Pnt, gp_Vec, gp_Dir
+from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
+from OCC.Core.TopLoc import TopLoc_Location
+from OCC.Core.BRep import BRep_Tool
 import math
 
 app = Flask(__name__)
@@ -121,6 +124,10 @@ def analyze_cad():
         flat_surfaces = detect_flat_surfaces_detailed(shape)
         primary_dims = calculate_principal_dimensions(shape, (xmin, ymin, zmin, xmax, ymax, zmax), is_cylindrical)
         
+        # Tessellate shape to extract mesh data
+        quality = float(request.form.get('quality', 0.5))  # 0-1, higher = finer mesh
+        mesh_data = tessellate_shape(shape, quality)
+        
         result = {
             'volume_cm3': round(volume_mm3 / 1000, 2),
             'surface_area_cm2': round(surface_area_mm2 / 100, 2),
@@ -140,10 +147,11 @@ def analyze_cad():
                 'grooves': grooves,
                 'flat_surfaces': flat_surfaces,
                 'primary_dimensions': primary_dims
-            }
+            },
+            'mesh_data': mesh_data
         }
         
-        logger.info(f"Analysis complete: cylindrical={is_cylindrical}, complexity={complexity}, holes={len(holes)}, grooves={len(grooves)}")
+        logger.info(f"Analysis complete: cylindrical={is_cylindrical}, complexity={complexity}, holes={len(holes)}, grooves={len(grooves)}, triangles={mesh_data['triangle_count']}")
         return jsonify(result), 200
         
     except Exception as e:
@@ -369,6 +377,145 @@ def calculate_principal_dimensions(shape, bbox, is_cylindrical):
         dims['length_mm'] = round(depth, 2)
     
     return dims
+
+def tessellate_shape(shape, quality=0.5):
+    """
+    Tessellate STEP shape into triangulated mesh for 3D rendering
+    
+    Args:
+        shape: TopoDS_Shape from STEP file
+        quality: 0-1 value, higher = finer mesh (more triangles, slower)
+    
+    Returns:
+        dict with vertices, indices, normals arrays for Three.js BufferGeometry
+    """
+    try:
+        # Quality controls deflection (lower = finer mesh)
+        # 0.5 quality -> 0.5mm deflection (good balance)
+        # 0.1 quality -> 0.1mm deflection (very fine)
+        # 1.0 quality -> 1.0mm deflection (coarse, fast)
+        deflection = 1.0 - quality + 0.1  # Map to 0.1-1.0mm range
+        
+        # Create incremental mesh
+        logger.info(f"Tessellating shape with quality={quality} (deflection={deflection}mm)")
+        mesh = BRepMesh_IncrementalMesh(shape, deflection)
+        mesh.Perform()
+        
+        if not mesh.IsDone():
+            raise Exception("Mesh tessellation failed")
+        
+        # Extract triangulated geometry
+        vertices = []
+        indices = []
+        normals = []
+        vertex_map = {}  # Map vertex coords to index
+        current_index = 0
+        
+        # Iterate through all faces
+        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+        
+        while face_explorer.More():
+            face = face_explorer.Current()
+            location = TopLoc_Location()
+            triangulation = BRep_Tool.Triangulation(face, location)
+            
+            if triangulation is None:
+                face_explorer.Next()
+                continue
+            
+            # Get transformation
+            transform = location.Transformation()
+            
+            # Get face normal direction
+            surface = BRepAdaptor_Surface(face)
+            face_reversed = face.Orientation() == 1  # TopAbs_REVERSED
+            
+            # Build local vertex map for this face
+            face_vertex_start = current_index
+            face_vertices = []
+            
+            # Extract vertices
+            for i in range(1, triangulation.NbNodes() + 1):
+                pnt = triangulation.Node(i)
+                # Apply transformation
+                pnt.Transform(transform)
+                
+                coord = (round(pnt.X(), 6), round(pnt.Y(), 6), round(pnt.Z(), 6))
+                
+                if coord not in vertex_map:
+                    vertices.extend([pnt.X(), pnt.Y(), pnt.Z()])
+                    vertex_map[coord] = current_index
+                    face_vertices.append(current_index)
+                    current_index += 1
+                else:
+                    face_vertices.append(vertex_map[coord])
+            
+            # Extract triangles
+            for i in range(1, triangulation.NbTriangles() + 1):
+                triangle = triangulation.Triangle(i)
+                n1, n2, n3 = triangle.Get()
+                
+                # Map to global indices
+                idx1 = face_vertices[n1 - 1]
+                idx2 = face_vertices[n2 - 1]
+                idx3 = face_vertices[n3 - 1]
+                
+                # Reverse winding if face is reversed
+                if face_reversed:
+                    indices.extend([idx1, idx3, idx2])
+                else:
+                    indices.extend([idx1, idx2, idx3])
+                
+                # Calculate triangle normal
+                v1 = vertices[idx1*3:idx1*3+3]
+                v2 = vertices[idx2*3:idx2*3+3]
+                v3 = vertices[idx3*3:idx3*3+3]
+                
+                edge1 = [v2[i] - v1[i] for i in range(3)]
+                edge2 = [v3[i] - v1[i] for i in range(3)]
+                
+                # Cross product
+                normal = [
+                    edge1[1] * edge2[2] - edge1[2] * edge2[1],
+                    edge1[2] * edge2[0] - edge1[0] * edge2[2],
+                    edge1[0] * edge2[1] - edge1[1] * edge2[0]
+                ]
+                
+                # Normalize
+                length = math.sqrt(sum(n*n for n in normal))
+                if length > 0:
+                    normal = [n / length for n in normal]
+                
+                # Reverse normal if face is reversed
+                if face_reversed:
+                    normal = [-n for n in normal]
+                
+                # Add normal for each vertex of triangle
+                for _ in range(3):
+                    normals.extend(normal)
+            
+            face_explorer.Next()
+        
+        triangle_count = len(indices) // 3
+        
+        logger.info(f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles")
+        
+        return {
+            'vertices': vertices,
+            'indices': indices,
+            'normals': normals,
+            'triangle_count': triangle_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Error tessellating shape: {e}")
+        # Return minimal mesh on error
+        return {
+            'vertices': [],
+            'indices': [],
+            'normals': [],
+            'triangle_count': 0
+        }
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)

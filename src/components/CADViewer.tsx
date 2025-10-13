@@ -5,37 +5,34 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import * as THREE from 'three';
-import { Triangle } from '@/lib/geometryAnalyzer';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CADViewerProps {
   file?: File;
   fileUrl?: string;
   fileName: string;
-  triangles?: Triangle[];
+  meshId?: string;
 }
 
-// Component to render triangles directly from geometry data
-function TriangleMeshModel({ triangles }: { triangles: Triangle[] }) {
+interface MeshData {
+  vertices: number[];
+  indices: number[];
+  normals: number[];
+  triangle_count: number;
+}
+
+// Component to render mesh from database-stored geometry
+function MeshModel({ meshData }: { meshData: MeshData }) {
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     
-    const positions: number[] = [];
-    const normals: number[] = [];
-    
-    for (const tri of triangles) {
-      // Add vertices
-      for (const vertex of tri.vertices) {
-        positions.push(vertex.x, vertex.y, vertex.z);
-        normals.push(tri.normal.x, tri.normal.y, tri.normal.z);
-      }
-    }
-    
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
+    geo.setIndex(meshData.indices);
     geo.computeBoundingSphere();
     
     return geo;
-  }, [triangles]);
+  }, [meshData]);
   
   return (
     <mesh geometry={geometry}>
@@ -48,15 +45,44 @@ function TriangleMeshModel({ triangles }: { triangles: Triangle[] }) {
   );
 }
 
-export function CADViewer({ file, fileUrl, fileName, triangles }: CADViewerProps) {
+export function CADViewer({ file, fileUrl, fileName, meshId }: CADViewerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [meshData, setMeshData] = useState<MeshData | null>(null);
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isRenderableFormat = ['stl', 'step', 'stp', 'iges', 'igs'].includes(fileExtension);
   
+  // Fetch mesh data from database when meshId is provided
+  useEffect(() => {
+    if (!meshId) return;
+    
+    const fetchMesh = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('cad_meshes')
+          .select('vertices, indices, normals, triangle_count')
+          .eq('id', meshId)
+          .single();
+        
+        if (error) throw error;
+        if (data) {
+          setMeshData(data as MeshData);
+        }
+      } catch (err: any) {
+        console.error('Error fetching mesh:', err);
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchMesh();
+  }, [meshId]);
+  
   // Determine if we have valid 3D data to display
-  const hasValidModel = triangles && triangles.length > 0;
+  const hasValidModel = meshData && meshData.vertices && meshData.vertices.length > 0;
   
   // Create object URL for File objects, cleanup on unmount
   const objectUrl = useMemo(() => {
@@ -89,11 +115,16 @@ export function CADViewer({ file, fileUrl, fileName, triangles }: CADViewerProps
         </CardTitle>
       </CardHeader>
       <CardContent className="h-[500px]">
-        {hasValidModel ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Loading 3D model...</p>
+          </div>
+        ) : hasValidModel ? (
           <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
             <Suspense fallback={null}>
               <Stage environment="city" intensity={0.6}>
-                <TriangleMeshModel triangles={triangles} />
+                <MeshModel meshData={meshData!} />
               </Stage>
               <Grid infiniteGrid />
               <OrbitControls makeDefault />

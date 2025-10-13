@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -80,6 +81,13 @@ interface FeatureTree {
   oriented_sections: OrientedSection[];
 }
 
+interface MeshData {
+  vertices: number[];
+  indices: number[];
+  normals: number[];
+  triangle_count: number;
+}
+
 interface AnalysisResult {
   volume_cm3: number;
   surface_area_cm2: number;
@@ -95,6 +103,7 @@ interface AnalysisResult {
   recommended_processes?: string[];
   detailed_features?: DetailedFeatures;
   feature_tree?: FeatureTree;
+  mesh_id?: string;
 }
 
 interface Vector3 {
@@ -470,6 +479,12 @@ async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): P
     // Build feature tree organized by orientation
     const feature_tree: FeatureTree | undefined = detailed_features ? buildFeatureTree(detailed_features) : undefined;
     
+    // Store mesh data in database if available
+    let mesh_id: string | undefined;
+    if (data.mesh_data && data.mesh_data.vertices && data.mesh_data.vertices.length > 0) {
+      mesh_id = await storeMeshData(data.mesh_data, fileName, fileData);
+    }
+    
     return {
       volume_cm3: data.volume_cm3,
       surface_area_cm2: data.surface_area_cm2,
@@ -482,12 +497,74 @@ async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): P
       detected_features,
       recommended_processes,
       detailed_features,
+      mesh_id,
       feature_tree
     };
     
   } catch (error) {
     console.error('Error calling geometry service:', error);
     return null;
+  }
+}
+
+// Calculate SHA-256 hash of file data for caching
+async function calculateFileHash(fileData: ArrayBuffer): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', fileData);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Store mesh data in database with caching
+async function storeMeshData(
+  meshData: MeshData,
+  fileName: string,
+  fileData: ArrayBuffer
+): Promise<string | undefined> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // Calculate file hash for caching
+    const fileHash = await calculateFileHash(fileData);
+    
+    // Check if mesh already exists
+    const { data: existingMesh } = await supabase
+      .from('cad_meshes')
+      .select('id')
+      .eq('file_hash', fileHash)
+      .maybeSingle();
+    
+    if (existingMesh) {
+      console.log(`Mesh already cached for ${fileName} (hash: ${fileHash})`);
+      return existingMesh.id;
+    }
+    
+    // Store new mesh
+    const { data: newMesh, error } = await supabase
+      .from('cad_meshes')
+      .insert({
+        file_hash: fileHash,
+        file_name: fileName,
+        vertices: meshData.vertices,
+        indices: meshData.indices,
+        normals: meshData.normals,
+        triangle_count: meshData.triangle_count
+      })
+      .select('id')
+      .single();
+    
+    if (error) {
+      console.error('Error storing mesh data:', error);
+      return undefined;
+    }
+    
+    console.log(`Stored mesh data for ${fileName}: ${meshData.triangle_count} triangles, mesh_id: ${newMesh.id}`);
+    return newMesh.id;
+    
+  } catch (error) {
+    console.error('Error in storeMeshData:', error);
+    return undefined;
   }
 }
 

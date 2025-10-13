@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      cad_meshes: {
+        Row: {
+          created_at: string | null
+          file_hash: string
+          file_name: string
+          id: string
+          indices: number[]
+          line_item_id: string | null
+          normals: number[]
+          quotation_id: string | null
+          triangle_count: number
+          vertices: number[]
+        }
+        Insert: {
+          created_at?: string | null
+          file_hash: string
+          file_name: string
+          id?: string
+          indices: number[]
+          line_item_id?: string | null
+          normals: number[]
+          quotation_id?: string | null
+          triangle_count: number
+          vertices: number[]
+        }
+        Update: {
+          created_at?: string | null
+          file_hash?: string
+          file_name?: string
+          id?: string
+          indices?: number[]
+          line_item_id?: string | null
+          normals?: number[]
+          quotation_id?: string | null
+          triangle_count?: number
+          vertices?: number[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cad_meshes_line_item_id_fkey"
+            columns: ["line_item_id"]
+            isOneToOne: false
+            referencedRelation: "quote_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cad_meshes_quotation_id_fkey"
+            columns: ["quotation_id"]
+            isOneToOne: false
+            referencedRelation: "quotation_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_submissions: {
         Row: {
           created_at: string | null

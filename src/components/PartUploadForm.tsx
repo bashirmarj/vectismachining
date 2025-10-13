@@ -46,7 +46,7 @@ interface FileWithQuantity {
   quantity: number;
   material?: string;
   process?: string;
-  triangles?: Triangle[];
+  meshId?: string;
   analysis?: {
     volume_cm3: number;
     surface_area_cm2: number;
@@ -193,53 +193,21 @@ export const PartUploadForm = () => {
         i === index ? { ...f, isAnalyzing: true } : f
       ));
 
-      const fileName = fileWithQty.file.name.toLowerCase();
-      const isGeometryParseable = fileName.endsWith('.stl') || fileName.endsWith('.step') || 
-                                   fileName.endsWith('.stp') || fileName.endsWith('.iges') || 
-                                   fileName.endsWith('.igs');
-      
-      let analysisData;
-      let triangles: Triangle[] | undefined;
+      // Convert file to base64 for server-side analysis
+      const arrayBuffer = await fileWithQty.file.arrayBuffer();
+      const base64 = arrayBufferToBase64(arrayBuffer);
 
-      // Try browser-based geometry parsing first for supported formats
-      if (isGeometryParseable) {
-        try {
-          console.log(`Parsing ${fileName} in browser...`);
-          const geometryResult = await parseCADFile(fileWithQty.file);
-          
-          if (geometryResult) {
-            console.log(`Successfully parsed ${fileName} with ${geometryResult.triangle_count} triangles`);
-            analysisData = geometryResult;
-            triangles = geometryResult.triangles;
-            
-            toast({
-              title: "File Parsed Successfully",
-              description: `Extracted ${geometryResult.triangle_count.toLocaleString()} triangles from ${fileName.split('.').pop()?.toUpperCase()} file`,
-            });
-          }
-        } catch (parseError: any) {
-          console.warn('Browser parsing failed, falling back to server:', parseError);
-          toast({
-            title: "Using Heuristic Analysis",
-            description: "Could not parse geometry, using file metadata instead",
-            variant: "default",
-          });
+      // Call server-side analyze-cad edge function
+      const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze-cad', {
+        body: {
+          file_name: fileWithQty.file.name,
+          file_size: fileWithQty.file.size,
+          file_data: base64,
+          quantity: fileWithQty.quantity
         }
-      }
+      });
 
-      // Fall back to server-side analysis if browser parsing failed
-      if (!analysisData) {
-        const { data, error: analysisError } = await supabase.functions.invoke('analyze-cad', {
-          body: {
-            file_name: fileWithQty.file.name,
-            file_size: fileWithQty.file.size,
-            quantity: fileWithQty.quantity
-          }
-        });
-
-        if (analysisError) throw analysisError;
-        analysisData = data;
-      }
+      if (analysisError) throw analysisError;
 
       // Call pricing calculator if material is selected AND processes were detected
       let quoteData = null;
@@ -263,11 +231,11 @@ export const PartUploadForm = () => {
         quoteData = data;
       }
 
-      // Update file with analysis, triangles, and quote
+      // Update file with analysis, meshId, and quote
       setFiles(prev => prev.map((f, i) => 
         i === index ? { 
           ...f,
-          triangles,
+          meshId: analysisData.mesh_id,
           analysis: {
             volume_cm3: analysisData.volume_cm3,
             surface_area_cm2: analysisData.surface_area_cm2,
