@@ -227,14 +227,19 @@ const PricingSettings = () => {
   const saveProcesses = async () => {
     setSaving(true);
     try {
-      const updates = processes.map(p => ({
-        id: p.id,
-        name: p.name,
-        base_rate_per_hour: p.base_rate_per_hour,
-        setup_cost: p.setup_cost,
-        complexity_multiplier: p.complexity_multiplier,
-        is_active: p.is_active,
-      }));
+    const updates = processes.map(p => ({
+      id: p.id,
+      name: p.name,
+      base_rate_per_hour: p.base_rate_per_hour,
+      setup_cost: p.setup_cost,
+      complexity_multiplier: p.complexity_multiplier,
+      is_active: p.is_active,
+      feed_rate_mm_per_min: p.feed_rate_mm_per_min ?? 500,
+      spindle_speed_rpm: p.spindle_speed_rpm ?? 3000,
+      depth_of_cut_mm: p.depth_of_cut_mm ?? 2.0,
+      tool_change_time_minutes: p.tool_change_time_minutes ?? 2.0,
+      rapid_feed_rate_mm_per_min: p.rapid_feed_rate_mm_per_min ?? 5000,
+    }));
 
       for (const update of updates) {
         const { error } = await supabase
@@ -1173,6 +1178,89 @@ const PricingSettings = () => {
                                 <p className="text-xs text-muted-foreground mt-1">
                                   Time adjustment factor (1.0 = normal)
                                 </p>
+                              </div>
+                            </div>
+
+                            {/* Machining Parameters Section */}
+                            <Separator className="my-4" />
+                            <div className="space-y-4">
+                              <h4 className="font-semibold text-sm">Machining Parameters</h4>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label htmlFor={`feed-rate-${process.id}`}>Feed Rate (mm/min)</Label>
+                                  <Input
+                                    id={`feed-rate-${process.id}`}
+                                    type="number"
+                                    step="10"
+                                    value={process.feed_rate_mm_per_min ?? 500}
+                                    onChange={(e) =>
+                                      updateProcess(process.id, 'feed_rate_mm_per_min', parseFloat(e.target.value))
+                                    }
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Cutting tool feed rate
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label htmlFor={`spindle-speed-${process.id}`}>Spindle Speed (RPM)</Label>
+                                  <Input
+                                    id={`spindle-speed-${process.id}`}
+                                    type="number"
+                                    step="100"
+                                    value={process.spindle_speed_rpm ?? 3000}
+                                    onChange={(e) =>
+                                      updateProcess(process.id, 'spindle_speed_rpm', parseFloat(e.target.value))
+                                    }
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Spindle rotation speed
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label htmlFor={`depth-of-cut-${process.id}`}>Depth of Cut (mm)</Label>
+                                  <Input
+                                    id={`depth-of-cut-${process.id}`}
+                                    type="number"
+                                    step="0.1"
+                                    value={process.depth_of_cut_mm ?? 2.0}
+                                    onChange={(e) =>
+                                      updateProcess(process.id, 'depth_of_cut_mm', parseFloat(e.target.value))
+                                    }
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Cut depth per pass
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label htmlFor={`tool-change-${process.id}`}>Tool Change Time (min)</Label>
+                                  <Input
+                                    id={`tool-change-${process.id}`}
+                                    type="number"
+                                    step="0.5"
+                                    value={process.tool_change_time_minutes ?? 2.0}
+                                    onChange={(e) =>
+                                      updateProcess(process.id, 'tool_change_time_minutes', parseFloat(e.target.value))
+                                    }
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Time for tool changes
+                                  </p>
+                                </div>
+                                <div className="col-span-2">
+                                  <Label htmlFor={`rapid-feed-${process.id}`}>Rapid Feed Rate (mm/min)</Label>
+                                  <Input
+                                    id={`rapid-feed-${process.id}`}
+                                    type="number"
+                                    step="100"
+                                    value={process.rapid_feed_rate_mm_per_min ?? 5000}
+                                    onChange={(e) =>
+                                      updateProcess(process.id, 'rapid_feed_rate_mm_per_min', parseFloat(e.target.value))
+                                    }
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Non-cutting movement speed
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           </div>
