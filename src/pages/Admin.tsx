@@ -148,13 +148,6 @@ const Admin = () => {
                 <Settings className="mr-2 h-4 w-4" />
                 Pricing Settings
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => navigate('/admin/surface-treatments')}
-              >
-                <Settings className="mr-2 h-4 w-4" />
-                Surface Treatments
-              </Button>
             </div>
             
             {/* Filters */}

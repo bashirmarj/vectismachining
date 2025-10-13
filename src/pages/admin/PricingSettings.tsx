@@ -13,13 +13,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, Plus, Trash2, Settings, X, Download, Upload } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, Settings, X, Download, Upload, Edit } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 
 interface ManufacturingProcess {
   id: string;
@@ -76,6 +78,15 @@ interface MaterialCost {
   machinability_rating?: number;
   hardness_brinell?: number;
   cutting_speed_m_per_min?: number;
+}
+
+interface SurfaceTreatment {
+  id: string;
+  name: string;
+  category: 'heat_treatment' | 'post_process' | 'surface_treatment';
+  cost_per_cm2: number;
+  description: string | null;
+  is_active: boolean;
 }
 
 const PricingSettings = () => {
@@ -135,8 +146,23 @@ const PricingSettings = () => {
   const [processes, setProcesses] = useState<ManufacturingProcess[]>([]);
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
   const [materials, setMaterials] = useState<MaterialCost[]>([]);
+  const [treatments, setTreatments] = useState<SurfaceTreatment[]>([]);
   const [activeTab, setActiveTab] = useState<string>('');
   const [selectedCrossSections, setSelectedCrossSections] = useState<Record<string, number>>({});
+  const [editingTreatmentId, setEditingTreatmentId] = useState<string | null>(null);
+  const [treatmentFormData, setTreatmentFormData] = useState<{
+    name: string;
+    category: 'heat_treatment' | 'post_process' | 'surface_treatment';
+    cost_per_cm2: number;
+    description: string;
+    is_active: boolean;
+  }>({
+    name: "",
+    category: "surface_treatment",
+    cost_per_cm2: 0,
+    description: "",
+    is_active: true
+  });
 
   useEffect(() => {
     const checkAdminAndFetchData = async () => {
@@ -173,18 +199,21 @@ const PricingSettings = () => {
   const fetchPricingData = async () => {
     setLoading(true);
     try {
-      const [processesResponse, materialsResponse, categoriesResponse] = await Promise.all([
+      const [processesResponse, materialsResponse, categoriesResponse, treatmentsResponse] = await Promise.all([
         supabase.from('manufacturing_processes').select('*').order('name'),
         supabase.from('material_costs').select('*').order('material_name'),
         supabase.from('material_categories').select('*').order('display_order'),
+        supabase.from('surface_treatments').select('*').order('category', { ascending: true }).order('name', { ascending: true }),
       ]);
 
       if (processesResponse.error) throw processesResponse.error;
       if (materialsResponse.error) throw materialsResponse.error;
       if (categoriesResponse.error) throw categoriesResponse.error;
+      if (treatmentsResponse.error) throw treatmentsResponse.error;
 
       setProcesses(processesResponse.data || []);
       setCategories(categoriesResponse.data || []);
+      setTreatments((treatmentsResponse.data as SurfaceTreatment[]) || []);
       
       // Parse finish_options and cross_sections from JSONB to array
       const parsedMaterials = (materialsResponse.data || []).map(m => ({
@@ -998,6 +1027,104 @@ const PricingSettings = () => {
     }
   };
 
+  // Surface Treatment handlers
+  const handleTreatmentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      if (editingTreatmentId) {
+        const { error } = await supabase
+          .from('surface_treatments')
+          .update(treatmentFormData)
+          .eq('id', editingTreatmentId);
+
+        if (error) throw error;
+        
+        toast({
+          title: "Treatment updated",
+          description: "Surface treatment has been updated successfully.",
+        });
+      } else {
+        const { error } = await supabase
+          .from('surface_treatments')
+          .insert([treatmentFormData]);
+
+        if (error) throw error;
+        
+        toast({
+          title: "Treatment created",
+          description: "New surface treatment has been added.",
+        });
+      }
+
+      resetTreatmentForm();
+      await fetchPricingData();
+    } catch (error: any) {
+      toast({
+        title: "Error saving treatment",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditTreatment = (treatment: SurfaceTreatment) => {
+    setEditingTreatmentId(treatment.id);
+    setTreatmentFormData({
+      name: treatment.name,
+      category: treatment.category,
+      cost_per_cm2: treatment.cost_per_cm2,
+      description: treatment.description || "",
+      is_active: treatment.is_active
+    });
+  };
+
+  const handleDeleteTreatment = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this treatment?")) return;
+
+    try {
+      const { error } = await supabase
+        .from('surface_treatments')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Treatment deleted",
+        description: "Surface treatment has been removed.",
+      });
+
+      await fetchPricingData();
+    } catch (error: any) {
+      toast({
+        title: "Error deleting treatment",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const resetTreatmentForm = () => {
+    setEditingTreatmentId(null);
+    setTreatmentFormData({
+      name: "",
+      category: "surface_treatment",
+      cost_per_cm2: 0,
+      description: "",
+      is_active: true
+    });
+  };
+
+  const getCategoryLabel = (category: string) => {
+    switch (category) {
+      case 'heat_treatment': return 'Heat Treatment';
+      case 'post_process': return 'Post Process';
+      case 'surface_treatment': return 'Surface Treatment';
+      default: return category;
+    }
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -1069,9 +1196,10 @@ const PricingSettings = () => {
           </div>
 
           <Tabs defaultValue="processes" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="processes">Manufacturing Processes</TabsTrigger>
               <TabsTrigger value="materials">Material Costs</TabsTrigger>
+              <TabsTrigger value="treatments">Surface Treatments</TabsTrigger>
               <TabsTrigger value="formulas">Pricing Formulas</TabsTrigger>
             </TabsList>
 
@@ -2104,6 +2232,154 @@ const PricingSettings = () => {
                         </>
                       )}
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Surface Treatments Tab */}
+            <TabsContent value="treatments" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>{editingTreatmentId ? "Edit" : "Add"} Surface Treatment</CardTitle>
+                  <CardDescription>
+                    Manage heat treatments, post-processes, and surface treatments (priced by surface area)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleTreatmentSubmit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="treatment-name">Treatment Name</Label>
+                        <Input
+                          id="treatment-name"
+                          value={treatmentFormData.name}
+                          onChange={(e) => setTreatmentFormData({ ...treatmentFormData, name: e.target.value })}
+                          placeholder="e.g., Anodizing Type II"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="treatment-category">Category</Label>
+                        <Select
+                          value={treatmentFormData.category}
+                          onValueChange={(value: any) => setTreatmentFormData({ ...treatmentFormData, category: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="heat_treatment">Heat Treatment</SelectItem>
+                            <SelectItem value="post_process">Post Process</SelectItem>
+                            <SelectItem value="surface_treatment">Surface Treatment</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="treatment-cost">Cost per cm² ($)</Label>
+                        <Input
+                          id="treatment-cost"
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          value={treatmentFormData.cost_per_cm2}
+                          onChange={(e) => setTreatmentFormData({ ...treatmentFormData, cost_per_cm2: parseFloat(e.target.value) || 0 })}
+                          required
+                        />
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="treatment-active"
+                          checked={treatmentFormData.is_active}
+                          onCheckedChange={(checked) => setTreatmentFormData({ ...treatmentFormData, is_active: checked })}
+                        />
+                        <Label htmlFor="treatment-active">Active</Label>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="treatment-description">Description</Label>
+                      <Textarea
+                        id="treatment-description"
+                        value={treatmentFormData.description}
+                        onChange={(e) => setTreatmentFormData({ ...treatmentFormData, description: e.target.value })}
+                        placeholder="Brief description of the treatment..."
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button type="submit">
+                        {editingTreatmentId ? "Update" : "Add"} Treatment
+                      </Button>
+                      {editingTreatmentId && (
+                        <Button type="button" variant="outline" onClick={resetTreatmentForm}>
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Surface Treatments</CardTitle>
+                  <CardDescription>
+                    All surface treatments grouped by category
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {['heat_treatment', 'post_process', 'surface_treatment'].map((category) => {
+                      const categoryTreatments = treatments.filter(t => t.category === category);
+                      if (categoryTreatments.length === 0) return null;
+
+                      return (
+                        <div key={category}>
+                          <h3 className="font-semibold text-lg mb-2">{getCategoryLabel(category)}</h3>
+                          <div className="space-y-2">
+                            {categoryTreatments.map((treatment) => (
+                              <div
+                                key={treatment.id}
+                                className="flex items-center justify-between p-4 border rounded-lg"
+                              >
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-medium">{treatment.name}</h4>
+                                    {!treatment.is_active && (
+                                      <Badge variant="secondary">Inactive</Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">{treatment.description}</p>
+                                  <p className="text-sm font-semibold mt-1">
+                                    ${treatment.cost_per_cm2.toFixed(3)} per cm²
+                                  </p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEditTreatment(treatment)}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => handleDeleteTreatment(treatment.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
