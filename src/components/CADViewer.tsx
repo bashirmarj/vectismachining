@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Stage, Grid } from '@react-three/drei';
+import { OrbitControls, Environment } from '@react-three/drei';
 import { Suspense, useMemo, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Box } from 'lucide-react';
@@ -35,11 +35,12 @@ function MeshModel({ meshData }: { meshData: MeshData }) {
   }, [meshData]);
   
   return (
-    <mesh geometry={geometry}>
+    <mesh geometry={geometry} castShadow receiveShadow>
       <meshStandardMaterial 
-        color="hsl(var(--primary))" 
-        metalness={0.3}
-        roughness={0.4}
+        color="#b0b8c0"
+        metalness={0.7}
+        roughness={0.25}
+        envMapIntensity={1.5}
       />
     </mesh>
   );
@@ -149,13 +150,37 @@ export function CADViewer({ file, fileUrl, fileName, meshId }: CADViewerProps) {
             </Button>
           </div>
         ) : hasValidModel ? (
-          <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
+          <Canvas 
+            camera={{ position: [150, 150, 150], fov: 45 }} 
+            shadows
+            gl={{ antialias: true, alpha: true }}
+          >
             <Suspense fallback={null}>
-              <Stage environment="city" intensity={0.6}>
-                <MeshModel meshData={meshData!} />
-              </Stage>
-              <Grid infiniteGrid />
-              <OrbitControls makeDefault />
+              {/* Lighting setup for realistic metal appearance */}
+              <ambientLight intensity={0.4} />
+              <directionalLight 
+                position={[10, 10, 5]} 
+                intensity={1.2} 
+                castShadow 
+                shadow-mapSize={[2048, 2048]}
+              />
+              <directionalLight position={[-10, -10, -5]} intensity={0.5} />
+              <hemisphereLight args={['#ffffff', '#60a5fa', 0.3]} />
+              
+              {/* Environment map for reflections */}
+              <Environment preset="studio" />
+              
+              {/* 3D Model */}
+              <MeshModel meshData={meshData!} />
+              
+              {/* Camera controls */}
+              <OrbitControls 
+                makeDefault 
+                enableDamping 
+                dampingFactor={0.05}
+                minDistance={50}
+                maxDistance={500}
+              />
             </Suspense>
           </Canvas>
         ) : isRenderableFormat ? (
