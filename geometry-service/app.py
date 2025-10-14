@@ -168,92 +168,120 @@ def analyze_cad():
             pass
 
 def detect_holes(shape):
-    """Detect circular holes (cylindrical voids)"""
+    """Detect cylindrical holes (voids) - not outer cylindrical features"""
     holes = []
     
     try:
-        # Find all edges and look for circular ones
-        edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
-        circular_edges = []
+        # Find cylindrical faces (not edges, to avoid false positives)
+        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+        cylindrical_faces = []
         
-        while edge_explorer.More():
-            edge = edge_explorer.Current()
-            curve = BRepAdaptor_Curve(edge)
+        while face_explorer.More():
+            face = face_explorer.Current()
+            surface = BRepAdaptor_Surface(face)
             
-            if curve.GetType() == GeomAbs_Circle:
-                circle = curve.Circle()
-                center = circle.Location()
-                axis = circle.Axis().Direction()
-                radius = circle.Radius()
+            # Only consider cylindrical surfaces
+            if surface.GetType() == GeomAbs_Cylinder:
+                cylinder = surface.Cylinder()
+                axis = cylinder.Axis()
+                center = axis.Location()
+                direction = axis.Direction()
+                radius = cylinder.Radius()
                 
-                circular_edges.append({
+                # Get face properties to determine if it's a hole
+                props = GProp_GProps()
+                brepgprop.SurfaceProperties(face, props)
+                area = props.Mass()
+                
+                cylindrical_faces.append({
                     'center': (center.X(), center.Y(), center.Z()),
-                    'axis': (axis.X(), axis.Y(), axis.Z()),
-                    'radius': radius
+                    'axis': (direction.X(), direction.Y(), direction.Z()),
+                    'radius': radius,
+                    'area': area,
+                    'face': face
                 })
             
-            edge_explorer.Next()
+            face_explorer.Next()
         
-        # Group circular edges that share same axis (indicating a hole)
+        # Filter to only actual holes (small radius relative to part size)
+        # Get bounding box to determine part size
+        bbox = Bnd_Box()
+        brepbndlib.Add(shape, bbox)
+        xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
+        max_dimension = max(xmax - xmin, ymax - ymin, zmax - zmin)
+        
+        # Group cylindrical faces by axis and position
         processed = set()
-        for i, edge1 in enumerate(circular_edges):
+        for i, cyl1 in enumerate(cylindrical_faces):
             if i in processed:
                 continue
             
-            hole_edges = [edge1]
-            for j, edge2 in enumerate(circular_edges):
+            # Only consider features smaller than 1/3 of the part size as potential holes
+            if cyl1['radius'] > max_dimension / 3:
+                processed.add(i)
+                continue
+            
+            hole_faces = [cyl1]
+            
+            # Find paired cylindrical faces (same axis, similar radius)
+            for j, cyl2 in enumerate(cylindrical_faces):
                 if j <= i or j in processed:
                     continue
                 
-                # Check if axes are parallel and centers aligned
-                axis_dot = sum(a*b for a,b in zip(edge1['axis'], edge2['axis']))
+                # Check if axes are parallel
+                axis_dot = sum(a*b for a,b in zip(cyl1['axis'], cyl2['axis']))
                 if abs(abs(axis_dot) - 1.0) < 0.1:  # Nearly parallel
-                    # Check if centers are on same axis line
-                    center_diff = tuple(c2-c1 for c1,c2 in zip(edge1['center'], edge2['center']))
-                    cross_product_mag = sum((center_diff[i]*edge1['axis'][j] - center_diff[j]*edge1['axis'][i])**2 
-                                           for i,j in [(0,1), (1,2), (0,2)])
-                    
-                    if cross_product_mag < 100:  # Centers aligned
-                        hole_edges.append(edge2)
-                        processed.add(j)
+                    # Check if radii are similar (within 10%)
+                    if abs(cyl1['radius'] - cyl2['radius']) < cyl1['radius'] * 0.1:
+                        # Check if centers are aligned on axis
+                        center_diff = tuple(c2-c1 for c1,c2 in zip(cyl1['center'], cyl2['center']))
+                        cross_mag = sum((center_diff[i]*cyl1['axis'][j] - center_diff[j]*cyl1['axis'][i])**2 
+                                       for i,j in [(0,1), (1,2), (0,2)])
+                        
+                        if cross_mag < cyl1['radius']**2:  # Centers aligned within radius
+                            hole_faces.append(cyl2)
+                            processed.add(j)
             
             processed.add(i)
             
-            if len(hole_edges) >= 1:
-                # Calculate hole properties
-                avg_radius = sum(e['radius'] for e in hole_edges) / len(hole_edges)
+            # Only report as hole if we have paired faces (through hole) or single small cylinder
+            if len(hole_faces) >= 1:
+                avg_radius = sum(f['radius'] for f in hole_faces) / len(hole_faces)
                 
-                # Calculate depth from center separation
-                if len(hole_edges) >= 2:
-                    centers = [e['center'] for e in hole_edges]
+                # Calculate depth
+                if len(hole_faces) >= 2:
+                    centers = [f['center'] for f in hole_faces]
                     depth = max(math.sqrt(sum((c1[i]-c2[i])**2 for i in range(3))) 
                                for c1 in centers for c2 in centers)
-                    through = depth > avg_radius * 2  # Heuristic: through if depth > diameter
+                    through = depth > avg_radius * 3  # Through if depth > 1.5 * diameter
                 else:
-                    depth = avg_radius  # Blind hole approximation
+                    # Single face - likely blind hole, estimate depth from area
+                    depth = hole_faces[0]['area'] / (2 * 3.14159 * avg_radius)
                     through = False
                 
-                # Classify orientation
-                axis = hole_edges[0]['axis']
-                abs_axis = tuple(abs(a) for a in axis)
-                max_component = max(abs_axis)
-                
-                if abs(abs_axis[2] - max_component) < 0.1:
-                    orientation = 'Top+0°' if axis[2] > 0 else 'Top+180°'
-                elif abs(abs_axis[0] - max_component) < 0.1:
-                    orientation = 'Right' if axis[0] > 0 else 'Left'
-                else:
-                    orientation = 'Front' if axis[1] > 0 else 'Back'
-                
-                holes.append({
-                    'type': 'hole',
-                    'diameter_mm': round(avg_radius * 2, 2),
-                    'depth_mm': round(depth, 2),
-                    'through': through,
-                    'position': [round(hole_edges[0]['center'][i], 2) for i in range(3)],
-                    'axis': [round(axis[i], 2) for i in range(3)],
-                    'orientation': orientation
-                })
+                # Only add if it looks like an actual hole (small relative to part)
+                if avg_radius < max_dimension / 4:  # Hole radius < 25% of part size
+                    # Classify orientation
+                    axis = hole_faces[0]['axis']
+                    abs_axis = tuple(abs(a) for a in axis)
+                    max_component = max(abs_axis)
+                    
+                    if abs(abs_axis[2] - max_component) < 0.1:
+                        orientation = 'Top+0°' if axis[2] > 0 else 'Top+180°'
+                    elif abs(abs_axis[0] - max_component) < 0.1:
+                        orientation = 'Right' if axis[0] > 0 else 'Left'
+                    else:
+                        orientation = 'Front' if axis[1] > 0 else 'Back'
+                    
+                    holes.append({
+                        'type': 'hole',
+                        'diameter_mm': round(avg_radius * 2, 2),
+                        'depth_mm': round(depth, 2),
+                        'through': through,
+                        'position': [round(hole_faces[0]['center'][i], 2) for i in range(3)],
+                        'axis': [round(axis[i], 2) for i in range(3)],
+                        'orientation': orientation
+                    })
     
     except Exception as e:
         logger.error(f"Error detecting holes: {e}")

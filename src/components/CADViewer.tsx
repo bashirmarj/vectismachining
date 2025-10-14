@@ -34,15 +34,26 @@ function MeshModel({ meshData }: { meshData: MeshData }) {
     return geo;
   }, [meshData]);
   
+  // Create edge geometry for clear visualization
+  const edges = useMemo(() => {
+    return new THREE.EdgesGeometry(geometry, 15); // 15 degree threshold for edges
+  }, [geometry]);
+  
   return (
-    <mesh geometry={geometry}>
-      <meshPhongMaterial 
-        color="#4a90e2"
-        specular="#ffffff"
-        shininess={30}
-        flatShading={false}
-      />
-    </mesh>
+    <group>
+      {/* Main solid mesh - flat color, no reflections */}
+      <mesh geometry={geometry}>
+        <meshBasicMaterial 
+          color="#5b9bd5"
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      
+      {/* Edge lines for clarity */}
+      <lineSegments geometry={edges}>
+        <lineBasicMaterial color="#1a3a52" linewidth={1} />
+      </lineSegments>
+    </group>
   );
 }
 
