@@ -144,10 +144,10 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
             side={THREE.DoubleSide}
             clippingPlanes={clippingPlane || undefined}
             clipIntersection={false}
-            metalness={0.2}
-            roughness={0.6}
-            flatShading={type === 'internal' || type === 'planar'}
-            envMapIntensity={0.8}
+            metalness={0}
+            roughness={1}
+            flatShading={true}
+            envMapIntensity={0}
           />
         </mesh>
       ))}
