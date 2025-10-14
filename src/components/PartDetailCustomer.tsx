@@ -33,6 +33,7 @@ interface PartDetailCustomerProps {
       confidence?: number;
       method?: string;
       recommended_processes?: string[];
+      detected_features?: any;
       feature_tree?: {
         common_dimensions: Array<{
           label: string;
@@ -157,6 +158,7 @@ export function PartDetailCustomer({
                 file={file.file}
                 fileName={file.file.name}
                 meshId={file.meshId}
+                detectedFeatures={file.analysis?.detected_features}
               />
             </TabsContent>
 

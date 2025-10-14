@@ -410,14 +410,14 @@ def calculate_principal_dimensions(shape, bbox, is_cylindrical):
 
 def tessellate_shape(shape, quality=0.5):
     """
-    Tessellate STEP shape into triangulated mesh for 3D rendering
+    Tessellate STEP shape into triangulated mesh for 3D rendering with face classification
     
     Args:
         shape: TopoDS_Shape from STEP file
         quality: 0-1 value, higher = finer mesh (more triangles, slower)
     
     Returns:
-        dict with vertices, indices, normals arrays for Three.js BufferGeometry
+        dict with vertices, indices, normals arrays + face classifications for Meviy-style rendering
     """
     try:
         # Quality controls deflection (lower deflection = finer mesh)
@@ -443,10 +443,20 @@ def tessellate_shape(shape, quality=0.5):
         if not mesh.IsDone():
             raise Exception("Mesh tessellation failed")
         
-        # Extract triangulated geometry
+        # Get bounding box for classification
+        bbox = Bnd_Box()
+        brepbndlib.Add(shape, bbox)
+        xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
+        center_x = (xmin + xmax) / 2
+        center_y = (ymin + ymax) / 2
+        center_z = (zmin + zmax) / 2
+        max_radius = max(xmax - xmin, ymax - ymin, zmax - zmin) / 2
+        
+        # Extract triangulated geometry with face classification
         vertices = []
         indices = []
         normals = []
+        face_types = []  # 'external', 'internal', 'cylindrical', 'planar'
         vertex_map = {}  # Map vertex coords to index
         current_index = 0
         
@@ -465,9 +475,46 @@ def tessellate_shape(shape, quality=0.5):
             # Get transformation
             transform = location.Transformation()
             
-            # Get face normal direction
+            # Get face properties for classification
             surface = BRepAdaptor_Surface(face)
             face_reversed = face.Orientation() == 1  # TopAbs_REVERSED
+            surface_type = surface.GetType()
+            
+            # Classify face type for Meviy-style color coding
+            face_classification = 'external'  # Default
+            
+            if surface_type == GeomAbs_Cylinder:
+                # Cylindrical surface
+                cylinder = surface.Cylinder()
+                cyl_center = cylinder.Axis().Location()
+                cyl_radius = cylinder.Radius()
+                
+                # Check if internal (small radius, inside part)
+                dist_from_center = math.sqrt(
+                    (cyl_center.X() - center_x)**2 + 
+                    (cyl_center.Y() - center_y)**2 + 
+                    (cyl_center.Z() - center_z)**2
+                )
+                
+                if cyl_radius < max_radius * 0.3 and dist_from_center < max_radius * 0.5:
+                    face_classification = 'internal'  # Internal cylindrical feature (hole)
+                else:
+                    face_classification = 'cylindrical'  # External cylindrical feature
+                    
+            elif surface_type == GeomAbs_Plane:
+                # Planar surface
+                plane = surface.Plane()
+                normal = plane.Axis().Direction()
+                
+                # Check if it's a top/bottom face or side face
+                abs_nz = abs(normal.Z())
+                if abs_nz > 0.9:  # Mostly vertical normal
+                    face_classification = 'planar'
+                else:
+                    face_classification = 'external'
+            else:
+                # Other surface types (BSpline, etc.) - check position
+                face_classification = 'external'
             
             # Build local vertex map for this face
             face_vertex_start = current_index
@@ -532,17 +579,19 @@ def tessellate_shape(shape, quality=0.5):
                 # Add normal for each vertex of triangle
                 for _ in range(3):
                     normals.extend(normal)
+                    face_types.append(face_classification)
             
             face_explorer.Next()
         
         triangle_count = len(indices) // 3
         
-        logger.info(f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles")
+        logger.info(f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles, classified faces")
         
         return {
             'vertices': vertices,
             'indices': indices,
             'normals': normals,
+            'face_types': face_types,  # Face classification for each vertex
             'triangle_count': triangle_count
         }
         

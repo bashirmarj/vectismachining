@@ -17,6 +17,7 @@ export type Database = {
       cad_meshes: {
         Row: {
           created_at: string | null
+          face_types: string[] | null
           file_hash: string
           file_name: string
           id: string
@@ -29,6 +30,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          face_types?: string[] | null
           file_hash: string
           file_name: string
           id?: string
@@ -41,6 +43,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          face_types?: string[] | null
           file_hash?: string
           file_name?: string
           id?: string

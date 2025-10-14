@@ -1,67 +1,41 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
 import { Suspense, useMemo, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
+import { MeshModel } from './cad-viewer/MeshModel';
+import { ViewerControls } from './cad-viewer/ViewerControls';
+import { DimensionAnnotations } from './cad-viewer/DimensionAnnotations';
 
 interface CADViewerProps {
   file?: File;
   fileUrl?: string;
   fileName: string;
   meshId?: string;
+  detectedFeatures?: any;
 }
 
 interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
+  face_types?: string[];
   triangle_count: number;
 }
 
-// Component to render mesh from database-stored geometry
-function MeshModel({ meshData }: { meshData: MeshData }) {
-  const geometry = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
-    
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
-    geo.setIndex(meshData.indices);
-    geo.computeBoundingSphere();
-    
-    return geo;
-  }, [meshData]);
-  
-  // Create edge geometry for clear visualization
-  const edges = useMemo(() => {
-    // 15 degree threshold: shows sharp design edges while hiding tessellation artifacts
-    return new THREE.EdgesGeometry(geometry, 15);
-  }, [geometry]);
-  
-  return (
-    <group>
-      {/* Main solid mesh - flat color, no reflections, smooth shading */}
-      <mesh geometry={geometry}>
-        <meshBasicMaterial 
-          color="#5b9bd5"
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      
-      {/* Edge lines for clarity */}
-      <lineSegments geometry={edges}>
-        <lineBasicMaterial color="#1a3a52" linewidth={1} />
-      </lineSegments>
-    </group>
-  );
-}
-
-export function CADViewer({ file, fileUrl, fileName, meshId }: CADViewerProps) {
+export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }: CADViewerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meshData, setMeshData] = useState<MeshData | null>(null);
+  
+  // Professional viewer controls (Phase 3, 4, 5)
+  const [showSectionCut, setShowSectionCut] = useState(false);
+  const [sectionPosition, setSectionPosition] = useState(0);
+  const [showEdges, setShowEdges] = useState(true);
+  const [showDimensions, setShowDimensions] = useState(false);
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isSTEP = ['step', 'stp'].includes(fileExtension);
@@ -81,7 +55,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId }: CADViewerProps) {
       try {
         const { data, error } = await supabase
           .from('cad_meshes')
-          .select('vertices, indices, normals, triangle_count')
+          .select('vertices, indices, normals, face_types, triangle_count')
           .eq('id', meshId)
           .single();
         
@@ -99,6 +73,36 @@ export function CADViewer({ file, fileUrl, fileName, meshId }: CADViewerProps) {
     
     fetchMesh();
   }, [meshId, meshData]);
+  
+  // Calculate bounding box for camera and annotations
+  const boundingBox = useMemo(() => {
+    if (!meshData || !meshData.vertices || meshData.vertices.length === 0) {
+      return { width: 100, height: 100, depth: 100, center: [0, 0, 0] as [number, number, number] };
+    }
+    
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    
+    for (let i = 0; i < meshData.vertices.length; i += 3) {
+      minX = Math.min(minX, meshData.vertices[i]);
+      maxX = Math.max(maxX, meshData.vertices[i]);
+      minY = Math.min(minY, meshData.vertices[i + 1]);
+      maxY = Math.max(maxY, meshData.vertices[i + 1]);
+      minZ = Math.min(minZ, meshData.vertices[i + 2]);
+      maxZ = Math.max(maxZ, meshData.vertices[i + 2]);
+    }
+    
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const depth = maxZ - minZ;
+    const center: [number, number, number] = [
+      (minX + maxX) / 2,
+      (minY + maxY) / 2,
+      (minZ + maxZ) / 2,
+    ];
+    
+    return { width, height, depth, center };
+  }, [meshData]);
   
   // Determine if we have valid 3D data to display
   const hasValidModel = meshData && meshData.vertices && meshData.vertices.length > 0;
@@ -162,37 +166,84 @@ export function CADViewer({ file, fileUrl, fileName, meshId }: CADViewerProps) {
             </Button>
           </div>
         ) : hasValidModel ? (
-          <Canvas 
-            camera={{ position: [150, 150, 150], fov: 45 }} 
-            gl={{ 
-              antialias: true, 
-              alpha: true,
-              preserveDrawingBuffer: true,
-              powerPreference: "high-performance"
-            }}
-            dpr={[1, 2]}
-          >
-            <Suspense fallback={null}>
-              {/* Simple, clear lighting - no confusing shadows */}
-              <ambientLight intensity={0.6} />
-              <directionalLight position={[100, 100, 50]} intensity={0.8} />
-              <directionalLight position={[-100, -100, -50]} intensity={0.4} />
-              <pointLight position={[0, 100, 0]} intensity={0.3} />
-              
-              {/* 3D Model */}
-              <MeshModel meshData={meshData!} />
-              
-              {/* Camera controls with smooth damping */}
-              <OrbitControls 
-                makeDefault 
-                enableDamping 
-                dampingFactor={0.05}
-                minDistance={50}
-                maxDistance={500}
-                rotateSpeed={0.5}
-              />
-            </Suspense>
-          </Canvas>
+          <div className="relative h-full">
+            <ViewerControls
+              showSectionCut={showSectionCut}
+              onToggleSectionCut={() => setShowSectionCut(!showSectionCut)}
+              sectionPosition={sectionPosition}
+              onSectionPositionChange={setSectionPosition}
+              showEdges={showEdges}
+              onToggleEdges={() => setShowEdges(!showEdges)}
+              showDimensions={showDimensions}
+              onToggleDimensions={() => setShowDimensions(!showDimensions)}
+            />
+            
+            <Canvas
+              camera={{ position: [150, 150, 150], fov: 45 }}
+              gl={{
+                antialias: true,
+                alpha: false,
+                preserveDrawingBuffer: true,
+                powerPreference: "high-performance",
+                localClippingEnabled: true,
+              }}
+              dpr={[1, 2]}
+            >
+              <Suspense fallback={null}>
+                {/* Professional lighting setup (Phase 5) */}
+                <ambientLight intensity={0.5} />
+                <hemisphereLight
+                  color="#ffffff"
+                  groundColor="#444444"
+                  intensity={0.4}
+                />
+                <directionalLight position={[100, 100, 50]} intensity={0.6} />
+                <directionalLight position={[-100, -100, -50]} intensity={0.3} />
+                <pointLight position={[0, 100, 0]} intensity={0.2} />
+                
+                {/* Subtle environment for better material appearance */}
+                <Environment preset="city" />
+                
+                {/* Auto-framed camera */}
+                <PerspectiveCamera
+                  makeDefault
+                  position={[
+                    boundingBox.center[0] + boundingBox.width * 1.5,
+                    boundingBox.center[1] + boundingBox.height * 1.5,
+                    boundingBox.center[2] + boundingBox.depth * 1.5,
+                  ]}
+                  fov={45}
+                />
+                
+                {/* 3D Model with Meviy-style color classification (Phase 1 & 2) */}
+                <MeshModel
+                  meshData={meshData!}
+                  showSectionCut={showSectionCut}
+                  sectionPosition={sectionPosition}
+                  showEdges={showEdges}
+                />
+                
+                {/* Dimension Annotations (Phase 4) */}
+                {showDimensions && detectedFeatures && (
+                  <DimensionAnnotations
+                    features={detectedFeatures}
+                    boundingBox={boundingBox}
+                  />
+                )}
+                
+                {/* Camera controls with smooth damping */}
+                <OrbitControls
+                  makeDefault
+                  target={boundingBox.center}
+                  enableDamping
+                  dampingFactor={0.05}
+                  minDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth)}
+                  maxDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 5}
+                  rotateSpeed={0.5}
+                />
+              </Suspense>
+            </Canvas>
+          </div>
         ) : isRenderableFormat ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Box className="h-16 w-16 text-muted-foreground" />
