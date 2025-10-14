@@ -701,6 +701,24 @@ export const PartUploadForm = () => {
 
           <div className="space-y-2">
             <Label htmlFor="file-upload">CAD Files * (Multiple files supported)</Label>
+            
+            {/* Display uploaded files OUTSIDE the label to prevent click interference */}
+            {files.length > 0 && (
+              <div className="w-full space-y-3 mb-4">
+                {files.map((fileWithQty, index) => (
+                  <PartDetailCustomer
+                    key={index}
+                    file={fileWithQty}
+                    materials={materials}
+                    onUpdateMaterial={(material) => updateFileMaterial(index, material)}
+                    onAnalyze={() => analyzeFile(fileWithQty, index)}
+                    onRemove={() => removeFile(index)}
+                  />
+                ))}
+              </div>
+            )}
+            
+            {/* Upload area - only the upload UI should be inside the label */}
             <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
               <input
                 id="file-upload"
@@ -714,34 +732,13 @@ export const PartUploadForm = () => {
                 htmlFor="file-upload"
                 className="cursor-pointer flex flex-col items-center"
               >
-                 {files.length > 0 ? (
-                  <div className="w-full space-y-3">
-                    {files.map((fileWithQty, index) => (
-                      <PartDetailCustomer
-                        key={index}
-                        file={fileWithQty}
-                        materials={materials}
-                        onUpdateMaterial={(material) => updateFileMaterial(index, material)}
-                        onAnalyze={() => analyzeFile(fileWithQty, index)}
-                        onRemove={() => removeFile(index)}
-                      />
-                    ))}
-                    <div className="flex items-center justify-center gap-2 text-primary pt-2">
-                      <Upload className="h-5 w-5" />
-                      <span className="text-sm">Click to add more files</span>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <Upload className="h-12 w-12 text-muted-foreground mb-3" />
-                    <p className="text-sm font-medium mb-1">
-                      Click to upload or drag and drop
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      STEP, IGES, STL, SolidWorks, Inventor, CATIA, and more
-                    </p>
-                  </>
-                )}
+                <Upload className="h-12 w-12 text-muted-foreground mb-3" />
+                <p className="text-sm font-medium mb-1">
+                  {files.length > 0 ? 'Click to add more files' : 'Click to upload or drag and drop'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  STEP, IGES, STL, SolidWorks, Inventor, CATIA, and more
+                </p>
               </label>
             </div>
           </div>
