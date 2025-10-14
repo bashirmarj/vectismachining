@@ -938,6 +938,22 @@ const handler = async (req: Request): Promise<Response> => {
       file_name = body.file_name;
       file_size = body.file_size;
       quantity = body.quantity || 1;
+      
+      // Decode base64 file data if provided
+      if (body.file_data) {
+        try {
+          const base64Data = body.file_data;
+          const binaryString = atob(base64Data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          file_data = bytes.buffer;
+          console.log(`✅ Decoded base64 file data: ${(file_data.byteLength / 1024).toFixed(2)} KB`);
+        } catch (decodeError) {
+          console.error('❌ Failed to decode base64 file data:', decodeError);
+        }
+      }
     }
     
     if (!file_name || !file_size) {
