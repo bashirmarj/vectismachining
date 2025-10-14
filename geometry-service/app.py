@@ -125,9 +125,9 @@ def analyze_cad():
         primary_dims = calculate_principal_dimensions(shape, (xmin, ymin, zmin, xmax, ymax, zmax), is_cylindrical)
         
         # Tessellate shape to extract mesh data
-        # Default quality=0.98 for very high precision (0.12mm deflection)
-        # This captures internal fillets, small radii, and complex curved surfaces with high detail
-        quality = float(request.form.get('quality', 0.98))  # 0-1, higher = finer mesh
+        # Default quality=0.995 for maximum precision (0.105mm deflection)
+        # This ensures all internal curved surfaces, fillets, and complex geometry are captured with professional CAD quality
+        quality = float(request.form.get('quality', 0.995))  # 0-1, higher = finer mesh
         mesh_data = tessellate_shape(shape, quality)
         
         result = {
@@ -421,11 +421,12 @@ def tessellate_shape(shape, quality=0.5):
     """
     try:
         # Quality controls deflection (lower deflection = finer mesh)
-        # quality=0.5  -> 0.6mm deflection (coarse, fast preview)
-        # quality=0.85 -> 0.25mm deflection (good for external features)
-        # quality=0.95 -> 0.15mm deflection (captures internal fillets & small radii)
-        # quality=0.98 -> 0.12mm deflection (very high detail for complex internals - default)
-        # quality=1.0  -> 0.1mm deflection (maximum detail, slower)
+        # quality=0.5   -> 0.6mm deflection (coarse, fast preview)
+        # quality=0.85  -> 0.25mm deflection (good for external features)
+        # quality=0.95  -> 0.15mm deflection (captures internal fillets & small radii)
+        # quality=0.98  -> 0.12mm deflection (very high detail for complex internals)
+        # quality=0.995 -> 0.105mm deflection (professional CAD quality - default)
+        # quality=1.0   -> 0.1mm deflection (maximum detail, slower)
         deflection = 1.1 - quality  # Map to 0.1-0.6mm range (inverted: higher quality = lower deflection)
         
         # Create incremental mesh
