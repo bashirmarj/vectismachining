@@ -29,10 +29,6 @@ function MeshModel({ meshData }: { meshData: MeshData }) {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     geo.setIndex(meshData.indices);
-    
-    // Recompute vertex normals for smoother shading across tessellated faces
-    // This averages face normals at each vertex, eliminating visible faceting
-    geo.computeVertexNormals();
     geo.computeBoundingSphere();
     
     return geo;
@@ -40,8 +36,8 @@ function MeshModel({ meshData }: { meshData: MeshData }) {
   
   // Create edge geometry for clear visualization
   const edges = useMemo(() => {
-    // 20 degree threshold: shows design edges, hides tessellation artifacts on curved surfaces
-    return new THREE.EdgesGeometry(geometry, 20);
+    // 15 degree threshold: shows sharp design edges while hiding tessellation artifacts
+    return new THREE.EdgesGeometry(geometry, 15);
   }, [geometry]);
   
   return (
