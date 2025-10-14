@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import { Suspense, useMemo, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Box } from 'lucide-react';
@@ -35,12 +35,12 @@ function MeshModel({ meshData }: { meshData: MeshData }) {
   }, [meshData]);
   
   return (
-    <mesh geometry={geometry} castShadow receiveShadow>
-      <meshStandardMaterial 
-        color="#b0b8c0"
-        metalness={0.7}
-        roughness={0.25}
-        envMapIntensity={1.5}
+    <mesh geometry={geometry}>
+      <meshPhongMaterial 
+        color="#4a90e2"
+        specular="#ffffff"
+        shininess={30}
+        flatShading={false}
       />
     </mesh>
   );
@@ -152,34 +152,32 @@ export function CADViewer({ file, fileUrl, fileName, meshId }: CADViewerProps) {
         ) : hasValidModel ? (
           <Canvas 
             camera={{ position: [150, 150, 150], fov: 45 }} 
-            shadows
-            gl={{ antialias: true, alpha: true }}
+            gl={{ 
+              antialias: true, 
+              alpha: true,
+              preserveDrawingBuffer: true,
+              powerPreference: "high-performance"
+            }}
+            dpr={[1, 2]}
           >
             <Suspense fallback={null}>
-              {/* Lighting setup for realistic metal appearance */}
-              <ambientLight intensity={0.4} />
-              <directionalLight 
-                position={[10, 10, 5]} 
-                intensity={1.2} 
-                castShadow 
-                shadow-mapSize={[2048, 2048]}
-              />
-              <directionalLight position={[-10, -10, -5]} intensity={0.5} />
-              <hemisphereLight args={['#ffffff', '#60a5fa', 0.3]} />
-              
-              {/* Environment map for reflections */}
-              <Environment preset="studio" />
+              {/* Simple, clear lighting - no confusing shadows */}
+              <ambientLight intensity={0.6} />
+              <directionalLight position={[100, 100, 50]} intensity={0.8} />
+              <directionalLight position={[-100, -100, -50]} intensity={0.4} />
+              <pointLight position={[0, 100, 0]} intensity={0.3} />
               
               {/* 3D Model */}
               <MeshModel meshData={meshData!} />
               
-              {/* Camera controls */}
+              {/* Camera controls with smooth damping */}
               <OrbitControls 
                 makeDefault 
                 enableDamping 
                 dampingFactor={0.05}
                 minDistance={50}
                 maxDistance={500}
+                rotateSpeed={0.5}
               />
             </Suspense>
           </Canvas>
