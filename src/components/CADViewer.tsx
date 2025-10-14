@@ -34,22 +34,25 @@ function MeshModel({ meshData }: { meshData: MeshData }) {
     return geo;
   }, [meshData]);
   
-  // Create edge geometry for clear visualization
+  // Create edge geometry for sharp edges only (not smooth curves)
   const edges = useMemo(() => {
-    return new THREE.EdgesGeometry(geometry, 15); // 15 degree threshold for edges
+    return new THREE.EdgesGeometry(geometry, 25); // 25 degree threshold - only show sharp edges, not curves
   }, [geometry]);
   
   return (
     <group>
-      {/* Main solid mesh - flat color, no reflections */}
+      {/* Main solid mesh - flat color with smooth shading */}
       <mesh geometry={geometry}>
-        <meshBasicMaterial 
+        <meshPhongMaterial 
           color="#5b9bd5"
           side={THREE.DoubleSide}
+          flatShading={false}
+          shininess={5}
+          specular="#113355"
         />
       </mesh>
       
-      {/* Edge lines for clarity */}
+      {/* Edge lines for sharp edges only */}
       <lineSegments geometry={edges}>
         <lineBasicMaterial color="#1a3a52" linewidth={1} />
       </lineSegments>
