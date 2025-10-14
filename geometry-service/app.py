@@ -125,7 +125,9 @@ def analyze_cad():
         primary_dims = calculate_principal_dimensions(shape, (xmin, ymin, zmin, xmax, ymax, zmax), is_cylindrical)
         
         # Tessellate shape to extract mesh data
-        quality = float(request.form.get('quality', 0.5))  # 0-1, higher = finer mesh
+        # Default quality=0.85 for manufacturing precision (0.25mm deflection)
+        # Higher quality captures small features like holes, threads, chamfers
+        quality = float(request.form.get('quality', 0.85))  # 0-1, higher = finer mesh
         mesh_data = tessellate_shape(shape, quality)
         
         result = {
@@ -390,11 +392,12 @@ def tessellate_shape(shape, quality=0.5):
         dict with vertices, indices, normals arrays for Three.js BufferGeometry
     """
     try:
-        # Quality controls deflection (lower = finer mesh)
-        # 0.5 quality -> 0.5mm deflection (good balance)
-        # 0.1 quality -> 0.1mm deflection (very fine)
-        # 1.0 quality -> 1.0mm deflection (coarse, fast)
-        deflection = 1.0 - quality + 0.1  # Map to 0.1-1.0mm range
+        # Quality controls deflection (lower deflection = finer mesh)
+        # quality=0.5  -> 0.6mm deflection (coarse, fast preview)
+        # quality=0.85 -> 0.25mm deflection (manufacturing precision - default)
+        # quality=0.95 -> 0.15mm deflection (high detail for threads/small features)
+        # quality=1.0  -> 0.1mm deflection (maximum detail, slower)
+        deflection = 1.1 - quality  # Map to 0.1-0.6mm range (inverted: higher quality = lower deflection)
         
         # Create incremental mesh
         logger.info(f"Tessellating shape with quality={quality} (deflection={deflection}mm)")
