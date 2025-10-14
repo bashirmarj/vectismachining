@@ -408,6 +408,51 @@ def calculate_principal_dimensions(shape, bbox, is_cylindrical):
     
     return dims
 
+def calculate_face_center(triangulation, transform):
+    """Calculate centroid of face"""
+    x_sum = y_sum = z_sum = 0
+    count = triangulation.NbNodes()
+    for i in range(1, count + 1):
+        pnt = triangulation.Node(i)
+        pnt.Transform(transform)
+        x_sum += pnt.X()
+        y_sum += pnt.Y()
+        z_sum += pnt.Z()
+    return [x_sum/count, y_sum/count, z_sum/count]
+
+def get_average_face_normal(triangulation, transform, face_reversed):
+    """Calculate average normal of face"""
+    # Use first triangle's normal as representative
+    triangle = triangulation.Triangle(1)
+    n1, n2, n3 = triangle.Get()
+    
+    p1 = triangulation.Node(n1)
+    p2 = triangulation.Node(n2)
+    p3 = triangulation.Node(n3)
+    
+    p1.Transform(transform)
+    p2.Transform(transform)
+    p3.Transform(transform)
+    
+    # Cross product for normal
+    edge1 = [p2.X()-p1.X(), p2.Y()-p1.Y(), p2.Z()-p1.Z()]
+    edge2 = [p3.X()-p1.X(), p3.Y()-p1.Y(), p3.Z()-p1.Z()]
+    
+    normal = [
+        edge1[1]*edge2[2] - edge1[2]*edge2[1],
+        edge1[2]*edge2[0] - edge1[0]*edge2[2],
+        edge1[0]*edge2[1] - edge1[1]*edge2[0]
+    ]
+    
+    # Normalize and reverse if needed
+    length = math.sqrt(sum(n*n for n in normal))
+    if length > 0:
+        normal = [n/length for n in normal]
+    if face_reversed:
+        normal = [-n for n in normal]
+    
+    return normal
+
 def tessellate_shape(shape, quality=0.5):
     """
     Tessellate STEP shape into triangulated mesh for 3D rendering with face classification
@@ -480,41 +525,44 @@ def tessellate_shape(shape, quality=0.5):
             face_reversed = face.Orientation() == 1  # TopAbs_REVERSED
             surface_type = surface.GetType()
             
-            # Classify face type for Meviy-style color coding
+            # Classify face type for Meviy-style color coding with normal-based detection
             face_classification = 'external'  # Default
+            
+            # Calculate face center and normal direction
+            face_center = calculate_face_center(triangulation, transform)
+            vector_to_center = [
+                center_x - face_center[0],
+                center_y - face_center[1],
+                center_z - face_center[2]
+            ]
+            normal_vec = get_average_face_normal(triangulation, transform, face_reversed)
+            
+            # Dot product: positive = facing inward (internal), negative = facing outward
+            dot_product = sum(n * v for n, v in zip(normal_vec, vector_to_center))
             
             if surface_type == GeomAbs_Cylinder:
                 # Cylindrical surface
                 cylinder = surface.Cylinder()
-                cyl_center = cylinder.Axis().Location()
                 cyl_radius = cylinder.Radius()
                 
-                # Check if internal (small radius, inside part)
-                dist_from_center = math.sqrt(
-                    (cyl_center.X() - center_x)**2 + 
-                    (cyl_center.Y() - center_y)**2 + 
-                    (cyl_center.Z() - center_z)**2
-                )
-                
-                if cyl_radius < max_radius * 0.3 and dist_from_center < max_radius * 0.5:
+                # Internal if: small radius OR normal pointing inward
+                if cyl_radius < max_radius * 0.4 or dot_product > 0.3:
                     face_classification = 'internal'  # Internal cylindrical feature (hole)
                 else:
                     face_classification = 'cylindrical'  # External cylindrical feature
                     
             elif surface_type == GeomAbs_Plane:
-                # Planar surface
-                plane = surface.Plane()
-                normal = plane.Axis().Direction()
-                
-                # Check if it's a top/bottom face or side face
-                abs_nz = abs(normal.Z())
-                if abs_nz > 0.9:  # Mostly vertical normal
+                # Planar surface - check if internal based on normal direction
+                if dot_product > 0.5:
+                    face_classification = 'internal'
+                else:
                     face_classification = 'planar'
+            else:
+                # Other surface types (BSpline, fillets, etc.) - check if internal based on normal
+                if dot_product > 0.3:
+                    face_classification = 'internal'
                 else:
                     face_classification = 'external'
-            else:
-                # Other surface types (BSpline, etc.) - check position
-                face_classification = 'external'
             
             # Build local vertex map for this face
             face_vertex_start = current_index

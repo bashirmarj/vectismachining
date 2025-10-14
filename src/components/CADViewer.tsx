@@ -191,18 +191,19 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
             >
               <Suspense fallback={null}>
                 {/* Professional lighting setup (Phase 5) */}
-                <ambientLight intensity={0.5} />
+                <ambientLight intensity={0.6} />
                 <hemisphereLight
                   color="#ffffff"
-                  groundColor="#444444"
-                  intensity={0.4}
+                  groundColor="#666666"
+                  intensity={0.5}
                 />
-                <directionalLight position={[100, 100, 50]} intensity={0.6} />
-                <directionalLight position={[-100, -100, -50]} intensity={0.3} />
-                <pointLight position={[0, 100, 0]} intensity={0.2} />
+                <directionalLight position={[100, 100, 100]} intensity={0.7} castShadow />
+                <directionalLight position={[-50, 50, -50]} intensity={0.4} />
+                <pointLight position={[0, 100, 0]} intensity={0.3} />
+                <spotLight position={[0, 150, 0]} angle={0.3} intensity={0.5} />
                 
                 {/* Subtle environment for better material appearance */}
-                <Environment preset="city" />
+                <Environment preset="apartment" />
                 
                 {/* Auto-framed camera */}
                 <PerspectiveCamera

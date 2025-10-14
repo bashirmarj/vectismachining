@@ -59,8 +59,9 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
       const idx2 = meshData.indices[i + 1];
       const idx3 = meshData.indices[i + 2];
       
-      // Get face type from first vertex of triangle
-      const faceType = meshData.face_types[i] || 'external';
+      // Get face type for this triangle (divide by 3 to get triangle index)
+      const triangleIdx = i / 3;
+      const faceType = meshData.face_types[triangleIdx] || 'external';
       const group = typeGroups[faceType];
       const vMap = vertexMap[faceType];
       
@@ -96,6 +97,12 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
         geo.setAttribute('position', new THREE.Float32BufferAttribute(data.vertices, 3));
         geo.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3));
         geo.setIndex(data.indices);
+        
+        // Smooth normals for curved surfaces (cylindrical, external) for better appearance
+        if (type === 'cylindrical' || type === 'external') {
+          geo.computeVertexNormals();
+        }
+        
         geo.computeBoundingSphere();
         result[type] = geo;
       }
@@ -137,8 +144,10 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
             side={THREE.DoubleSide}
             clippingPlanes={clippingPlane || undefined}
             clipIntersection={false}
-            metalness={0.1}
-            roughness={0.8}
+            metalness={0.2}
+            roughness={0.6}
+            flatShading={type === 'internal' || type === 'planar'}
+            envMapIntensity={0.8}
           />
         </mesh>
       ))}
