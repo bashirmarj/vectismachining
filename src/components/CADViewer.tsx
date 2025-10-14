@@ -55,84 +55,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId }: CADViewerProps) {
   const isIGES = ['iges', 'igs'].includes(fileExtension);
   const isRenderableFormat = ['stl', 'step', 'stp', 'iges', 'igs'].includes(fileExtension);
   
-  // Parse STEP/IGES files client-side using occt-import-js (industry standard approach)
-  useEffect(() => {
-    if (!file && !fileUrl) return;
-    if (!isSTEP && !isIGES) return;
-    
-    const parseCADFile = async () => {
-      setIsLoading(true);
-      setError(null);
-      
-      try {
-        console.log(`🔧 Client-side parsing ${fileExtension.toUpperCase()} file: ${fileName}`);
-        
-        // Load the file as ArrayBuffer
-        let fileBuffer: Uint8Array;
-        if (file) {
-          const arrayBuffer = await file.arrayBuffer();
-          fileBuffer = new Uint8Array(arrayBuffer);
-        } else if (fileUrl) {
-          const response = await fetch(fileUrl);
-          const arrayBuffer = await response.arrayBuffer();
-          fileBuffer = new Uint8Array(arrayBuffer);
-        } else {
-          throw new Error('No file source provided');
-        }
-        
-        // Initialize occt-import-js using dynamic import (WASM module)
-        console.log(`📖 Parsing ${fileExtension.toUpperCase()} geometry...`);
-        const occtModule = await import('occt-import-js');
-        // @ts-ignore
-        const occtimportjs = occtModule.default || occtModule;
-        const occt = await occtimportjs();
-        
-        // Parse STEP or IGES file
-        const result = isSTEP 
-          ? occt.ReadStepFile(fileBuffer, null)
-          : occt.ReadIgesFile(fileBuffer, null);
-        
-        if (!result.success) {
-          throw new Error(`Failed to parse ${fileExtension.toUpperCase()} file`);
-        }
-        
-        console.log(`✅ Successfully parsed ${fileExtension.toUpperCase()} file:`, {
-          meshCount: result.meshes?.length || 0,
-          faceCount: result.faces?.length || 0
-        });
-        
-        // Convert occt result to mesh data
-        if (result.meshes && result.meshes.length > 0) {
-          const firstMesh = result.meshes[0];
-          
-          // Extract vertices, indices, and normals from occt mesh
-          const vertices = firstMesh.attributes.position.array;
-          const indices = firstMesh.index ? Array.from(firstMesh.index.array) : [];
-          const normals = firstMesh.attributes.normal?.array || new Float32Array(vertices.length);
-          
-          const parsedMeshData: MeshData = {
-            vertices: Array.from(vertices) as number[],
-            indices: indices as number[],
-            normals: Array.from(normals) as number[],
-            triangle_count: indices.length / 3
-          };
-          
-          console.log(`✅ Mesh data extracted: ${parsedMeshData.triangle_count} triangles`);
-          setMeshData(parsedMeshData);
-        } else {
-          throw new Error('No mesh data found in file');
-        }
-        
-      } catch (err: any) {
-        console.error(`❌ Error parsing ${fileExtension.toUpperCase()} file:`, err);
-        setError(err.message || `Failed to parse ${fileExtension.toUpperCase()} file`);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    parseCADFile();
-  }, [file, fileUrl, fileName, fileExtension, isSTEP, isIGES]);
+  // STEP/IGES files are now processed server-side via geometry service
+  // Mesh data is fetched from database using meshId (provided after server analysis)
   
   // Fetch mesh data from database when meshId is provided (for admin view)
   useEffect(() => {
@@ -201,9 +125,15 @@ export function CADViewer({ file, fileUrl, fileName, meshId }: CADViewerProps) {
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">
-              {isSTEP || isIGES ? `Parsing ${fileExtension.toUpperCase()} geometry...` : 'Loading 3D model...'}
+              {isSTEP || isIGES 
+                ? `Processing ${fileExtension.toUpperCase()} geometry on server...` 
+                : 'Loading 3D model...'}
             </p>
-            <p className="text-xs text-muted-foreground">This may take a few seconds</p>
+            <p className="text-xs text-muted-foreground">
+              {isSTEP || isIGES 
+                ? 'This may take 5-10 seconds for complex parts'
+                : 'This may take a few seconds'}
+            </p>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
