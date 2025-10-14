@@ -154,12 +154,20 @@ export function PartDetailCustomer({
             </TabsList>
 
             <TabsContent value="model" className="mt-4">
-              <CADViewer 
-                file={file.file}
-                fileName={file.file.name}
-                meshId={file.meshId}
-                detectedFeatures={file.analysis?.detected_features}
-              />
+              <div className="space-y-4">
+                <MaterialSelector
+                  value={file.material}
+                  materials={materials}
+                  onSelect={onUpdateMaterial}
+                  compact
+                />
+                <CADViewer 
+                  file={file.file}
+                  fileName={file.file.name}
+                  meshId={file.meshId}
+                  detectedFeatures={file.analysis?.detected_features}
+                />
+              </div>
             </TabsContent>
 
             <TabsContent value="features" className="mt-4">
