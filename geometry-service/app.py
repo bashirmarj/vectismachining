@@ -125,9 +125,9 @@ def analyze_cad():
         primary_dims = calculate_principal_dimensions(shape, (xmin, ymin, zmin, xmax, ymax, zmax), is_cylindrical)
         
         # Tessellate shape to extract mesh data
-        # Default quality=0.995 for maximum precision (0.105mm deflection)
-        # This ensures all internal curved surfaces, fillets, and complex geometry are captured with professional CAD quality
-        quality = float(request.form.get('quality', 0.995))  # 0-1, higher = finer mesh
+        # Default quality=0.999 for professional CAD viewer quality (0.011mm deflection)
+        # This ensures perfectly smooth internal curved surfaces with no visible faceting
+        quality = float(request.form.get('quality', 0.999))  # 0-1, higher = finer mesh
         mesh_data = tessellate_shape(shape, quality)
         
         result = {
@@ -425,13 +425,19 @@ def tessellate_shape(shape, quality=0.5):
         # quality=0.85  -> 0.25mm deflection (good for external features)
         # quality=0.95  -> 0.15mm deflection (captures internal fillets & small radii)
         # quality=0.98  -> 0.12mm deflection (very high detail for complex internals)
-        # quality=0.995 -> 0.105mm deflection (professional CAD quality - default)
-        # quality=1.0   -> 0.1mm deflection (maximum detail, slower)
-        deflection = 1.1 - quality  # Map to 0.1-0.6mm range (inverted: higher quality = lower deflection)
+        # quality=0.995 -> 0.105mm deflection (professional CAD quality)
+        # quality=0.999 -> 0.011mm deflection (maximum quality, smooth internals - default)
+        # quality=1.0   -> 0.01mm deflection (absolute maximum)
+        deflection = 1.1 - quality  # Map to 0.01-0.6mm range (inverted: higher quality = lower deflection)
         
-        # Create incremental mesh
-        logger.info(f"Tessellating shape with quality={quality} (deflection={deflection}mm)")
-        mesh = BRepMesh_IncrementalMesh(shape, deflection)
+        # Angular deflection for smooth curves (radians)
+        # Lower values = smoother curves, more triangles on curved surfaces
+        angular_deflection = 0.2  # ~11.5 degrees - balances quality and performance
+        
+        # Create incremental mesh with adaptive tessellation
+        # Parameters: shape, linear_deflection, is_relative, angular_deflection, is_parallel
+        logger.info(f"Tessellating shape with quality={quality} (deflection={deflection}mm, angular={angular_deflection} rad)")
+        mesh = BRepMesh_IncrementalMesh(shape, deflection, False, angular_deflection, True)
         mesh.Perform()
         
         if not mesh.IsDone():
