@@ -41,7 +41,7 @@ export function ViewerControls({
     <TooltipProvider>
       <div className="absolute top-4 right-4 z-20">
         {/* Glass-morphism toolbar */}
-        <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-xl p-3 shadow-2xl space-y-3">
+        <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-3 shadow-2xl space-y-3">
           {/* View Controls Section */}
           <div className="space-y-2">
             <Label className="text-[10px] font-semibold text-white/70 uppercase tracking-wider">
@@ -54,7 +54,7 @@ export function ViewerControls({
                     variant="ghost"
                     size="icon"
                     onClick={onFitView}
-                    className="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-white transition-all"
+                    className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-white transition-all"
                   >
                     <Maximize2 className="h-4 w-4" />
                   </Button>
@@ -70,7 +70,7 @@ export function ViewerControls({
                     variant="ghost"
                     size="icon"
                     onClick={onToggleSectionCut}
-                    className={`h-8 w-8 rounded-lg transition-all border ${
+                    className={`h-8 w-8 rounded-full transition-all border ${
                       showSectionCut
                         ? 'bg-primary/20 border-primary/40 text-white'
                         : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
@@ -90,7 +90,7 @@ export function ViewerControls({
                     variant="ghost"
                     size="icon"
                     onClick={onToggleEdges}
-                    className={`h-8 w-8 rounded-lg transition-all border ${
+                    className={`h-8 w-8 rounded-full transition-all border ${
                       showEdges
                         ? 'bg-primary/20 border-primary/40 text-white'
                         : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
@@ -134,7 +134,7 @@ export function ViewerControls({
                     variant="ghost"
                     size="icon"
                     onClick={() => onMeasurementModeChange(measurementMode === 'distance' ? null : 'distance')}
-                    className={`h-8 w-8 rounded-lg transition-all border ${
+                    className={`h-8 w-8 rounded-full transition-all border ${
                       measurementMode === 'distance'
                         ? 'bg-primary/20 border-primary/40 text-white'
                         : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
@@ -154,7 +154,7 @@ export function ViewerControls({
                     variant="ghost"
                     size="icon"
                     onClick={() => onMeasurementModeChange(measurementMode === 'radius' ? null : 'radius')}
-                    className={`h-8 w-8 rounded-lg transition-all border ${
+                    className={`h-8 w-8 rounded-full transition-all border ${
                       measurementMode === 'radius'
                         ? 'bg-primary/20 border-primary/40 text-white'
                         : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
@@ -174,7 +174,7 @@ export function ViewerControls({
                     variant="ghost"
                     size="icon"
                     onClick={() => onMeasurementModeChange(measurementMode === 'angle' ? null : 'angle')}
-                    className={`h-8 w-8 rounded-lg transition-all border ${
+                    className={`h-8 w-8 rounded-full transition-all border ${
                       measurementMode === 'angle'
                         ? 'bg-primary/20 border-primary/40 text-white'
                         : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'

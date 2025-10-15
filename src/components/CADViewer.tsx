@@ -171,19 +171,46 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     host.appendChild(renderer.domElement);
     
-    // Create cube with Meviy-style material
+    // Create cube with proper geometry for 3D appearance
+    const cubeGeometry = new THREE.BoxGeometry(3, 3, 3);
     const cube = new THREE.Mesh(
-      new THREE.BoxGeometry(3, 3, 3),
+      cubeGeometry,
       new THREE.MeshStandardMaterial({
         color: 0x8f98a3,
-        metalness: 0.2,
-        roughness: 0.85
+        metalness: 0.4,
+        roughness: 0.6,
+        flatShading: false // Smooth shading for depth
       })
     );
+    
+    // Add visible edge lines for 3D definition
+    const edges = new THREE.EdgesGeometry(cubeGeometry, 15);
+    const edgeLines = new THREE.LineSegments(
+      edges,
+      new THREE.LineBasicMaterial({
+        color: 0x1a1a1a, // Dark edges
+        linewidth: 2,
+        transparent: true,
+        opacity: 0.8
+      })
+    );
+    cube.add(edgeLines);
+    
     scene.add(cube);
     
-    // Ambient lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+    // Proper lighting setup for 3D depth
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+    
+    // Key light from top-right
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    keyLight.position.set(5, 5, 5);
+    scene.add(keyLight);
+    
+    // Fill light from bottom-left for softer shadows
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    fillLight.position.set(-3, -3, -3);
+    scene.add(fillLight);
     
     // Face labels helper
     const makeFaceLabel = (txt: string, pos: [number, number, number]) => {
