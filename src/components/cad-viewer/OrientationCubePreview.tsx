@@ -22,7 +22,7 @@ export function OrientationCubePreview() {
   // Helper function to classify click region (face, edge, or corner)
   const classifyClickRegion = (localPoint: THREE.Vector3) => {
     const faceDistance = 1.0; // Half the cube size (2/2)
-    const edgeThreshold = 0.3;
+    const edgeThreshold = 0.25; // Adjusted for beveled edges
     const cornerThreshold = 0.5;
     
     const absX = Math.abs(localPoint.x);
@@ -139,7 +139,67 @@ export function OrientationCubePreview() {
     cubeCamera.position.set(3, 3, 3);
     cubeCamera.lookAt(0, 0, 0);
 
-    // Add face labels with better visibility
+    // Add chamfered edges (thin rectangular meshes for edge clicking)
+    const edgeBevelSize = 0.15;
+    const edgeGeometry = new THREE.BoxGeometry(2 - edgeBevelSize * 2, edgeBevelSize, edgeBevelSize);
+    const edgeMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x909090,
+      metalness: 0.3,
+      roughness: 0.6,
+    });
+
+    // 12 edges of the cube
+    const edgePositions = [
+      // Top edges (4)
+      { pos: [0, 1 - edgeBevelSize / 2, 1 - edgeBevelSize / 2], rot: [0, 0, 0] },
+      { pos: [0, 1 - edgeBevelSize / 2, -1 + edgeBevelSize / 2], rot: [0, 0, 0] },
+      { pos: [1 - edgeBevelSize / 2, 1 - edgeBevelSize / 2, 0], rot: [0, Math.PI / 2, 0] },
+      { pos: [-1 + edgeBevelSize / 2, 1 - edgeBevelSize / 2, 0], rot: [0, Math.PI / 2, 0] },
+      // Bottom edges (4)
+      { pos: [0, -1 + edgeBevelSize / 2, 1 - edgeBevelSize / 2], rot: [0, 0, 0] },
+      { pos: [0, -1 + edgeBevelSize / 2, -1 + edgeBevelSize / 2], rot: [0, 0, 0] },
+      { pos: [1 - edgeBevelSize / 2, -1 + edgeBevelSize / 2, 0], rot: [0, Math.PI / 2, 0] },
+      { pos: [-1 + edgeBevelSize / 2, -1 + edgeBevelSize / 2, 0], rot: [0, Math.PI / 2, 0] },
+      // Vertical edges (4)
+      { pos: [1 - edgeBevelSize / 2, 0, 1 - edgeBevelSize / 2], rot: [0, 0, Math.PI / 2] },
+      { pos: [-1 + edgeBevelSize / 2, 0, 1 - edgeBevelSize / 2], rot: [0, 0, Math.PI / 2] },
+      { pos: [1 - edgeBevelSize / 2, 0, -1 + edgeBevelSize / 2], rot: [0, 0, Math.PI / 2] },
+      { pos: [-1 + edgeBevelSize / 2, 0, -1 + edgeBevelSize / 2], rot: [0, 0, Math.PI / 2] },
+    ];
+
+    edgePositions.forEach(({ pos, rot }) => {
+      const edgeMesh = new THREE.Mesh(edgeGeometry, edgeMaterial);
+      edgeMesh.position.set(pos[0], pos[1], pos[2]);
+      edgeMesh.rotation.set(rot[0], rot[1], rot[2]);
+      cube.add(edgeMesh);
+    });
+
+    // Add corner chamfers (small spheres at corners for clicking)
+    const cornerGeometry = new THREE.SphereGeometry(edgeBevelSize * 1.2, 8, 8);
+    const cornerMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x808080,
+      metalness: 0.4,
+      roughness: 0.5,
+    });
+
+    const cornerPositions = [
+      [1 - edgeBevelSize, 1 - edgeBevelSize, 1 - edgeBevelSize],
+      [1 - edgeBevelSize, 1 - edgeBevelSize, -1 + edgeBevelSize],
+      [1 - edgeBevelSize, -1 + edgeBevelSize, 1 - edgeBevelSize],
+      [1 - edgeBevelSize, -1 + edgeBevelSize, -1 + edgeBevelSize],
+      [-1 + edgeBevelSize, 1 - edgeBevelSize, 1 - edgeBevelSize],
+      [-1 + edgeBevelSize, 1 - edgeBevelSize, -1 + edgeBevelSize],
+      [-1 + edgeBevelSize, -1 + edgeBevelSize, 1 - edgeBevelSize],
+      [-1 + edgeBevelSize, -1 + edgeBevelSize, -1 + edgeBevelSize],
+    ];
+
+    cornerPositions.forEach(pos => {
+      const cornerMesh = new THREE.Mesh(cornerGeometry, cornerMaterial);
+      cornerMesh.position.set(pos[0], pos[1], pos[2]);
+      cube.add(cornerMesh);
+    });
+
+    // Add face labels using Planes instead of Sprites (fixed to face orientation)
     const faces = [
       { text: 'Front', position: [0, 0, 1], rotation: [0, 0, 0] },
       { text: 'Back', position: [0, 0, -1], rotation: [0, Math.PI, 0] },
@@ -172,19 +232,29 @@ export function OrientationCubePreview() {
       context.fillText(face.text, 256, 256);
 
       const texture = new THREE.CanvasTexture(canvas);
-      const spriteMaterial = new THREE.SpriteMaterial({ 
+      
+      // Use PlaneGeometry instead of Sprite to fix orientation to face
+      const planeGeometry = new THREE.PlaneGeometry(1.8, 1.8);
+      const planeMaterial = new THREE.MeshBasicMaterial({ 
         map: texture,
         transparent: true,
-        opacity: 1.0
+        opacity: 1.0,
+        side: THREE.DoubleSide,
+        depthTest: false,
+        depthWrite: false
       });
-      const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.position.set(
-        face.position[0] * 1.01,
-        face.position[1] * 1.01,
-        face.position[2] * 1.01
+      const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
+      
+      // Position and rotate to match face orientation
+      planeMesh.position.set(
+        face.position[0] * 1.02,
+        face.position[1] * 1.02,
+        face.position[2] * 1.02
       );
-      sprite.scale.set(0.95, 0.95, 1);
-      cube.add(sprite);
+      planeMesh.rotation.set(face.rotation[0], face.rotation[1], face.rotation[2]);
+      planeMesh.renderOrder = 999; // Render on top
+      
+      cube.add(planeMesh);
     });
 
     // Click handler for interactive orientation
@@ -300,13 +370,23 @@ export function OrientationCubePreview() {
       material.dispose();
       lineMaterial.dispose();
 
-      // Dispose all sprite materials and textures
+      // Dispose all mesh materials, textures, and geometries
       cube.children.forEach(child => {
-        if (child instanceof THREE.Sprite) {
-          if (child.material.map) {
-            child.material.map.dispose();
+        if (child instanceof THREE.Mesh) {
+          if (child.geometry) {
+            child.geometry.dispose();
           }
-          child.material.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(mat => {
+                if (mat.map) mat.map.dispose();
+                mat.dispose();
+              });
+            } else {
+              if (child.material.map) child.material.map.dispose();
+              child.material.dispose();
+            }
+          }
         }
       });
 
