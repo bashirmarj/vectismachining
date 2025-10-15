@@ -141,25 +141,36 @@ export function OrientationCubePreview() {
     const bevelRadius = 0.25; // More visible bevels
     const geometry = createBeveledBoxGeometry(2, 2, 2, bevelRadius, 3);
     const material = new THREE.MeshStandardMaterial({ 
-      color: 0xf0f0f0,
-      metalness: 0.05,
-      roughness: 0.6,
-      transparent: true,
-      opacity: 0.9
+      color: 0xfafafa, // Uniform white color
+      metalness: 0,
+      roughness: 0.4,
+      transparent: false,
+      opacity: 1
     });
     const cube = new THREE.Mesh(geometry, material);
     cubeRef.current = cube;
 
-    // Add edges (adjusted threshold for beveled geometry)
-    const edges = new THREE.EdgesGeometry(geometry, 10); // Lower threshold for more edge detail
+    // Add subtle edges
+    const edges = new THREE.EdgesGeometry(geometry, 10);
     const lineMaterial = new THREE.LineBasicMaterial({ 
-      color: 0x222222, // Darker for better contrast
+      color: 0xdddddd, // Very light gray for subtle edges
       linewidth: 1,
       transparent: true,
-      opacity: 0.8 // More opaque for better visibility
+      opacity: 0.2 // Very subtle
     });
     const line = new THREE.LineSegments(edges, lineMaterial);
     cube.add(line);
+
+    // Add blue highlight edges (initially hidden)
+    const highlightEdges = new THREE.EdgesGeometry(geometry, 10);
+    const highlightLineMaterial = new THREE.LineBasicMaterial({
+      color: 0x3b82f6, // Blue highlight
+      linewidth: 2,
+      transparent: true,
+      opacity: 0 // Initially invisible
+    });
+    const highlightLine = new THREE.LineSegments(highlightEdges, highlightLineMaterial);
+    cube.add(highlightLine);
 
     cubeScene.add(cube);
 
@@ -197,9 +208,7 @@ export function OrientationCubePreview() {
       canvas.width = 512;
       canvas.height = 512;
 
-      // Semi-transparent dark background for contrast
-      context.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      context.fillRect(0, 0, 512, 512);
+      // No background for clean look
 
       // White text with shadow for better readability
       context.shadowColor = 'rgba(0, 0, 0, 0.9)';
@@ -274,6 +283,7 @@ export function OrientationCubePreview() {
       const intersects = raycaster.intersectObject(cube, false);
       
       if (intersects.length === 0) {
+        highlightLineMaterial.opacity = 0; // Hide blue highlight
         setHoveredRegion(null);
         cubeRenderer.domElement.style.cursor = 'default';
         return;
@@ -281,12 +291,15 @@ export function OrientationCubePreview() {
       
       const hit = intersects[0];
       if (!hit || !hit.point) {
+        highlightLineMaterial.opacity = 0; // Hide blue highlight
         setHoveredRegion(null);
         return;
       }
       
       const localPoint = cube.worldToLocal(hit.point.clone());
       const region = classifyClickRegion(localPoint);
+      
+      highlightLineMaterial.opacity = 0.9; // Show blue highlight on hover
       
       setHoveredRegion({
         type: region.type,
@@ -297,6 +310,7 @@ export function OrientationCubePreview() {
     };
 
     const onMouseLeave = () => {
+      highlightLineMaterial.opacity = 0; // Hide blue highlight
       setHoveredRegion(null);
       cubeRenderer.domElement.style.cursor = 'default';
     };
@@ -345,10 +359,12 @@ export function OrientationCubePreview() {
       // Dispose geometries
       geometry.dispose();
       edges.dispose();
+      highlightEdges.dispose();
 
       // Dispose materials
       material.dispose();
       lineMaterial.dispose();
+      highlightLineMaterial.dispose();
 
       // Dispose all mesh materials, textures, and geometries
       cube.children.forEach(child => {
