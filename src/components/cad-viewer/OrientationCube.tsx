@@ -1,124 +1,80 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { RotateCw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface OrientationCubeProps {
   onViewChange: (position: [number, number, number]) => void;
+  mainCamera?: THREE.Camera;
 }
 
-export function OrientationCube({ onViewChange }: OrientationCubeProps) {
+export function OrientationCube({ onViewChange, mainCamera }: OrientationCubeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<{ scene: THREE.Scene; camera: THREE.Camera; renderer: THREE.WebGLRenderer; cube: THREE.Mesh } | null>(null);
+  const cubeRef = useRef<{ scene: THREE.Scene; camera: THREE.PerspectiveCamera; renderer: THREE.WebGLRenderer; cube: THREE.Mesh } | null>(null);
   
+  // Initialize orientation cube scene
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const host = containerRef.current;
+    if (!host) return;
     
-    const w = 120;
-    const h = 120;
+    const w = 100;
+    const h = 100;
     
-    // Create mini Three.js scene
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(35, w / h, 0.1, 100);
-    camera.position.set(3, 2.5, 4);
-    camera.lookAt(0, 0, 0);
+    const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
+    camera.position.set(0, 0, 8);
     
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    container.appendChild(renderer.domElement);
+    host.appendChild(renderer.domElement);
     
-    // Create the cube with realistic materials
-    const cubeGeometry = new THREE.BoxGeometry(2, 2, 2);
-    const cubeMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x8b92a0,
-      metalness: 0.4,
-      roughness: 0.6,
-      flatShading: true
-    });
-    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-    cube.castShadow = true;
-    cube.receiveShadow = true;
+    // Create cube with Meviy-style material
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(3, 3, 3),
+      new THREE.MeshStandardMaterial({
+        color: 0x8f98a3,
+        metalness: 0.2,
+        roughness: 0.85
+      })
+    );
     scene.add(cube);
     
-    // Add edges for definition
-    const edges = new THREE.EdgesGeometry(cubeGeometry, 15);
-    const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x3a4350, linewidth: 1.5 });
-    const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
-    cube.add(edgeLines);
+    // Ambient lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 0.9));
     
-    // Create face labels with better styling
-    const createFaceLabel = (text: string, color: string = '#ffffff') => {
+    // Face labels helper
+    const makeFaceLabel = (txt: string, pos: [number, number, number]) => {
       const canvas = document.createElement('canvas');
-      canvas.width = 256;
-      canvas.height = 256;
+      canvas.width = 128;
+      canvas.height = 64;
       const ctx = canvas.getContext('2d')!;
       
-      // Background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0)';
-      ctx.fillRect(0, 0, 256, 256);
-      
-      // Text
-      ctx.fillStyle = color;
-      ctx.font = 'bold 120px Arial';
+      ctx.fillStyle = 'rgba(0,0,0,0)';
+      ctx.fillRect(0, 0, 128, 64);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 34px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(text, 128, 128);
+      ctx.fillText(txt, 64, 32);
       
       const texture = new THREE.CanvasTexture(canvas);
-      texture.needsUpdate = true;
-      return texture;
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: texture, depthTest: false })
+      );
+      sprite.position.set(...pos);
+      sprite.scale.set(1.2, 0.6, 1);
+      cube.add(sprite);
     };
     
-    // Add labels to cube faces
-    const faceTextures = [
-      createFaceLabel('R', '#e8eaed'), // Right
-      createFaceLabel('L', '#e8eaed'), // Left  
-      createFaceLabel('T', '#e8eaed'), // Top
-      createFaceLabel('B', '#e8eaed'), // Bottom
-      createFaceLabel('F', '#e8eaed'), // Front
-      createFaceLabel('Bk', '#e8eaed'), // Back
-    ];
+    // Add face labels
+    makeFaceLabel('R', [1.6, 0, 0]);
+    makeFaceLabel('L', [-1.6, 0, 0]);
+    makeFaceLabel('T', [0, 1.6, 0]);
+    makeFaceLabel('B', [0, -1.6, 0]);
+    makeFaceLabel('F', [0, 0, 1.6]);
+    makeFaceLabel('Bk', [0, 0, -1.6]);
     
-    faceTextures.forEach((texture, i) => {
-      const spriteMat = new THREE.SpriteMaterial({ 
-        map: texture, 
-        transparent: true,
-        opacity: 0.9,
-        depthTest: false
-      });
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.scale.set(1.2, 1.2, 1);
-      
-      // Position sprites on faces
-      const positions = [
-        [1.05, 0, 0], [-1.05, 0, 0],
-        [0, 1.05, 0], [0, -1.05, 0],
-        [0, 0, 1.05], [0, 0, -1.05]
-      ];
-      sprite.position.set(positions[i][0], positions[i][1], positions[i][2]);
-      cube.add(sprite);
-    });
-    
-    // Lighting for depth
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-    
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(5, 5, 5);
-    directionalLight.castShadow = true;
-    scene.add(directionalLight);
-    
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    fillLight.position.set(-3, -2, -3);
-    scene.add(fillLight);
-    
-    // Store refs
-    sceneRef.current = { scene, camera, renderer, cube };
-    
-    // Click handler
+    // Click-to-orient
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     
@@ -128,56 +84,65 @@ export function OrientationCube({ onViewChange }: OrientationCubeProps) {
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObject(cube, false);
+      const hit = raycaster.intersectObject(cube, false)[0];
+      if (!hit || !hit.face) return;
       
-      if (intersects.length > 0) {
-        const normal = intersects[0].face?.normal.clone();
-        if (!normal) return;
-        
-        // Transform normal to world space
-        normal.applyMatrix4(new THREE.Matrix4().extractRotation(cube.matrixWorld));
-        
-        const absX = Math.abs(normal.x);
-        const absY = Math.abs(normal.y);
-        const absZ = Math.abs(normal.z);
-        
-        let viewPos: [number, number, number];
-        
-        if (absX > absY && absX > absZ) {
-          viewPos = normal.x > 0 ? [300, 0, 0] : [-300, 0, 0];
-        } else if (absY > absX && absY > absZ) {
-          viewPos = normal.y > 0 ? [0, 300, 0] : [0, -300, 0];
-        } else {
-          viewPos = normal.z > 0 ? [0, 0, 300] : [0, 0, -300];
-        }
-        
-        onViewChange(viewPos);
+      const normal = hit.face.normal.clone().normalize().negate();
+      
+      const absX = Math.abs(normal.x);
+      const absY = Math.abs(normal.y);
+      const absZ = Math.abs(normal.z);
+      
+      let viewPos: [number, number, number];
+      
+      if (absX > absY && absX > absZ) {
+        viewPos = normal.x > 0 ? [300, 0, 0] : [-300, 0, 0];
+      } else if (absY > absX && absY > absZ) {
+        viewPos = normal.y > 0 ? [0, 300, 0] : [0, -300, 0];
+      } else {
+        viewPos = normal.z > 0 ? [0, 0, 300] : [0, 0, -300];
       }
+      
+      onViewChange(viewPos);
     };
     
     renderer.domElement.addEventListener('click', onClick);
     renderer.domElement.style.cursor = 'pointer';
     
-    // Animation loop
-    let rotation = 0;
-    const animate = () => {
-      requestAnimationFrame(animate);
-      
-      // Slow rotation for visual interest
-      rotation += 0.003;
-      cube.rotation.y = rotation;
-      cube.rotation.x = Math.sin(rotation * 0.5) * 0.1;
-      
+    cubeRef.current = { scene, camera, renderer, cube };
+    
+    // Render loop
+    const render = () => {
+      requestAnimationFrame(render);
       renderer.render(scene, camera);
     };
-    animate();
+    render();
     
     return () => {
       renderer.domElement.removeEventListener('click', onClick);
-      container.removeChild(renderer.domElement);
+      host.removeChild(renderer.domElement);
       renderer.dispose();
     };
   }, [onViewChange]);
+  
+  // Sync cube orientation with main camera
+  useEffect(() => {
+    if (!mainCamera || !cubeRef.current) return;
+    
+    let animationId: number;
+    const syncOrientation = () => {
+      if (cubeRef.current?.cube && mainCamera) {
+        cubeRef.current.cube.quaternion.copy(mainCamera.quaternion);
+      }
+      animationId = requestAnimationFrame(syncOrientation);
+    };
+    
+    syncOrientation();
+    
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    };
+  }, [mainCamera]);
   
   const handleRotation = (direction: 'up' | 'down' | 'left' | 'right') => {
     const rotationMap = {
@@ -190,7 +155,7 @@ export function OrientationCube({ onViewChange }: OrientationCubeProps) {
   };
   
   return (
-    <div className="absolute top-4 right-20 z-30 flex flex-col items-center">
+    <div className="absolute bottom-5 right-5 z-30 flex flex-col items-center">
       {/* Top rotation icon */}
       <button
         onClick={() => handleRotation('up')}
@@ -210,18 +175,16 @@ export function OrientationCube({ onViewChange }: OrientationCubeProps) {
           <ChevronLeft className="w-4 h-4 text-white/70 hover:text-white" />
         </button>
         
-        {/* Cube container */}
+        {/* Cube container - Meviy style */}
         <div
           ref={containerRef}
           className="relative"
           style={{
-            width: '120px',
-            height: '120px',
-            background: 'rgba(30, 41, 59, 0.6)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(148, 163, 184, 0.2)',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
-            borderRadius: '8px',
+            width: '100px',
+            height: '100px',
+            background: 'rgba(255, 255, 255, 0.04)',
+            backdropFilter: 'blur(8px)',
+            borderRadius: '12px',
           }}
         />
         
