@@ -3,36 +3,31 @@ import * as THREE from 'three';
 import { Button } from '@/components/ui/button';
 import { Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, RotateCw, RotateCcw } from 'lucide-react';
 
-// Helper function to create a beveled box geometry
-function createBeveledBoxGeometry(
+// Helper function to create a chamfered box geometry with sharp edges
+function createChamferedBoxGeometry(
   width: number,
   height: number,
   depth: number,
-  bevelRadius: number,
-  segments: number = 3
+  chamferSize: number
 ): THREE.BufferGeometry {
   const shape = new THREE.Shape();
-  const halfWidth = width / 2 - bevelRadius;
-  const halfHeight = height / 2 - bevelRadius;
+  const halfWidth = width / 2 - chamferSize;
+  const halfHeight = height / 2 - chamferSize;
   
-  // Draw rounded rectangle
-  shape.moveTo(-halfWidth, -halfHeight + bevelRadius);
-  shape.lineTo(-halfWidth, halfHeight - bevelRadius);
-  shape.quadraticCurveTo(-halfWidth, halfHeight, -halfWidth + bevelRadius, halfHeight);
-  shape.lineTo(halfWidth - bevelRadius, halfHeight);
-  shape.quadraticCurveTo(halfWidth, halfHeight, halfWidth, halfHeight - bevelRadius);
-  shape.lineTo(halfWidth, -halfHeight + bevelRadius);
-  shape.quadraticCurveTo(halfWidth, -halfHeight, halfWidth - bevelRadius, -halfHeight);
-  shape.lineTo(-halfWidth + bevelRadius, -halfHeight);
-  shape.quadraticCurveTo(-halfWidth, -halfHeight, -halfWidth, -halfHeight + bevelRadius);
+  // Draw rectangle with straight lines (no curves for sharp chamfers)
+  shape.moveTo(-halfWidth, -halfHeight);
+  shape.lineTo(-halfWidth, halfHeight);
+  shape.lineTo(halfWidth, halfHeight);
+  shape.lineTo(halfWidth, -halfHeight);
+  shape.lineTo(-halfWidth, -halfHeight);
   
-  // Extrude settings
+  // Extrude settings with bevelSegments: 1 for sharp chamfers
   const extrudeSettings = {
-    depth: depth - bevelRadius * 2,
+    depth: depth - chamferSize * 2,
     bevelEnabled: true,
-    bevelThickness: bevelRadius,
-    bevelSize: bevelRadius,
-    bevelSegments: segments,
+    bevelThickness: chamferSize,
+    bevelSize: chamferSize,
+    bevelSegments: 1, // 1 segment = sharp chamfer, not rounded fillet
   };
   
   const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
@@ -138,10 +133,10 @@ export function OrientationCubePreview() {
     cubeScene.background = new THREE.Color(0x2a2a3a);
 
     // Create beveled cube
-    const bevelRadius = 0.25; // More visible bevels
-    const geometry = createBeveledBoxGeometry(2, 2, 2, bevelRadius, 3);
+    const chamferSize = 0.25; // Sharp chamfer size
+    const geometry = createChamferedBoxGeometry(2, 2, 2, chamferSize);
     const material = new THREE.MeshStandardMaterial({ 
-      color: 0xfafafa, // Uniform white color
+      color: 0xffffff, // Pure white
       metalness: 0,
       roughness: 0.4,
       transparent: false,
