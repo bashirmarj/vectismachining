@@ -232,16 +232,15 @@ export function OrientationCubePreview() {
       context.fillText(face.text, 256, 256);
 
       const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
       
       // Use PlaneGeometry instead of Sprite to fix orientation to face
       const planeGeometry = new THREE.PlaneGeometry(1.8, 1.8);
       const planeMaterial = new THREE.MeshBasicMaterial({ 
         map: texture,
         transparent: true,
-        opacity: 1.0,
         side: THREE.DoubleSide,
-        depthTest: false,
-        depthWrite: false
+        fog: false
       });
       const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
       
@@ -252,7 +251,6 @@ export function OrientationCubePreview() {
         face.position[2] * 1.02
       );
       planeMesh.rotation.set(face.rotation[0], face.rotation[1], face.rotation[2]);
-      planeMesh.renderOrder = 999; // Render on top
       
       cube.add(planeMesh);
     });
