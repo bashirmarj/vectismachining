@@ -19,19 +19,19 @@ export function OrientationCubePreview() {
     if (!cubeContainerRef.current) return;
 
     // Setup renderer
-    cubeRenderer.setSize(150, 150);
-    cubeRenderer.setClearColor(0x1a1a1a, 1);
+    cubeRenderer.setSize(220, 220);
+    cubeRenderer.setClearColor(0x2a2a3a, 1);
     cubeContainerRef.current.appendChild(cubeRenderer.domElement);
 
     // Setup scene
-    cubeScene.background = new THREE.Color(0x1a1a1a);
+    cubeScene.background = new THREE.Color(0x2a2a3a);
 
     // Create cube
     const geometry = new THREE.BoxGeometry(2, 2, 2);
     const material = new THREE.MeshStandardMaterial({ 
-      color: 0x606870,
-      metalness: 0.5,
-      roughness: 0.5,
+      color: 0xb0b8c0,
+      metalness: 0.2,
+      roughness: 0.7,
     });
     const cube = new THREE.Mesh(geometry, material);
     cubeRef.current = cube;
@@ -39,10 +39,10 @@ export function OrientationCubePreview() {
     // Add edges
     const edges = new THREE.EdgesGeometry(geometry);
     const lineMaterial = new THREE.LineBasicMaterial({ 
-      color: 0xffffff,
+      color: 0x000000,
       linewidth: 1,
       transparent: true,
-      opacity: 0.15
+      opacity: 0.5
     });
     const line = new THREE.LineSegments(edges, lineMaterial);
     cube.add(line);
@@ -50,7 +50,7 @@ export function OrientationCubePreview() {
     cubeScene.add(cube);
 
     // Add lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     cubeScene.add(ambientLight);
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -65,12 +65,7 @@ export function OrientationCubePreview() {
     cubeCamera.position.set(3, 3, 3);
     cubeCamera.lookAt(0, 0, 0);
 
-    // Add face labels
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d')!;
-    canvas.width = 256;
-    canvas.height = 256;
-
+    // Add face labels with better visibility
     const faces = [
       { text: 'Front', position: [0, 0, 1], rotation: [0, 0, 0] },
       { text: 'Back', position: [0, 0, -1], rotation: [0, Math.PI, 0] },
@@ -81,19 +76,32 @@ export function OrientationCubePreview() {
     ];
 
     faces.forEach(face => {
-      context.fillStyle = '#1a1a1a';
-      context.fillRect(0, 0, 256, 256);
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d')!;
+      canvas.width = 512;
+      canvas.height = 512;
+
+      // Semi-transparent dark background for contrast
+      context.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      context.fillRect(0, 0, 512, 512);
+
+      // White text with shadow for better readability
+      context.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      context.shadowBlur = 10;
+      context.shadowOffsetX = 3;
+      context.shadowOffsetY = 3;
+      
       context.fillStyle = '#ffffff';
-      context.font = 'bold 48px Arial';
+      context.font = 'bold 80px Arial';
       context.textAlign = 'center';
       context.textBaseline = 'middle';
-      context.fillText(face.text, 128, 128);
+      context.fillText(face.text, 256, 256);
 
       const texture = new THREE.CanvasTexture(canvas);
       const spriteMaterial = new THREE.SpriteMaterial({ 
         map: texture,
         transparent: true,
-        opacity: 0.9
+        opacity: 1.0
       });
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.position.set(
@@ -101,7 +109,7 @@ export function OrientationCubePreview() {
         face.position[1] * 1.01,
         face.position[2] * 1.01
       );
-      sprite.scale.set(1.5, 1.5, 1);
+      sprite.scale.set(0.95, 0.95, 1);
       cube.add(sprite);
     });
 
@@ -236,12 +244,12 @@ export function OrientationCubePreview() {
       {/* Cube Container */}
       <div 
         ref={cubeContainerRef} 
-        className="relative rounded-lg overflow-hidden"
+        className="relative rounded-lg overflow-hidden shadow-lg"
         style={{
-          width: '150px',
-          height: '150px',
-          background: 'rgba(26, 26, 26, 0.95)',
-          border: '1px solid rgba(255, 255, 255, 0.1)'
+          width: '220px',
+          height: '220px',
+          background: 'rgba(42, 42, 58, 0.95)',
+          border: '1px solid rgba(255, 255, 255, 0.15)'
         }}
       />
 
