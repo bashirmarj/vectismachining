@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import customPartsImg from "@/assets/custom-parts.jpg";
 import { PartUploadForm } from "@/components/PartUploadForm";
+import { OrientationCubePreview } from "@/components/cad-viewer/OrientationCubePreview";
 
 const CustomParts = () => {
   return (
@@ -71,6 +72,17 @@ const CustomParts = () => {
                   Request a Quote <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
+            </div>
+          </div>
+
+          {/* 3D Orientation Cube Preview */}
+          <div className="mt-16 mb-16">
+            <h2 className="mb-6 text-center">Interactive 3D Viewer Preview</h2>
+            <p className="text-lg text-muted-foreground mb-8 text-center max-w-2xl mx-auto">
+              Our 3D viewer allows you to inspect your parts from any angle. Try the controls below:
+            </p>
+            <div className="flex justify-center">
+              <OrientationCubePreview />
             </div>
           </div>
 

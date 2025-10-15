@@ -105,6 +105,23 @@ export function OrientationCubePreview() {
       cube.add(sprite);
     });
 
+    // Context loss/restore handlers
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      console.log('WebGL context lost - orientation cube');
+    };
+
+    const handleContextRestored = () => {
+      console.log('WebGL context restored - orientation cube');
+      animate();
+    };
+
+    cubeRenderer.domElement.addEventListener('webglcontextlost', handleContextLost);
+    cubeRenderer.domElement.addEventListener('webglcontextrestored', handleContextRestored);
+
     // Animation loop
     const animate = () => {
       animationFrameRef.current = requestAnimationFrame(animate);
@@ -120,9 +137,38 @@ export function OrientationCubePreview() {
     animate();
 
     return () => {
+      // Cancel animation frame
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
+
+      // Remove event listeners
+      cubeRenderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
+      cubeRenderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
+
+      // Dispose geometries
+      geometry.dispose();
+      edges.dispose();
+
+      // Dispose materials
+      material.dispose();
+      lineMaterial.dispose();
+
+      // Dispose all sprite materials and textures
+      cube.children.forEach(child => {
+        if (child instanceof THREE.Sprite) {
+          if (child.material.map) {
+            child.material.map.dispose();
+          }
+          child.material.dispose();
+        }
+      });
+
+      // Dispose renderer and force context loss
+      cubeRenderer.dispose();
+      cubeRenderer.forceContextLoss();
+
+      // Remove DOM element
       if (cubeContainerRef.current && cubeRenderer.domElement.parentNode === cubeContainerRef.current) {
         cubeContainerRef.current.removeChild(cubeRenderer.domElement);
       }
