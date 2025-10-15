@@ -165,6 +165,9 @@ def analyze_cad():
             routing_result["recommended_routings"]
         )
         
+        # Build feature tree for advanced feature display
+        feature_tree = buildFeatureTree(holes, grooves, flat_surfaces, primary_dims, is_cylindrical, width_mm, height_mm, depth_mm)
+        
         # Build enhanced result
         result = {
             'volume_cm3': round(volume_mm3 / 1000, 2),
@@ -186,6 +189,7 @@ def analyze_cad():
                 'flat_surfaces': flat_surfaces,
                 'primary_dimensions': primary_dims
             },
+            'feature_tree': feature_tree,
             'mesh_data': mesh_data,
             # Industrial routing data
             'recommended_routings': routing_result["recommended_routings"],
@@ -443,6 +447,94 @@ def calculate_principal_dimensions(shape, bbox, is_cylindrical):
         dims['length_mm'] = round(depth, 2)
     else:
         # For prismatic parts
+        dims['width_mm'] = round(width, 2)
+        dims['height_mm'] = round(height, 2)
+        dims['depth_mm'] = round(depth, 2)
+    
+    return dims
+
+def buildFeatureTree(holes, grooves, flat_surfaces, primary_dims, is_cylindrical, width_mm, height_mm, depth_mm):
+    """
+    Build a hierarchical feature tree from detected features
+    
+    Returns a structured tree with:
+    - common_dimensions: Overall part dimensions
+    - oriented_sections: Features grouped by orientation
+    """
+    feature_tree = {
+        'common_dimensions': {},
+        'oriented_sections': []
+    }
+    
+    # Common dimensions
+    if is_cylindrical:
+        diameter = primary_dims.get('major_diameter_mm', max(width_mm, height_mm))
+        length = primary_dims.get('length_mm', depth_mm)
+        feature_tree['common_dimensions'] = {
+            'type': 'cylindrical',
+            'diameter_mm': round(diameter, 2),
+            'length_mm': round(length, 2)
+        }
+    else:
+        feature_tree['common_dimensions'] = {
+            'type': 'prismatic',
+            'width_mm': round(width_mm, 2),
+            'height_mm': round(height_mm, 2),
+            'depth_mm': round(depth_mm, 2)
+        }
+    
+    # Group features by orientation
+    sections = {}
+    
+    # Add holes to sections
+    for hole in holes:
+        orientation = hole.get('orientation', 'Unknown')
+        if orientation not in sections:
+            sections[orientation] = {
+                'orientation': orientation,
+                'features': []
+            }
+        sections[orientation]['features'].append({
+            'type': 'hole',
+            'diameter_mm': hole.get('diameter_mm'),
+            'depth_mm': hole.get('depth_mm'),
+            'through': hole.get('through', False)
+        })
+    
+    # Add grooves to sections
+    for groove in grooves:
+        orientation = groove.get('orientation', 'Radial')
+        if orientation not in sections:
+            sections[orientation] = {
+                'orientation': orientation,
+                'features': []
+            }
+        sections[orientation]['features'].append({
+            'type': 'groove',
+            'inner_diameter_mm': groove.get('inner_diameter_mm'),
+            'outer_diameter_mm': groove.get('outer_diameter_mm'),
+            'depth_mm': groove.get('depth_mm')
+        })
+    
+    # Add flat surfaces to sections
+    for flat in flat_surfaces:
+        orientation = flat.get('orientation', 'Unknown')
+        if orientation not in sections:
+            sections[orientation] = {
+                'orientation': orientation,
+                'features': []
+            }
+        sections[orientation]['features'].append({
+            'type': 'flat_surface',
+            'area_mm2': flat.get('area_mm2'),
+            'width_mm': flat.get('width_mm'),
+            'length_mm': flat.get('length_mm')
+        })
+    
+    # Convert sections dict to list
+    feature_tree['oriented_sections'] = list(sections.values())
+    
+    return feature_tree
         dims['width_mm'] = round(width, 2)
         dims['height_mm'] = round(height, 2)
         dims['length_mm'] = round(depth, 2)
