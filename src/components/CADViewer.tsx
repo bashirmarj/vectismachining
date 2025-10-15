@@ -2,14 +2,13 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
 import { Suspense, useMemo, useEffect, useState, useRef } from 'react';
 import { CardContent } from '@/components/ui/card';
-import { Loader2, Box } from 'lucide-react';
+import { Loader2, Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
 import { MeshModel } from './cad-viewer/MeshModel';
 import { ViewerControls } from './cad-viewer/ViewerControls';
 import { DimensionAnnotations } from './cad-viewer/DimensionAnnotations';
-import { OrientationCube } from './cad-viewer/OrientationCube';
 import { MeasurementTool } from './cad-viewer/MeasurementTool';
 import { AutoRotate } from './cad-viewer/AutoRotate';
 
@@ -44,6 +43,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const cubeHostRef = useRef<HTMLDivElement>(null);
+  const cubeRef = useRef<{ scene: THREE.Scene; camera: THREE.PerspectiveCamera; renderer: THREE.WebGLRenderer; cube: THREE.Mesh } | null>(null);
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isSTEP = ['step', 'stp'].includes(fileExtension);
@@ -153,33 +154,169 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     }
   };
   
-  const handleViewChange = (position: [number, number, number]) => {
-    if (cameraRef.current && controlsRef.current) {
-      const duration = 1000; // Animation duration in ms
-      const startPos = cameraRef.current.position.clone();
-      const targetPos = new THREE.Vector3(
-        boundingBox.center[0] + position[0],
-        boundingBox.center[1] + position[1],
-        boundingBox.center[2] + position[2]
+  // Initialize orientation cube
+  useEffect(() => {
+    const host = cubeHostRef.current;
+    if (!host) return;
+    
+    const w = 100;
+    const h = 100;
+    
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
+    camera.position.set(0, 0, 8);
+    
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    host.appendChild(renderer.domElement);
+    
+    // Create cube with Meviy-style material
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(3, 3, 3),
+      new THREE.MeshStandardMaterial({
+        color: 0x8f98a3,
+        metalness: 0.2,
+        roughness: 0.85
+      })
+    );
+    scene.add(cube);
+    
+    // Ambient lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+    
+    // Face labels helper
+    const makeFaceLabel = (txt: string, pos: [number, number, number]) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d')!;
+      
+      ctx.fillStyle = 'rgba(0,0,0,0)';
+      ctx.fillRect(0, 0, 128, 64);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 34px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, 64, 32);
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: texture, depthTest: false })
       );
+      sprite.position.set(...pos);
+      sprite.scale.set(1.2, 0.6, 1);
+      cube.add(sprite);
+    };
+    
+    // Add face labels
+    makeFaceLabel('R', [1.6, 0, 0]);
+    makeFaceLabel('L', [-1.6, 0, 0]);
+    makeFaceLabel('T', [0, 1.6, 0]);
+    makeFaceLabel('B', [0, -1.6, 0]);
+    makeFaceLabel('F', [0, 0, 1.6]);
+    makeFaceLabel('Bk', [0, 0, -1.6]);
+    
+    // Click-to-orient
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    
+    const onClick = (e: MouseEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       
-      const startTime = Date.now();
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
-        
-        cameraRef.current.position.lerpVectors(startPos, targetPos, eased);
-        controlsRef.current.target.set(...boundingBox.center);
-        controlsRef.current.update();
-        
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        }
-      };
+      raycaster.setFromCamera(mouse, camera);
+      const hit = raycaster.intersectObject(cube, false)[0];
+      if (!hit || !hit.face) return;
       
-      animate();
+      const normal = hit.face.normal.clone().normalize().negate();
+      orientMainCameraToNormal(normal);
+    };
+    
+    renderer.domElement.addEventListener('click', onClick);
+    renderer.domElement.style.cursor = 'pointer';
+    
+    cubeRef.current = { scene, camera, renderer, cube };
+    
+    // Render loop
+    const render = () => {
+      requestAnimationFrame(render);
+      renderer.render(scene, camera);
+    };
+    render();
+    
+    return () => {
+      renderer.domElement.removeEventListener('click', onClick);
+      host.removeChild(renderer.domElement);
+      renderer.dispose();
+    };
+  }, []);
+  
+  // Sync cube orientation with main camera
+  useEffect(() => {
+    if (!cameraRef.current || !cubeRef.current) return;
+    
+    let animationId: number;
+    const syncCubeToCamera = () => {
+      if (cubeRef.current?.cube && cameraRef.current) {
+        cubeRef.current.cube.quaternion.copy(cameraRef.current.quaternion);
+      }
+      animationId = requestAnimationFrame(syncCubeToCamera);
+    };
+    
+    syncCubeToCamera();
+    
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    };
+  }, [cameraRef.current]);
+  
+  // Smooth quaternion-based camera orientation
+  const orientMainCameraToNormal = (normal: THREE.Vector3) => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    
+    const absX = Math.abs(normal.x);
+    const absY = Math.abs(normal.y);
+    const absZ = Math.abs(normal.z);
+    
+    let alignedNormal: THREE.Vector3;
+    
+    if (absX > absY && absX > absZ) {
+      alignedNormal = new THREE.Vector3(normal.x > 0 ? 1 : -1, 0, 0);
+    } else if (absY > absX && absY > absZ) {
+      alignedNormal = new THREE.Vector3(0, normal.y > 0 ? 1 : -1, 0);
+    } else {
+      alignedNormal = new THREE.Vector3(0, 0, normal.z > 0 ? 1 : -1);
     }
+    
+    const targetQuat = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 0, 1),
+      alignedNormal
+    );
+    
+    const start = cameraRef.current.quaternion.clone();
+    const dur = 500;
+    const t0 = performance.now();
+    
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / dur);
+      cameraRef.current.quaternion.slerpQuaternions(start, targetQuat, k);
+      controlsRef.current.update();
+      if (k < 1) requestAnimationFrame(step);
+    };
+    
+    requestAnimationFrame(step);
+  };
+  
+  const handleViewChange = (direction: 'up' | 'down' | 'left' | 'right') => {
+    const rotationMap = {
+      up: new THREE.Vector3(0, 1, 0),
+      down: new THREE.Vector3(0, -1, 0),
+      left: new THREE.Vector3(-1, 0, 0),
+      right: new THREE.Vector3(1, 0, 0),
+    };
+    orientMainCameraToNormal(rotationMap[direction]);
   };
   
   // Keyboard shortcuts
@@ -272,8 +409,59 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
               onFitView={handleFitView}
             />
             
-            {/* Orientation Cube - outside Canvas */}
-            <OrientationCube onViewChange={handleViewChange} />
+            {/* Orientation Cube */}
+            <div className="absolute bottom-5 right-5 z-30 flex flex-col items-center">
+              {/* Top rotation icon */}
+              <button
+                onClick={() => handleViewChange('up')}
+                className="mb-1 p-1 hover:bg-white/10 rounded transition-colors"
+                title="View from top"
+              >
+                <ChevronUp className="w-4 h-4 text-white/70 hover:text-white" />
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {/* Left rotation */}
+                <button
+                  onClick={() => handleViewChange('left')}
+                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                  title="View from left"
+                >
+                  <ChevronLeft className="w-4 h-4 text-white/70 hover:text-white" />
+                </button>
+                
+                {/* Cube container - Meviy style */}
+                <div
+                  ref={cubeHostRef}
+                  className="relative"
+                  style={{
+                    width: '100px',
+                    height: '100px',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    backdropFilter: 'blur(8px)',
+                    borderRadius: '12px',
+                  }}
+                />
+                
+                {/* Right rotation */}
+                <button
+                  onClick={() => handleViewChange('right')}
+                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                  title="View from right"
+                >
+                  <ChevronRight className="w-4 h-4 text-white/70 hover:text-white" />
+                </button>
+              </div>
+              
+              {/* Bottom rotation icon */}
+              <button
+                onClick={() => handleViewChange('down')}
+                className="mt-1 p-1 hover:bg-white/10 rounded transition-colors"
+                title="View from bottom"
+              >
+                <ChevronDown className="w-4 h-4 text-white/70 hover:text-white" />
+              </button>
+            </div>
             
             {/* Vectis Manufacturing Watermark */}
             <div className="absolute bottom-4 left-4 z-10 text-xs text-white/30 font-medium">
