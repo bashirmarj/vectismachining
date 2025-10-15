@@ -135,29 +135,29 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
   }, [showSectionCut, sectionPosition]);
   
   return (
-    <group>
+    <group castShadow receiveShadow>
       {/* Render each face type with its specific color */}
       {Object.entries(geometries).map(([type, geo]) => (
         <group key={type}>
           {/* Main colored mesh */}
-          <mesh geometry={geo}>
+          <mesh geometry={geo} castShadow receiveShadow>
             <meshStandardMaterial
               color={FACE_COLORS[type as keyof typeof FACE_COLORS] || FACE_COLORS.external}
               side={THREE.DoubleSide}
               clippingPlanes={clippingPlane || undefined}
               clipIntersection={false}
-              metalness={0.1}
-              roughness={0.65}
+              metalness={0.15}
+              roughness={0.6}
               transparent={true}
-              opacity={0.92}
-              envMapIntensity={0.3}
+              opacity={0.95}
+              envMapIntensity={0.4}
             />
           </mesh>
           
           {/* Silhouette outline for crisp contours */}
-          <mesh geometry={geo} scale={1.001}>
+          <mesh geometry={geo} scale={1.002} castShadow>
             <meshBasicMaterial
-              color="#000000"
+              color="#0a0a0a"
               side={THREE.BackSide}
               clippingPlanes={clippingPlane || undefined}
               clipIntersection={false}

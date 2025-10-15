@@ -11,6 +11,7 @@ import { ViewerControls } from './cad-viewer/ViewerControls';
 import { DimensionAnnotations } from './cad-viewer/DimensionAnnotations';
 import { OrientationCube } from './cad-viewer/OrientationCube';
 import { MeasurementTool } from './cad-viewer/MeasurementTool';
+import { AutoRotate } from './cad-viewer/AutoRotate';
 
 interface CADViewerProps {
   file?: File;
@@ -33,14 +34,16 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   const [error, setError] = useState<string | null>(null);
   const [meshData, setMeshData] = useState<MeshData | null>(null);
   
-  // Professional viewer controls (Phase 3, 4, 5)
+  // Professional viewer controls
   const [showSectionCut, setShowSectionCut] = useState(false);
   const [sectionPosition, setSectionPosition] = useState(0);
   const [showEdges, setShowEdges] = useState(true);
   const [showDimensions, setShowDimensions] = useState(false);
   const [measurementMode, setMeasurementMode] = useState<'distance' | 'angle' | 'radius' | null>(null);
+  const [isIdle, setIsIdle] = useState(false);
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
+  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isSTEP = ['step', 'stp'].includes(fileExtension);
@@ -152,15 +155,68 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   
   const handleViewChange = (position: [number, number, number]) => {
     if (cameraRef.current && controlsRef.current) {
-      cameraRef.current.position.set(
+      const duration = 1000; // Animation duration in ms
+      const startPos = cameraRef.current.position.clone();
+      const targetPos = new THREE.Vector3(
         boundingBox.center[0] + position[0],
         boundingBox.center[1] + position[1],
         boundingBox.center[2] + position[2]
       );
-      controlsRef.current.target.set(...boundingBox.center);
-      controlsRef.current.update();
+      
+      const startTime = Date.now();
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
+        
+        cameraRef.current.position.lerpVectors(startPos, targetPos, eased);
+        controlsRef.current.target.set(...boundingBox.center);
+        controlsRef.current.update();
+        
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        }
+      };
+      
+      animate();
     }
   };
+  
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        handleFitView();
+      } else if (e.code === 'KeyE') {
+        setShowEdges(!showEdges);
+      } else if (e.code === 'KeyM') {
+        setMeasurementMode(measurementMode ? null : 'distance');
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [showEdges, measurementMode]);
+  
+  // Idle detection for auto-rotation
+  useEffect(() => {
+    const resetIdleTimer = () => {
+      setIsIdle(false);
+      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
+      idleTimeoutRef.current = setTimeout(() => setIsIdle(true), 5000);
+    };
+    
+    window.addEventListener('mousemove', resetIdleTimer);
+    window.addEventListener('mousedown', resetIdleTimer);
+    resetIdleTimer();
+    
+    return () => {
+      window.removeEventListener('mousemove', resetIdleTimer);
+      window.removeEventListener('mousedown', resetIdleTimer);
+      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
+    };
+  }, []);
   
   return (
     <div className="h-full bg-white rounded-lg overflow-hidden">
@@ -193,7 +249,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
             </Button>
           </div>
         ) : hasValidModel ? (
-          <div className="relative h-full bg-gradient-to-br from-slate-50 to-white">
+          <div className="relative h-full" style={{ background: 'linear-gradient(180deg, #202020 0%, #1b1b1b 100%)' }}>
             <ViewerControls
               showSectionCut={showSectionCut}
               onToggleSectionCut={() => setShowSectionCut(!showSectionCut)}
@@ -209,7 +265,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
             />
             
             {/* Vectis Manufacturing Watermark */}
-            <div className="absolute bottom-4 right-4 z-10 text-xs text-muted-foreground/60">
+            <div className="absolute bottom-4 left-4 z-10 text-xs text-white/30 font-medium">
               Vectis Manufacturing | Automating Precision
             </div>
             
@@ -221,21 +277,38 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                 preserveDrawingBuffer: true,
                 powerPreference: "high-performance",
                 localClippingEnabled: true,
+                toneMapping: THREE.ACESFilmicToneMapping,
+                toneMappingExposure: 1.2,
               }}
               dpr={[1, 2]}
             >
               <Suspense fallback={null}>
-                {/* Professional lighting setup */}
-                <ambientLight intensity={0.8} />
-                <directionalLight position={[5, 5, 5]} intensity={0.6} />
-                <directionalLight position={[-5, 3, -5]} intensity={0.4} />
-                <hemisphereLight groundColor="#f0f0f0" intensity={0.5} />
+                {/* Professional dark scene lighting */}
+                <color attach="background" args={['#1b1b1b']} />
+                <fog attach="fog" args={['#1b1b1b', 300, 1000]} />
                 
-                {/* Subtle grid for reference */}
-                <gridHelper args={[500, 50, '#cccccc', '#e0e0e0']} position={[0, -boundingBox.height / 2 - 10, 0]} />
+                {/* Multi-point lighting for industrial look */}
+                <ambientLight intensity={0.4} />
+                <directionalLight
+                  position={[10, 10, 5]}
+                  intensity={0.8}
+                  castShadow
+                  shadow-mapSize-width={2048}
+                  shadow-mapSize-height={2048}
+                />
+                <directionalLight position={[-10, 5, -5]} intensity={0.3} />
+                <hemisphereLight args={['#ffffff', '#3a3a3a', 0.3]} />
                 
-                {/* Environment */}
-                <Environment preset="studio" />
+                {/* Subtle grid (faint gray) */}
+                <gridHelper
+                  args={[500, 50, '#3a3a3a', '#3a3a3a']}
+                  position={[0, -boundingBox.height / 2 - 10, 0]}
+                  material-opacity={0.25}
+                  material-transparent
+                />
+                
+                {/* Environment for reflections */}
+                <Environment preset="city" />
                 
                 {/* Auto-framed camera */}
                 <PerspectiveCamera
@@ -249,13 +322,25 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   fov={45}
                 />
                 
-                {/* 3D Model with Meviy-style color classification */}
-                <MeshModel
-                  meshData={meshData!}
-                  showSectionCut={showSectionCut}
-                  sectionPosition={sectionPosition}
-                  showEdges={showEdges}
-                />
+                {/* 3D Model with auto-rotation when idle */}
+                <AutoRotate enabled={isIdle}>
+                  <MeshModel
+                    meshData={meshData!}
+                    showSectionCut={showSectionCut}
+                    sectionPosition={sectionPosition}
+                    showEdges={showEdges}
+                  />
+                </AutoRotate>
+                
+                {/* Soft contact shadow */}
+                <mesh
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  position={[0, -boundingBox.height / 2 - 10.5, 0]}
+                  receiveShadow
+                >
+                  <planeGeometry args={[boundingBox.width * 3, boundingBox.depth * 3]} />
+                  <shadowMaterial opacity={0.15} />
+                </mesh>
                 
                 {/* Dimension Annotations */}
                 {showDimensions && detectedFeatures && (
@@ -274,18 +359,19 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                 {/* Orientation Cube */}
                 <OrientationCube onViewChange={handleViewChange} />
                 
-                {/* Camera controls */}
+                {/* Camera controls with damping and inertia */}
                 <OrbitControls
                   ref={controlsRef}
                   makeDefault
                   target={boundingBox.center}
                   enableDamping
-                  dampingFactor={0.05}
-                  minDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth)}
+                  dampingFactor={0.08}
+                  minDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.5}
                   maxDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 5}
-                  rotateSpeed={0.5}
+                  rotateSpeed={0.6}
                   panSpeed={0.8}
                   zoomSpeed={1.2}
+                  enabled={!isIdle}
                 />
               </Suspense>
             </Canvas>

@@ -2,8 +2,14 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { Scissors, Grid3x3, Ruler, Maximize2, Move3D, Circle } from 'lucide-react';
-import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { useState, useEffect } from 'react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface ViewerControlsProps {
   showSectionCut: boolean;
@@ -32,105 +38,190 @@ export function ViewerControls({
   onMeasurementModeChange,
   onFitView,
 }: ViewerControlsProps) {
+  const [isVisible, setIsVisible] = useState(true);
+  const [hideTimeout, setHideTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setIsVisible(false), 3000);
+    setHideTimeout(timeout);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  const handleMouseEnter = () => {
+    setIsVisible(true);
+    if (hideTimeout) clearTimeout(hideTimeout);
+  };
+
+  const handleMouseLeave = () => {
+    const timeout = setTimeout(() => setIsVisible(false), 3000);
+    setHideTimeout(timeout);
+  };
+
   return (
-    <Card className="absolute top-4 right-4 p-4 bg-background/95 backdrop-blur z-10 space-y-4 w-72 shadow-lg">
-      <div className="space-y-3">
-        <Label className="text-sm font-semibold">View Controls</Label>
-        
-        {/* Primary view controls */}
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant={showEdges ? "default" : "outline"}
-            size="sm"
-            onClick={onToggleEdges}
-          >
-            <Grid3x3 className="h-4 w-4 mr-1.5" />
-            Edges
-          </Button>
-          
-          <Button
-            variant={showSectionCut ? "default" : "outline"}
-            size="sm"
-            onClick={onToggleSectionCut}
-          >
-            <Scissors className="h-4 w-4 mr-1.5" />
-            Section
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onFitView}
-          >
-            <Maximize2 className="h-4 w-4 mr-1.5" />
-            Fit View
-          </Button>
-          
-          <Button
-            variant={showDimensions ? "default" : "outline"}
-            size="sm"
-            onClick={onToggleDimensions}
-          >
-            <Ruler className="h-4 w-4 mr-1.5" />
-            Dims
-          </Button>
-        </div>
-        
-        {showSectionCut && (
-          <>
-            <Separator />
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Section Position</Label>
-              <Slider
-                value={[sectionPosition]}
-                onValueChange={(values) => onSectionPositionChange(values[0])}
-                min={-200}
-                max={200}
-                step={1}
-                className="w-full"
-              />
+    <TooltipProvider>
+      <div
+        className={`absolute top-4 right-4 z-20 transition-all duration-300 ${
+          isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'
+        }`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* Glass-morphism toolbar */}
+        <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-xl p-3 shadow-2xl space-y-3">
+          {/* View Controls Section */}
+          <div className="space-y-2">
+            <Label className="text-[10px] font-semibold text-white/70 uppercase tracking-wider">
+              View Controls
+            </Label>
+            <div className="flex gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onFitView}
+                    className="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-white transition-all"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="bg-black/90 text-white border-white/20">
+                  <p className="text-xs">Fit View (Space)</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onToggleSectionCut}
+                    className={`h-8 w-8 rounded-lg transition-all border ${
+                      showSectionCut
+                        ? 'bg-primary/20 border-primary/40 text-white'
+                        : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
+                    }`}
+                  >
+                    <Scissors className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="bg-black/90 text-white border-white/20">
+                  <p className="text-xs">Section Cut</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onToggleEdges}
+                    className={`h-8 w-8 rounded-lg transition-all border ${
+                      showEdges
+                        ? 'bg-primary/20 border-primary/40 text-white'
+                        : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
+                    }`}
+                  >
+                    <Grid3x3 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="bg-black/90 text-white border-white/20">
+                  <p className="text-xs">Toggle Edges (E)</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
-          </>
-        )}
-        
-        <Separator />
-        
-        {/* Measurement tools */}
-        <div className="space-y-2">
-          <Label className="text-sm font-semibold">Measurement Tools</Label>
-          <div className="grid grid-cols-3 gap-2">
-            <Button
-              variant={measurementMode === 'distance' ? "default" : "outline"}
-              size="sm"
-              onClick={() => onMeasurementModeChange(measurementMode === 'distance' ? null : 'distance')}
-            >
-              <Move3D className="h-4 w-4" />
-            </Button>
-            
-            <Button
-              variant={measurementMode === 'radius' ? "default" : "outline"}
-              size="sm"
-              onClick={() => onMeasurementModeChange(measurementMode === 'radius' ? null : 'radius')}
-            >
-              <Circle className="h-4 w-4" />
-            </Button>
-            
-            <Button
-              variant={measurementMode === 'angle' ? "default" : "outline"}
-              size="sm"
-              onClick={() => onMeasurementModeChange(measurementMode === 'angle' ? null : 'angle')}
-            >
-              <Ruler className="h-4 w-4" />
-            </Button>
+
+            {showSectionCut && (
+              <div className="pt-2 space-y-1.5">
+                <Label className="text-[9px] text-white/60">Section Position</Label>
+                <Slider
+                  value={[sectionPosition]}
+                  onValueChange={(values) => onSectionPositionChange(values[0])}
+                  min={-200}
+                  max={200}
+                  step={1}
+                  className="w-32"
+                />
+              </div>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {measurementMode === 'distance' && 'Click two points to measure distance'}
-            {measurementMode === 'radius' && 'Click circular edge to measure radius'}
-            {measurementMode === 'angle' && 'Click two edges to measure angle'}
-            {!measurementMode && 'Select a measurement tool'}
-          </p>
+
+          <Separator className="bg-white/10" />
+
+          {/* Measurement Tools Section */}
+          <div className="space-y-2">
+            <Label className="text-[10px] font-semibold text-white/70 uppercase tracking-wider">
+              Measurement Tools
+            </Label>
+            <div className="flex gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onMeasurementModeChange(measurementMode === 'distance' ? null : 'distance')}
+                    className={`h-8 w-8 rounded-lg transition-all border ${
+                      measurementMode === 'distance'
+                        ? 'bg-primary/20 border-primary/40 text-white'
+                        : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
+                    }`}
+                  >
+                    <Move3D className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="bg-black/90 text-white border-white/20">
+                  <p className="text-xs">Distance (M)</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onMeasurementModeChange(measurementMode === 'radius' ? null : 'radius')}
+                    className={`h-8 w-8 rounded-lg transition-all border ${
+                      measurementMode === 'radius'
+                        ? 'bg-primary/20 border-primary/40 text-white'
+                        : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
+                    }`}
+                  >
+                    <Circle className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="bg-black/90 text-white border-white/20">
+                  <p className="text-xs">Diameter</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onMeasurementModeChange(measurementMode === 'angle' ? null : 'angle')}
+                    className={`h-8 w-8 rounded-lg transition-all border ${
+                      measurementMode === 'angle'
+                        ? 'bg-primary/20 border-primary/40 text-white'
+                        : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
+                    }`}
+                  >
+                    <Ruler className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="bg-black/90 text-white border-white/20">
+                  <p className="text-xs">Angle</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
         </div>
+
+        {/* Hover indicator when hidden */}
+        {!isVisible && (
+          <div className="absolute top-0 right-0 w-1 h-full bg-white/20 rounded-r-full animate-pulse" />
+        )}
       </div>
-    </Card>
+    </TooltipProvider>
   );
 }
