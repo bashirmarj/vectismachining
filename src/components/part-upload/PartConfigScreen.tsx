@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronLeft, Info, Edit2, Trash2, Plus, ChevronDown, Package, DollarSign, Clock } from "lucide-react";
+import { ChevronLeft, Info, ChevronDown, Package, DollarSign, Clock } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { CADViewer } from "../CADViewer";
@@ -12,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
+import { RoutingEditor } from "./RoutingEditor";
 
 interface FileWithData {
   file: File;
@@ -181,49 +181,19 @@ export const PartConfigScreen = ({
             <Separator className="bg-border/60" />
 
             {/* Routing Editor */}
-            <Collapsible defaultOpen>
-              <CollapsibleTrigger className="flex items-center justify-between w-full group">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Process Routing
-                </Label>
-                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2 mt-3">
-                <div className="space-y-2">
-                  {selectedFile.process ? (
-                    <div className="flex items-center justify-between p-2.5 bg-muted/50 rounded-md border border-border/50">
-                      <span className="text-sm font-medium">{selectedFile.process}</span>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground italic">No process selected</p>
-                  )}
-                  
-                  <Select
-                    value={selectedFile.process}
-                    onValueChange={(value) => onUpdateFile(selectedFileIndex, { process: value })}
-                  >
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Add process routing" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-background z-50">
-                      {processes.map((process) => (
-                        <SelectItem key={process} value={process} className="text-sm">
-                          {process}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            <RoutingEditor
+              routings={selectedFile.analysis?.recommended_routings || (selectedFile.process ? [selectedFile.process] : [])}
+              onRoutingsChange={(routings) => {
+                onUpdateFile(selectedFileIndex, { 
+                  process: routings[0] || '',
+                  analysis: {
+                    ...selectedFile.analysis,
+                    recommended_routings: routings
+                  }
+                });
+              }}
+              analysisReasoning={selectedFile.analysis?.routing_reasoning}
+            />
 
             <Separator className="bg-border/60" />
 

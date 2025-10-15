@@ -1,7 +1,7 @@
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
 import { Suspense, useMemo, useEffect, useState, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CardContent } from '@/components/ui/card';
 import { Loader2, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import * as THREE from 'three';
@@ -185,13 +185,21 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      // Ignore if typing in input fields
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
       if (e.code === 'Space') {
         e.preventDefault();
         handleFitView();
       } else if (e.code === 'KeyE') {
+        e.preventDefault();
         setShowEdges(!showEdges);
       } else if (e.code === 'KeyM') {
+        e.preventDefault();
         setMeasurementMode(measurementMode ? null : 'distance');
+      } else if (e.code === 'Escape') {
+        e.preventDefault();
+        setMeasurementMode(null);
       }
     };
     
