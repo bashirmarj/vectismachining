@@ -198,12 +198,10 @@ export function OrientationCubePreview() {
     cubeScene.background = new THREE.Color(0x2a2a3a);
 
     // Create beveled cube
-    const chamferSize = 0.25; // Sharp chamfer size
+    const chamferSize = 0.5; // Sharp chamfer size (2x larger)
     const geometry = createChamferedBoxGeometry(2, 2, 2, chamferSize);
-    const material = new THREE.MeshStandardMaterial({ 
-      color: 0xffffff, // Pure white
-      metalness: 0,
-      roughness: 0.4,
+    const material = new THREE.MeshBasicMaterial({ 
+      color: 0xffffff, // Pure solid white
       transparent: false,
       opacity: 1
     });
@@ -213,10 +211,10 @@ export function OrientationCubePreview() {
     // Add subtle edges
     const edges = new THREE.EdgesGeometry(geometry, 10);
     const lineMaterial = new THREE.LineBasicMaterial({ 
-      color: 0xdddddd, // Very light gray for subtle edges
+      color: 0xcccccc, // Slightly darker gray for better visibility
       linewidth: 1,
       transparent: true,
-      opacity: 0.2 // Very subtle
+      opacity: 0.3 // Slightly more visible
     });
     const line = new THREE.LineSegments(edges, lineMaterial);
     cube.add(line);
