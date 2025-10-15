@@ -275,13 +275,6 @@ export function OrientationCubePreview() {
     // Animation loop
     const animate = () => {
       animationFrameRef.current = requestAnimationFrame(animate);
-      
-      // Auto-rotate the cube slowly
-      if (cubeRef.current) {
-        cubeRef.current.rotation.y += 0.003;
-        cubeRef.current.rotation.x += 0.001;
-      }
-      
       cubeRenderer.render(cubeScene, cubeCamera);
     };
     animate();
