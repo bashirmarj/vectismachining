@@ -138,7 +138,7 @@ export function OrientationCubePreview() {
     cubeScene.background = new THREE.Color(0x2a2a3a);
 
     // Create beveled cube
-    const bevelRadius = 0.15;
+    const bevelRadius = 0.25; // More visible bevels
     const geometry = createBeveledBoxGeometry(2, 2, 2, bevelRadius, 3);
     const material = new THREE.MeshStandardMaterial({ 
       color: 0xf0f0f0,
@@ -151,12 +151,12 @@ export function OrientationCubePreview() {
     cubeRef.current = cube;
 
     // Add edges (adjusted threshold for beveled geometry)
-    const edges = new THREE.EdgesGeometry(geometry, 15);
+    const edges = new THREE.EdgesGeometry(geometry, 10); // Lower threshold for more edge detail
     const lineMaterial = new THREE.LineBasicMaterial({ 
-      color: 0x444444,
+      color: 0x222222, // Darker for better contrast
       linewidth: 1,
       transparent: true,
-      opacity: 0.6
+      opacity: 0.8 // More opaque for better visibility
     });
     const line = new THREE.LineSegments(edges, lineMaterial);
     cube.add(line);
