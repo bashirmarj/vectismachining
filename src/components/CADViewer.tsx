@@ -272,6 +272,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
               onFitView={handleFitView}
             />
             
+            {/* Orientation Cube - outside Canvas */}
+            <OrientationCube onViewChange={handleViewChange} />
+            
             {/* Vectis Manufacturing Watermark */}
             <div className="absolute bottom-4 left-4 z-10 text-xs text-white/30 font-medium">
               Vectis Manufacturing | Automating Precision
@@ -363,9 +366,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   enabled={measurementMode !== null}
                   mode={measurementMode}
                 />
-                
-                {/* Orientation Cube */}
-                <OrientationCube onViewChange={handleViewChange} />
                 
                 {/* Camera controls with damping and inertia */}
                 <OrbitControls
