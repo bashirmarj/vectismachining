@@ -14,6 +14,80 @@ export function OrientationCubePreview() {
   }));
   const cubeRef = useRef<THREE.Mesh | null>(null);
   const animationFrameRef = useRef<number>();
+  const [hoveredRegion, setHoveredRegion] = useState<{
+    type: 'face' | 'edge' | 'corner';
+    description: string;
+  } | null>(null);
+
+  // Helper function to classify click region (face, edge, or corner)
+  const classifyClickRegion = (localPoint: THREE.Vector3) => {
+    const faceDistance = 1.0; // Half the cube size (2/2)
+    const edgeThreshold = 0.3;
+    const cornerThreshold = 0.5;
+    
+    const absX = Math.abs(localPoint.x);
+    const absY = Math.abs(localPoint.y);
+    const absZ = Math.abs(localPoint.z);
+    
+    const nearMaxX = absX > (faceDistance - edgeThreshold);
+    const nearMaxY = absY > (faceDistance - edgeThreshold);
+    const nearMaxZ = absZ > (faceDistance - edgeThreshold);
+    
+    const edgeCount = [nearMaxX, nearMaxY, nearMaxZ].filter(Boolean).length;
+    
+    // CORNER: All 3 dimensions near maximum
+    if (edgeCount === 3) {
+      const direction = new THREE.Vector3(
+        Math.sign(localPoint.x),
+        Math.sign(localPoint.y),
+        Math.sign(localPoint.z)
+      ).normalize();
+      
+      return {
+        type: 'corner' as const,
+        direction,
+        description: `Corner (${Math.sign(localPoint.x) > 0 ? '+' : '-'}X, ${Math.sign(localPoint.y) > 0 ? '+' : '-'}Y, ${Math.sign(localPoint.z) > 0 ? '+' : '-'}Z)`
+      };
+    }
+    
+    // EDGE: Exactly 2 dimensions near maximum
+    else if (edgeCount === 2) {
+      const direction = new THREE.Vector3(
+        nearMaxX ? Math.sign(localPoint.x) : 0,
+        nearMaxY ? Math.sign(localPoint.y) : 0,
+        nearMaxZ ? Math.sign(localPoint.z) : 0
+      ).normalize();
+      
+      return {
+        type: 'edge' as const,
+        direction,
+        description: 'Edge view'
+      };
+    }
+    
+    // FACE: Only 1 dimension near maximum
+    else {
+      if (absX > absY && absX > absZ) {
+        return {
+          type: 'face' as const,
+          direction: new THREE.Vector3(Math.sign(localPoint.x), 0, 0),
+          description: Math.sign(localPoint.x) > 0 ? 'Right' : 'Left'
+        };
+      } else if (absY > absX && absY > absZ) {
+        return {
+          type: 'face' as const,
+          direction: new THREE.Vector3(0, Math.sign(localPoint.y), 0),
+          description: Math.sign(localPoint.y) > 0 ? 'Top' : 'Bottom'
+        };
+      } else {
+        return {
+          type: 'face' as const,
+          direction: new THREE.Vector3(0, 0, Math.sign(localPoint.z)),
+          description: Math.sign(localPoint.z) > 0 ? 'Front' : 'Back'
+        };
+      }
+    }
+  };
 
   useEffect(() => {
     if (!cubeContainerRef.current) return;
@@ -113,6 +187,74 @@ export function OrientationCubePreview() {
       cube.add(sprite);
     });
 
+    // Click handler for interactive orientation
+    const onClick = (e: MouseEvent) => {
+      const rect = cubeRenderer.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, cubeCamera);
+      const intersects = raycaster.intersectObject(cube, false);
+      
+      if (intersects.length === 0) return;
+      
+      const hit = intersects[0];
+      if (!hit || !hit.point) return;
+      
+      const localPoint = cube.worldToLocal(hit.point.clone());
+      const region = classifyClickRegion(localPoint);
+      
+      console.log(`Clicked ${region.type}: ${region.description}`);
+      orientCameraToDirection(region.direction);
+    };
+
+    // Hover handler for visual feedback
+    const onMouseMove = (e: MouseEvent) => {
+      const rect = cubeRenderer.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, cubeCamera);
+      const intersects = raycaster.intersectObject(cube, false);
+      
+      if (intersects.length === 0) {
+        setHoveredRegion(null);
+        cubeRenderer.domElement.style.cursor = 'default';
+        return;
+      }
+      
+      const hit = intersects[0];
+      if (!hit || !hit.point) {
+        setHoveredRegion(null);
+        return;
+      }
+      
+      const localPoint = cube.worldToLocal(hit.point.clone());
+      const region = classifyClickRegion(localPoint);
+      
+      setHoveredRegion({
+        type: region.type,
+        description: region.description
+      });
+      
+      cubeRenderer.domElement.style.cursor = 'pointer';
+    };
+
+    const onMouseLeave = () => {
+      setHoveredRegion(null);
+      cubeRenderer.domElement.style.cursor = 'default';
+    };
+
+    cubeRenderer.domElement.addEventListener('click', onClick);
+    cubeRenderer.domElement.addEventListener('mousemove', onMouseMove);
+    cubeRenderer.domElement.addEventListener('mouseleave', onMouseLeave);
+
     // Context loss/restore handlers
     const handleContextLost = (e: Event) => {
       e.preventDefault();
@@ -151,6 +293,9 @@ export function OrientationCubePreview() {
       }
 
       // Remove event listeners
+      cubeRenderer.domElement.removeEventListener('click', onClick);
+      cubeRenderer.domElement.removeEventListener('mousemove', onMouseMove);
+      cubeRenderer.domElement.removeEventListener('mouseleave', onMouseLeave);
       cubeRenderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
       cubeRenderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
 
@@ -185,8 +330,22 @@ export function OrientationCubePreview() {
 
   const orientCameraToDirection = (direction: THREE.Vector3) => {
     const distance = 5;
-    cubeCamera.position.copy(direction.multiplyScalar(distance));
-    cubeCamera.lookAt(0, 0, 0);
+    const target = new THREE.Vector3(0, 0, 0);
+    
+    // Calculate new position
+    const newPosition = target.clone().add(
+      direction.clone().normalize().multiplyScalar(distance)
+    );
+    
+    // Handle up vector for top/bottom views
+    const up = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(direction.y) > 0.99) {
+      up.set(0, 0, direction.y > 0 ? 1 : -1);
+    }
+    
+    cubeCamera.position.copy(newPosition);
+    cubeCamera.up.copy(up);
+    cubeCamera.lookAt(target);
     cubeCamera.updateProjectionMatrix();
   };
 
@@ -252,6 +411,25 @@ export function OrientationCubePreview() {
           border: '1px solid rgba(255, 255, 255, 0.15)'
         }}
       />
+
+      {/* Hover tooltip */}
+      {hoveredRegion && (
+        <div 
+          className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-md text-xs font-medium text-white whitespace-nowrap pointer-events-none z-50"
+          style={{
+            background: 'rgba(0, 0, 0, 0.9)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+          }}
+        >
+          {hoveredRegion.description}
+          <div className="text-[10px] text-white/60 mt-0.5">
+            {hoveredRegion.type === 'face' && 'Orthogonal view'}
+            {hoveredRegion.type === 'edge' && 'Two-axis view'}
+            {hoveredRegion.type === 'corner' && 'Tri-axial view'}
+          </div>
+        </div>
+      )}
 
       {/* Directional Arrow Buttons */}
       <Button
