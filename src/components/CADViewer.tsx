@@ -45,6 +45,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const cubeHostRef = useRef<HTMLDivElement>(null);
   const cubeRef = useRef<{ scene: THREE.Scene; camera: THREE.PerspectiveCamera; renderer: THREE.WebGLRenderer; cube: THREE.Mesh } | null>(null);
+  const [hoveredRegion, setHoveredRegion] = useState<{
+    type: 'face' | 'edge' | 'corner';
+    description: string;
+  } | null>(null);
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isSTEP = ['step', 'stp'].includes(fileExtension);
@@ -154,6 +158,74 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     }
   };
   
+  // Helper function to classify click region (face, edge, or corner)
+  const classifyClickRegion = (localPoint: THREE.Vector3) => {
+    const faceDistance = 1.5; // Cube is 3x3x3, so face distance from center is 1.5
+    const edgeThreshold = 0.4;
+    const cornerThreshold = 0.6;
+    
+    const absX = Math.abs(localPoint.x);
+    const absY = Math.abs(localPoint.y);
+    const absZ = Math.abs(localPoint.z);
+    
+    const nearMaxX = absX > (faceDistance - edgeThreshold);
+    const nearMaxY = absY > (faceDistance - edgeThreshold);
+    const nearMaxZ = absZ > (faceDistance - edgeThreshold);
+    
+    const edgeCount = [nearMaxX, nearMaxY, nearMaxZ].filter(Boolean).length;
+    
+    // CORNER: All 3 dimensions near maximum
+    if (edgeCount === 3) {
+      const direction = new THREE.Vector3(
+        Math.sign(localPoint.x),
+        Math.sign(localPoint.y),
+        Math.sign(localPoint.z)
+      ).normalize();
+      
+      return {
+        type: 'corner' as const,
+        direction,
+        description: `Corner (${Math.sign(localPoint.x) > 0 ? '+' : '-'}X, ${Math.sign(localPoint.y) > 0 ? '+' : '-'}Y, ${Math.sign(localPoint.z) > 0 ? '+' : '-'}Z)`
+      };
+    }
+    // EDGE: Exactly 2 dimensions near maximum
+    else if (edgeCount === 2) {
+      const direction = new THREE.Vector3(
+        nearMaxX ? Math.sign(localPoint.x) : 0,
+        nearMaxY ? Math.sign(localPoint.y) : 0,
+        nearMaxZ ? Math.sign(localPoint.z) : 0
+      ).normalize();
+      
+      return {
+        type: 'edge' as const,
+        direction,
+        description: 'Edge view'
+      };
+    }
+    // FACE: Only 1 dimension near maximum
+    else {
+      if (absX > absY && absX > absZ) {
+        return {
+          type: 'face' as const,
+          direction: new THREE.Vector3(Math.sign(localPoint.x), 0, 0),
+          description: Math.sign(localPoint.x) > 0 ? 'Right' : 'Left'
+        };
+      } else if (absY > absX && absY > absZ) {
+        return {
+          type: 'face' as const,
+          direction: new THREE.Vector3(0, Math.sign(localPoint.y), 0),
+          description: Math.sign(localPoint.y) > 0 ? 'Top' : 'Bottom'
+        };
+      } else {
+        return {
+          type: 'face' as const,
+          direction: new THREE.Vector3(0, 0, Math.sign(localPoint.z)),
+          description: Math.sign(localPoint.z) > 0 ? 'Front' : 'Back'
+        };
+      }
+    }
+  };
+
   // Initialize orientation cube
   useEffect(() => {
     const host = cubeHostRef.current;
@@ -163,7 +235,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     const h = 100;
     
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a1a); // Dark background
+    scene.background = new THREE.Color(0x2a2a3a); // Lighter background
     
     const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
     camera.position.set(0, 0, 8);
@@ -173,44 +245,42 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     host.appendChild(renderer.domElement);
     
-    // Create cube with darker material for better contrast
+    // Create cube with professional material
     const cubeGeometry = new THREE.BoxGeometry(3, 3, 3);
     const cube = new THREE.Mesh(
       cubeGeometry,
       new THREE.MeshStandardMaterial({
-        color: 0x606870, // Darker gray for better contrast
-        metalness: 0.5,
-        roughness: 0.5,
+        color: 0xb0b8c0, // Lighter grey for better visibility
+        metalness: 0.2,
+        roughness: 0.7,
         flatShading: false
       })
     );
     
-    // Add subtle white edge lines for definition
+    // Add black edge lines for better definition
     const edges = new THREE.EdgesGeometry(cubeGeometry, 1);
     const edgeLines = new THREE.LineSegments(
       edges,
       new THREE.LineBasicMaterial({
-        color: 0xffffff,
+        color: 0x000000,
         linewidth: 1,
         transparent: true,
-        opacity: 0.15
+        opacity: 0.5
       })
     );
     cube.add(edgeLines);
     
     scene.add(cube);
     
-    // Stronger lighting for dramatic face differentiation
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    // Brighter lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
     
-    // Strong key light from top-front-right
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
     keyLight.position.set(8, 8, 8);
     scene.add(keyLight);
     
-    // Subtle fill light
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.2);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
     fillLight.position.set(-5, -3, -5);
     scene.add(fillLight);
     
@@ -246,7 +316,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     makeFaceLabel('F', [0, 0, 1.6]);
     makeFaceLabel('Bk', [0, 0, -1.6]);
     
-    // Click-to-orient
+    // Click-to-orient with face/edge/corner detection
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     
@@ -256,15 +326,59 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       
       raycaster.setFromCamera(mouse, camera);
-      const hit = raycaster.intersectObject(cube, false)[0];
-      if (!hit || !hit.face) return;
+      const intersects = raycaster.intersectObject(cube, false);
       
-      const normal = hit.face.normal.clone().normalize().negate();
-      orientMainCameraToNormal(normal);
+      if (intersects.length === 0) return;
+      
+      const hit = intersects[0];
+      if (!hit || !hit.point) return;
+      
+      const localPoint = cube.worldToLocal(hit.point.clone());
+      const region = classifyClickRegion(localPoint);
+      
+      console.log(`Clicked ${region.type}: ${region.description}`);
+      orientMainCameraToDirection(region.direction);
+    };
+    
+    const onMouseMove = (e: MouseEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(cube, false);
+      
+      if (intersects.length === 0) {
+        setHoveredRegion(null);
+        renderer.domElement.style.cursor = 'default';
+        return;
+      }
+      
+      const hit = intersects[0];
+      if (!hit || !hit.point) {
+        setHoveredRegion(null);
+        return;
+      }
+      
+      const localPoint = cube.worldToLocal(hit.point.clone());
+      const region = classifyClickRegion(localPoint);
+      
+      setHoveredRegion({
+        type: region.type,
+        description: region.description
+      });
+      
+      renderer.domElement.style.cursor = 'pointer';
+    };
+    
+    const onMouseLeave = () => {
+      setHoveredRegion(null);
+      renderer.domElement.style.cursor = 'default';
     };
     
     renderer.domElement.addEventListener('click', onClick);
-    renderer.domElement.style.cursor = 'pointer';
+    renderer.domElement.addEventListener('mousemove', onMouseMove);
+    renderer.domElement.addEventListener('mouseleave', onMouseLeave);
     
     cubeRef.current = { scene, camera, renderer, cube };
     
@@ -283,6 +397,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     
     return () => {
       renderer.domElement.removeEventListener('click', onClick);
+      renderer.domElement.removeEventListener('mousemove', onMouseMove);
+      renderer.domElement.removeEventListener('mouseleave', onMouseLeave);
       host.removeChild(renderer.domElement);
       renderer.dispose();
     };
@@ -310,41 +426,55 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     controlsRef.current.update();
   };
   
-  // Smooth quaternion-based camera orientation
-  const orientMainCameraToNormal = (normal: THREE.Vector3) => {
+  // Smooth camera orientation to any direction (face, edge, or corner)
+  const orientMainCameraToDirection = (direction: THREE.Vector3) => {
     if (!cameraRef.current || !controlsRef.current) return;
     
-    const absX = Math.abs(normal.x);
-    const absY = Math.abs(normal.y);
-    const absZ = Math.abs(normal.z);
+    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+    const distance = maxDim * 2.5;
+    const target = new THREE.Vector3(...boundingBox.center);
     
-    let alignedNormal: THREE.Vector3;
-    
-    if (absX > absY && absX > absZ) {
-      alignedNormal = new THREE.Vector3(normal.x > 0 ? 1 : -1, 0, 0);
-    } else if (absY > absX && absY > absZ) {
-      alignedNormal = new THREE.Vector3(0, normal.y > 0 ? 1 : -1, 0);
-    } else {
-      alignedNormal = new THREE.Vector3(0, 0, normal.z > 0 ? 1 : -1);
-    }
-    
-    const targetQuat = new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(0, 0, 1),
-      alignedNormal
+    // Calculate new camera position
+    const newPosition = target.clone().add(
+      direction.clone().multiplyScalar(distance)
     );
     
-    const start = cameraRef.current.quaternion.clone();
-    const dur = 500;
+    // Handle up vector for top/bottom views
+    const up = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(direction.y) > 0.99) {
+      up.set(0, 0, direction.y > 0 ? 1 : -1);
+    }
+    
+    const lookAtMatrix = new THREE.Matrix4().lookAt(
+      newPosition,
+      target,
+      up
+    );
+    const targetQuat = new THREE.Quaternion().setFromRotationMatrix(lookAtMatrix);
+    
+    // Smooth animation
+    const startPos = cameraRef.current.position.clone();
+    const startQuat = cameraRef.current.quaternion.clone();
+    const duration = 600;
     const t0 = performance.now();
     
-    const step = (t: number) => {
-      const k = Math.min(1, (t - t0) / dur);
-      cameraRef.current.quaternion.slerpQuaternions(start, targetQuat, k);
+    const animate = (t: number) => {
+      const elapsed = t - t0;
+      const k = Math.min(1, elapsed / duration);
+      const easedK = 1 - Math.pow(1 - k, 3); // Ease-out cubic
+      
+      cameraRef.current.position.lerpVectors(startPos, newPosition, easedK);
+      cameraRef.current.quaternion.slerpQuaternions(startQuat, targetQuat, easedK);
+      
+      controlsRef.current.target.copy(target);
       controlsRef.current.update();
-      if (k < 1) requestAnimationFrame(step);
+      
+      if (k < 1) {
+        requestAnimationFrame(animate);
+      }
     };
     
-    requestAnimationFrame(step);
+    requestAnimationFrame(animate);
   };
   
   const handleViewChange = (direction: 'up' | 'down' | 'left' | 'right') => {
@@ -354,7 +484,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
       left: new THREE.Vector3(-1, 0, 0),
       right: new THREE.Vector3(1, 0, 0),
     };
-    orientMainCameraToNormal(rotationMap[direction]);
+    orientMainCameraToDirection(rotationMap[direction]);
   };
   
   // Keyboard shortcuts
@@ -482,19 +612,40 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   <ChevronLeft className="w-4 h-4 text-white/80 hover:text-white" />
                 </button>
                 
-                {/* Cube container - Dark Meviy style */}
-                <div
-                  ref={cubeHostRef}
-                  className="relative"
-                  style={{
-                    width: '100px',
-                    height: '100px',
-                    background: 'rgba(26, 26, 26, 0.95)',
-                    backdropFilter: 'blur(8px)',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                  }}
-                />
+                {/* Cube container - Professional style */}
+                <div className="relative">
+                  {/* Hover tooltip */}
+                  {hoveredRegion && (
+                    <div 
+                      className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-md text-xs font-medium text-white whitespace-nowrap pointer-events-none z-50"
+                      style={{
+                        background: 'rgba(0, 0, 0, 0.9)',
+                        backdropFilter: 'blur(8px)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                      }}
+                    >
+                      {hoveredRegion.description}
+                      <div className="text-[10px] text-white/60 mt-0.5">
+                        {hoveredRegion.type === 'face' && 'Orthogonal view'}
+                        {hoveredRegion.type === 'edge' && 'Two-axis view'}
+                        {hoveredRegion.type === 'corner' && 'Tri-axial view'}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div
+                    ref={cubeHostRef}
+                    className="relative"
+                    style={{
+                      width: '100px',
+                      height: '100px',
+                      background: 'rgba(42, 42, 58, 0.95)',
+                      backdropFilter: 'blur(8px)',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                    }}
+                  />
+                </div>
                 
                 {/* Right rotation */}
                 <button
