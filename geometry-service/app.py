@@ -751,8 +751,9 @@ def tessellate_shape(shape, quality=0.5):
                 if length > 0:
                     normal = [n / length for n in normal]
                 
-                # Reverse normal if face is reversed
-                if face_reversed:
+                # Ensure normals consistently point outward relative to part center
+                dot_dir = sum(n * v for n, v in zip(normal, vector_to_center))
+                if dot_dir < 0:
                     normal = [-n for n in normal]
                 
                 # Add normal for each vertex of triangle
