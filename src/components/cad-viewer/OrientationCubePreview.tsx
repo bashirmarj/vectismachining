@@ -3,35 +3,100 @@ import * as THREE from 'three';
 import { Button } from '@/components/ui/button';
 import { Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, RotateCw, RotateCcw } from 'lucide-react';
 
-// Helper function to create a chamfered box geometry with sharp edges
+// Helper function to create a fully chamfered box geometry with sharp edges on all corners
 function createChamferedBoxGeometry(
   width: number,
   height: number,
   depth: number,
   chamferSize: number
 ): THREE.BufferGeometry {
-  const shape = new THREE.Shape();
-  const halfWidth = width / 2 - chamferSize;
-  const halfHeight = height / 2 - chamferSize;
+  const w = width / 2;
+  const h = height / 2;
+  const d = depth / 2;
+  const c = chamferSize;
   
-  // Draw rectangle with straight lines (no curves for sharp chamfers)
-  shape.moveTo(-halfWidth, -halfHeight);
-  shape.lineTo(-halfWidth, halfHeight);
-  shape.lineTo(halfWidth, halfHeight);
-  shape.lineTo(halfWidth, -halfHeight);
-  shape.lineTo(-halfWidth, -halfHeight);
+  // 24 vertices - 3 per corner (each corner cut at 45° creating 3 vertices)
+  const positions = new Float32Array([
+    // Front-top-right corner (0,1,2)
+    w-c, h, d,    w, h-c, d,    w, h, d-c,
+    // Front-top-left corner (3,4,5)
+    -w+c, h, d,   -w, h-c, d,   -w, h, d-c,
+    // Front-bottom-left corner (6,7,8)
+    -w+c, -h, d,  -w, -h+c, d,  -w, -h, d-c,
+    // Front-bottom-right corner (9,10,11)
+    w-c, -h, d,   w, -h+c, d,   w, -h, d-c,
+    // Back-top-right corner (12,13,14)
+    w-c, h, -d,   w, h-c, -d,   w, h, -d+c,
+    // Back-top-left corner (15,16,17)
+    -w+c, h, -d,  -w, h-c, -d,  -w, h, -d+c,
+    // Back-bottom-left corner (18,19,20)
+    -w+c, -h, -d, -w, -h+c, -d, -w, -h, -d+c,
+    // Back-bottom-right corner (21,22,23)
+    w-c, -h, -d,  w, -h+c, -d,  w, -h, -d+c,
+  ]);
   
-  // Extrude settings with bevelSegments: 1 for sharp chamfers
-  const extrudeSettings = {
-    depth: depth - chamferSize * 2,
-    bevelEnabled: true,
-    bevelThickness: chamferSize,
-    bevelSize: chamferSize,
-    bevelSegments: 1, // 1 segment = sharp chamfer, not rounded fillet
-  };
+  // Face indices - 8 corner triangles + 6 hexagonal main faces + 12 edge rectangles
+  const indices = [
+    // 8 Corner triangular faces (45° between each pair of adjacent faces)
+    0,1,2,      // Front-top-right
+    3,5,4,      // Front-top-left
+    6,7,8,      // Front-bottom-left
+    9,11,10,    // Front-bottom-right
+    12,14,13,   // Back-top-right
+    15,16,17,   // Back-top-left
+    18,20,19,   // Back-bottom-left
+    21,22,23,   // Back-bottom-right
+    
+    // Front face hexagon (Z+)
+    0,9,3,  3,9,6,
+    
+    // Back face hexagon (Z-)
+    12,15,21,  15,18,21,
+    
+    // Top face hexagon (Y+)
+    3,15,0,  0,15,12,
+    
+    // Bottom face hexagon (Y-)
+    9,21,6,  6,21,18,
+    
+    // Right face hexagon (X+)
+    1,10,13,  13,10,22,
+    
+    // Left face hexagon (X-)
+    4,19,7,  16,19,4,
+    
+    // 12 Edge chamfer rectangles (each rectangle = 2 triangles)
+    // Top-front edge
+    0,3,4,  0,4,1,
+    // Top-back edge
+    12,13,16,  12,16,15,
+    // Top-right edge
+    0,2,14,  0,14,12,
+    // Top-left edge
+    3,15,17,  3,17,5,
+    // Bottom-front edge
+    9,10,7,  9,7,6,
+    // Bottom-back edge
+    21,18,19,  21,19,22,
+    // Bottom-right edge
+    9,11,23,  9,23,21,
+    // Bottom-left edge
+    6,8,20,  6,20,18,
+    // Front-right edge
+    1,11,10,  1,2,11,
+    // Front-left edge
+    4,5,8,  4,8,7,
+    // Back-right edge
+    13,14,23,  13,23,22,
+    // Back-left edge
+    16,17,20,  16,20,19,
+  ];
   
-  const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-  geometry.center();
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  
   return geometry;
 }
 
