@@ -535,11 +535,6 @@ def buildFeatureTree(holes, grooves, flat_surfaces, primary_dims, is_cylindrical
     feature_tree['oriented_sections'] = list(sections.values())
     
     return feature_tree
-        dims['width_mm'] = round(width, 2)
-        dims['height_mm'] = round(height, 2)
-        dims['length_mm'] = round(depth, 2)
-    
-    return dims
 
 def calculate_face_center(triangulation, transform):
     """Calculate centroid of face"""
@@ -606,15 +601,16 @@ def tessellate_shape(shape, quality=0.5):
         # quality=0.995 -> 0.105mm deflection (professional CAD quality)
         # quality=0.999 -> 0.011mm deflection (maximum quality, smooth internals - default)
         # quality=1.0   -> 0.01mm deflection (absolute maximum)
-        deflection = 1.1 - quality  # Map to 0.01-0.6mm range (inverted: higher quality = lower deflection)
         
-        # Angular deflection for smooth curves (radians)
-        # Lower values = smoother curves, more triangles on curved surfaces
-        angular_deflection = 0.2  # ~11.5 degrees - balances quality and performance
+        # --- Improved Tessellation Control ---
+        # Map quality 0–1 → deflection range 0.6 → 0.01 mm
+        # This provides exponential precision increase at high quality
+        deflection = 0.6 * (1 - quality) + 0.01 * quality
+        angular_deflection = 0.05  # radians (~3°) for smooth curves
         
         # Create incremental mesh with adaptive tessellation
         # Parameters: shape, linear_deflection, is_relative, angular_deflection, is_parallel
-        logger.info(f"Tessellating shape with quality={quality} (deflection={deflection}mm, angular={angular_deflection} rad)")
+        logger.info(f"Tessellating with deflection={deflection:.4f}mm, angular={angular_deflection:.3f}rad")
         mesh = BRepMesh_IncrementalMesh(shape, deflection, False, angular_deflection, True)
         mesh.Perform()
         
@@ -672,14 +668,16 @@ def tessellate_shape(shape, quality=0.5):
             
             # Dot product: positive = facing inward (internal), negative = facing outward
             dot_product = sum(n * v for n, v in zip(normal_vec, vector_to_center))
+            # Normalize the dot product to prevent classification errors
+            dot_product /= (math.sqrt(sum(v*v for v in vector_to_center)) + 1e-9)
             
             if surface_type == GeomAbs_Cylinder:
                 # Cylindrical surface
                 cylinder = surface.Cylinder()
                 cyl_radius = cylinder.Radius()
                 
-                # Internal if: small radius OR normal pointing inward
-                if cyl_radius < max_radius * 0.4 or dot_product > 0.3:
+                # Internal if: small radius OR normal pointing inward (normalized threshold)
+                if cyl_radius < max_radius * 0.4 or dot_product > 0:
                     face_classification = 'internal'  # Internal cylindrical feature (hole)
                 else:
                     face_classification = 'cylindrical'  # External cylindrical feature

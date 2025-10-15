@@ -120,9 +120,9 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
     combinedGeo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     combinedGeo.setIndex(meshData.indices);
     
-    // 6 degree threshold: shows ALL design edges (90° corners, chamfers, fillets)
-    // while high tessellation quality (0.999) prevents false edges on curves
-    return new THREE.EdgesGeometry(combinedGeo, 6);
+    // 15 degree threshold: shows significant design edges (corners, chamfers, holes)
+    // Higher quality tessellation from backend prevents false edges on smooth curves
+    return new THREE.EdgesGeometry(combinedGeo, 15);
   }, [meshData, showEdges]);
   
   // Section cut plane
@@ -144,10 +144,10 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
             side={THREE.DoubleSide}
             clippingPlanes={clippingPlane || undefined}
             clipIntersection={false}
-            metalness={0}
-            roughness={1}
-            flatShading={true}
-            envMapIntensity={0}
+            metalness={0.2}
+            roughness={0.6}
+            flatShading={false}
+            envMapIntensity={0.3}
           />
         </mesh>
       ))}
