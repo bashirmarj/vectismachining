@@ -111,7 +111,7 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
     return result;
   }, [meshData]);
   
-  // Create unified edge geometry (5-8 degree threshold for ALL design edges)
+  // Create unified edge geometry (3-degree threshold for ALL design edges)
   const edges = useMemo(() => {
     if (!showEdges) return null;
     
@@ -120,9 +120,9 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
     combinedGeo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     combinedGeo.setIndex(meshData.indices);
     
-    // 15 degree threshold: shows significant design edges (corners, chamfers, holes)
-    // Higher quality tessellation from backend prevents false edges on smooth curves
-    return new THREE.EdgesGeometry(combinedGeo, 15);
+    // 3 degree threshold: shows ALL design edges (corners, chamfers, fillets, holes)
+    // Lower threshold captures smaller feature edges after high-fidelity tessellation
+    return new THREE.EdgesGeometry(combinedGeo, 3);
   }, [meshData, showEdges]);
   
   // Section cut plane
@@ -138,19 +138,32 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
     <group>
       {/* Render each face type with its specific color */}
       {Object.entries(geometries).map(([type, geo]) => (
-        <mesh key={type} geometry={geo}>
-          <meshStandardMaterial
-            color={FACE_COLORS[type as keyof typeof FACE_COLORS] || FACE_COLORS.external}
-            side={THREE.DoubleSide}
-            clippingPlanes={clippingPlane || undefined}
-            clipIntersection={false}
-            metalness={0.1}
-            roughness={0.65}
-            transparent={true}
-            opacity={0.92}
-            envMapIntensity={0.3}
-          />
-        </mesh>
+        <group key={type}>
+          {/* Main colored mesh */}
+          <mesh geometry={geo}>
+            <meshStandardMaterial
+              color={FACE_COLORS[type as keyof typeof FACE_COLORS] || FACE_COLORS.external}
+              side={THREE.DoubleSide}
+              clippingPlanes={clippingPlane || undefined}
+              clipIntersection={false}
+              metalness={0.1}
+              roughness={0.65}
+              transparent={true}
+              opacity={0.92}
+              envMapIntensity={0.3}
+            />
+          </mesh>
+          
+          {/* Silhouette outline for crisp contours */}
+          <mesh geometry={geo} scale={1.001}>
+            <meshBasicMaterial
+              color="#000000"
+              side={THREE.BackSide}
+              clippingPlanes={clippingPlane || undefined}
+              clipIntersection={false}
+            />
+          </mesh>
+        </group>
       ))}
       
       {/* Edge lines for clarity - prominent and visible through surfaces */}
