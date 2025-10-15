@@ -138,7 +138,7 @@ export function OrientationCube({ onViewChange }: OrientationCubeProps) {
   return (
     <div
       ref={containerRef}
-      className="absolute bottom-4 right-4 rounded-xl overflow-hidden"
+      className="absolute bottom-4 right-4 z-30"
       style={{
         width: '86px',
         height: '86px',
@@ -146,6 +146,8 @@ export function OrientationCube({ onViewChange }: OrientationCubeProps) {
         backdropFilter: 'blur(8px)',
         border: '1px solid rgba(255, 255, 255, 0.1)',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+        borderRadius: '12px',
+        overflow: 'hidden',
       }}
     />
   );
