@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronLeft, Info } from "lucide-react";
+import { ChevronLeft, Info, Edit2, Trash2, Plus, ChevronDown, Package, DollarSign, Clock } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { CADViewer } from "../CADViewer";
@@ -69,113 +69,153 @@ export const PartConfigScreen = ({
 
   return (
     <div className="flex h-[calc(100vh-12rem)] gap-0">
-      {/* Left Sidebar - Configuration Panel */}
-      <div className="w-96 border-r bg-background">
+      {/* Left Sidebar - Configuration Panel (30% width) */}
+      <div className="w-[30%] min-w-[380px] border-r bg-muted/30">
         <ScrollArea className="h-full">
-          <div className="p-6 space-y-6">
+          <div className="p-6 space-y-5">
             {/* Header */}
             <div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onBack}
-                className="mb-4"
+                className="mb-3"
               >
-                <ChevronLeft className="h-4 w-4 mr-2" />
-                Back to Upload
+                <ChevronLeft className="h-4 w-4 mr-1.5" />
+                Back
               </Button>
-              <h2 className="text-2xl font-bold">Configure Parts</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Select material, process, and quantity for each part
+              <h2 className="text-xl font-bold">Part Configuration</h2>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Configure manufacturing parameters for quotation
               </p>
             </div>
 
-            <Separator />
+            <Separator className="bg-border/60" />
 
             {/* File Selection */}
-            <div className="space-y-3">
-              <Label>Parts ({files.length})</Label>
-              <div className="space-y-2">
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Parts ({files.length})
+              </Label>
+              <div className="space-y-1.5">
                 {files.map((fileItem, index) => (
                   <button
                     key={index}
                     onClick={() => onSelectFile(index)}
-                    className={`w-full p-3 rounded-lg border-2 text-left transition-all ${
+                    className={`w-full p-2.5 rounded-md border text-left transition-all ${
                       selectedFileIndex === index
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50'
+                        ? 'border-primary bg-primary/10 shadow-sm'
+                        : 'border-border/50 hover:border-primary/30 hover:bg-muted/50'
                     }`}
                   >
-                    <p className="font-medium text-sm truncate">{fileItem.file.name}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Qty: {fileItem.quantity} {fileItem.material && `• ${fileItem.material}`}
-                    </p>
+                    <p className="font-medium text-xs truncate">{fileItem.file.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground">Qty: {fileItem.quantity}</span>
+                      {fileItem.material && (
+                        <>
+                          <span className="text-xs text-muted-foreground">•</span>
+                          <span className="text-xs text-muted-foreground">{fileItem.material}</span>
+                        </>
+                      )}
+                    </div>
                   </button>
                 ))}
               </div>
             </div>
 
-            <Separator />
+            <Separator className="bg-border/60" />
 
             {/* Part Configuration */}
             <Collapsible defaultOpen>
-              <CollapsibleTrigger className="flex items-center justify-between w-full">
-                <Label>Basic Information</Label>
+              <CollapsibleTrigger className="flex items-center justify-between w-full group">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                  <Package className="h-3.5 w-3.5" />
+                  Basic Information
+                </Label>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
               </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-4 mt-4">
+              <CollapsibleContent className="space-y-3 mt-3">
                 <div>
-                  <Label htmlFor="product-name">Product Name</Label>
+                  <Label htmlFor="product-name" className="text-xs font-medium">Product Name</Label>
                   <Input
                     id="product-name"
                     value={selectedFile.file.name.replace(/\.[^/.]+$/, "")}
                     readOnly
-                    className="mt-1.5 bg-muted"
+                    className="mt-1.5 bg-muted/50 text-sm h-9"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="quantity">Quantity</Label>
+                  <Label htmlFor="quantity" className="text-xs font-medium">Quantity</Label>
                   <Input
                     id="quantity"
                     type="number"
                     min="1"
                     value={selectedFile.quantity}
                     onChange={(e) => onUpdateFile(selectedFileIndex, { quantity: parseInt(e.target.value) || 1 })}
-                    className="mt-1.5"
+                    className="mt-1.5 text-sm h-9"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="material">Material</Label>
+                  <Label htmlFor="material" className="text-xs font-medium">Material</Label>
                   <Select
                     value={selectedFile.material}
                     onValueChange={(value) => onUpdateFile(selectedFileIndex, { material: value })}
                   >
-                    <SelectTrigger className="mt-1.5">
+                    <SelectTrigger className="mt-1.5 h-9 text-sm">
                       <SelectValue placeholder="Select material" />
                     </SelectTrigger>
                     <SelectContent className="bg-background z-50">
                       {materials.map((material) => (
-                        <SelectItem key={material} value={material}>
+                        <SelectItem key={material} value={material} className="text-sm">
                           {material}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+              </CollapsibleContent>
+            </Collapsible>
 
-                <div>
-                  <Label htmlFor="process">Manufacturing Process</Label>
+            <Separator className="bg-border/60" />
+
+            {/* Routing Editor */}
+            <Collapsible defaultOpen>
+              <CollapsibleTrigger className="flex items-center justify-between w-full group">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Process Routing
+                </Label>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 mt-3">
+                <div className="space-y-2">
+                  {selectedFile.process ? (
+                    <div className="flex items-center justify-between p-2.5 bg-muted/50 rounded-md border border-border/50">
+                      <span className="text-sm font-medium">{selectedFile.process}</span>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">No process selected</p>
+                  )}
+                  
                   <Select
                     value={selectedFile.process}
                     onValueChange={(value) => onUpdateFile(selectedFileIndex, { process: value })}
                   >
-                    <SelectTrigger className="mt-1.5">
-                      <SelectValue placeholder="Select process" />
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Add process routing" />
                     </SelectTrigger>
                     <SelectContent className="bg-background z-50">
                       {processes.map((process) => (
-                        <SelectItem key={process} value={process}>
+                        <SelectItem key={process} value={process} className="text-sm">
                           {process}
                         </SelectItem>
                       ))}
@@ -185,138 +225,156 @@ export const PartConfigScreen = ({
               </CollapsibleContent>
             </Collapsible>
 
+            <Separator className="bg-border/60" />
+
             {/* Analysis Results */}
             {selectedFile.analysis && (
               <>
-                <Separator />
-                <Collapsible>
-                  <CollapsibleTrigger className="flex items-center justify-between w-full">
-                    <Label>Part Analysis</Label>
+                <Collapsible defaultOpen>
+                  <CollapsibleTrigger className="flex items-center justify-between w-full group">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Part Details
+                    </Label>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-3 mt-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 bg-muted/50 rounded-lg">
-                        <p className="text-xs text-muted-foreground">Volume</p>
-                        <p className="font-semibold">{selectedFile.analysis.volume_cm3?.toFixed(2)} cm³</p>
+                  <CollapsibleContent className="space-y-2.5 mt-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-2.5 bg-muted/50 rounded-md border border-border/50">
+                        <p className="text-xs text-muted-foreground mb-0.5">Volume</p>
+                        <p className="font-semibold text-sm">{selectedFile.analysis.volume_cm3?.toFixed(2)} cm³</p>
                       </div>
-                      <div className="p-3 bg-muted/50 rounded-lg">
-                        <p className="text-xs text-muted-foreground">Surface Area</p>
-                        <p className="font-semibold">{selectedFile.analysis.surface_area_cm2?.toFixed(2)} cm²</p>
+                      <div className="p-2.5 bg-muted/50 rounded-md border border-border/50">
+                        <p className="text-xs text-muted-foreground mb-0.5">Surface Area</p>
+                        <p className="font-semibold text-sm">{selectedFile.analysis.surface_area_cm2?.toFixed(2)} cm²</p>
                       </div>
                     </div>
                     {selectedFile.analysis.detected_features && (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1.5">
                         {selectedFile.analysis.detected_features.is_cylindrical && (
-                          <Badge variant="outline">Cylindrical</Badge>
+                          <Badge variant="outline" className="text-xs">Cylindrical</Badge>
                         )}
                         {selectedFile.analysis.detected_features.has_keyway && (
-                          <Badge variant="outline">Keyway</Badge>
+                          <Badge variant="outline" className="text-xs">Keyway</Badge>
                         )}
                         {selectedFile.analysis.detected_features.has_internal_holes && (
-                          <Badge variant="outline">Internal Holes</Badge>
+                          <Badge variant="outline" className="text-xs">Internal Holes</Badge>
                         )}
                       </div>
                     )}
                   </CollapsibleContent>
                 </Collapsible>
+                <Separator className="bg-border/60" />
               </>
             )}
 
             {/* Quote Information */}
             {selectedFile.quote && (
               <>
-                <Separator />
-                <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">Unit Price:</span>
-                    <span className="text-xl font-bold text-primary">
-                      ${selectedFile.quote.unit_price.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Total ({selectedFile.quantity}x):</span>
-                    <span className="font-semibold">
-                      ${selectedFile.quote.total_price.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t">
-                    <span className="text-sm text-muted-foreground">Lead Time:</span>
-                    <span className="text-sm font-medium">
-                      {selectedFile.quote.lead_time_days} days
-                    </span>
-                  </div>
-                </div>
+                <Collapsible defaultOpen>
+                  <CollapsibleTrigger className="flex items-center justify-between w-full group">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                      <DollarSign className="h-3.5 w-3.5" />
+                      Quotation Summary
+                    </Label>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3">
+                    <div className="p-3 bg-primary/5 border border-primary/20 rounded-md space-y-2.5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">Unit Price:</span>
+                        <span className="text-lg font-bold text-primary">
+                          ${selectedFile.quote.unit_price.toFixed(2)}
+                        </span>
+                      </div>
+                      <Separator className="bg-border/40" />
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">Total ({selectedFile.quantity}x):</span>
+                        <span className="font-semibold text-sm">
+                          ${selectedFile.quote.total_price.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                          <Clock className="h-3 w-3" />
+                          Lead Time:
+                        </span>
+                        <span className="text-xs font-medium">
+                          {selectedFile.quote.lead_time_days} days
+                        </span>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+                <Separator className="bg-border/60" />
               </>
             )}
-
-            <Separator />
 
             {/* Contact Information Toggle */}
             <Collapsible open={showContactForm} onOpenChange={setShowContactForm}>
               <CollapsibleTrigger asChild>
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full h-9 text-sm">
                   {showContactForm ? 'Hide' : 'Add'} Contact Information
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-4 mt-4">
+              <CollapsibleContent className="space-y-3 mt-3">
                 <div>
-                  <Label htmlFor="name">Full Name *</Label>
+                  <Label htmlFor="name" className="text-xs font-medium">Full Name *</Label>
                   <Input
                     id="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="mt-1.5"
+                    className="mt-1.5 h-9 text-sm"
                     required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="email">Email *</Label>
+                  <Label htmlFor="email" className="text-xs font-medium">Email *</Label>
                   <Input
                     id="email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="mt-1.5"
+                    className="mt-1.5 h-9 text-sm"
                     required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="company">Company</Label>
+                  <Label htmlFor="company" className="text-xs font-medium">Company</Label>
                   <Input
                     id="company"
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
-                    className="mt-1.5"
+                    className="mt-1.5 h-9 text-sm"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="phone">Phone</Label>
+                  <Label htmlFor="phone" className="text-xs font-medium">Phone</Label>
                   <Input
                     id="phone"
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="mt-1.5"
+                    className="mt-1.5 h-9 text-sm"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="address">Shipping Address</Label>
+                  <Label htmlFor="address" className="text-xs font-medium">Shipping Address</Label>
                   <Textarea
                     id="address"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    className="mt-1.5"
-                    rows={3}
+                    className="mt-1.5 text-sm"
+                    rows={2}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="message">Additional Notes</Label>
+                  <Label htmlFor="message" className="text-xs font-medium">Additional Notes</Label>
                   <Textarea
                     id="message"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    className="mt-1.5"
-                    rows={3}
+                    className="mt-1.5 text-sm"
+                    rows={2}
                   />
                 </div>
               </CollapsibleContent>
@@ -324,18 +382,17 @@ export const PartConfigScreen = ({
 
             {/* Submit Button */}
             <Button
-              size="lg"
-              className="w-full"
+              className="w-full h-10"
               onClick={handleSubmit}
               disabled={isSubmitting || !showContactForm || !name || !email}
             >
-              {isSubmitting ? 'Submitting...' : 'Request Quote'}
+              {isSubmitting ? 'Submitting Quote Request...' : 'Request Quotation'}
             </Button>
 
             {!showContactForm && (
-              <Alert>
+              <Alert className="border-primary/20">
                 <Info className="h-4 w-4" />
-                <AlertDescription>
+                <AlertDescription className="text-xs">
                   Add contact information to request a quote
                 </AlertDescription>
               </Alert>
@@ -344,9 +401,9 @@ export const PartConfigScreen = ({
         </ScrollArea>
       </div>
 
-      {/* Right Panel - 3D Viewer */}
-      <div className="flex-1 bg-white">
-        <div className="h-full p-6">
+      {/* Right Panel - 3D Viewer (70% width) */}
+      <div className="flex-1 bg-gradient-to-br from-slate-50 to-white">
+        <div className="h-full">
           <CADViewer
             file={selectedFile.file}
             fileName={selectedFile.file.name}

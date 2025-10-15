@@ -1,6 +1,6 @@
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
-import { Suspense, useMemo, useEffect, useState } from 'react';
+import { Suspense, useMemo, useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { MeshModel } from './cad-viewer/MeshModel';
 import { ViewerControls } from './cad-viewer/ViewerControls';
 import { DimensionAnnotations } from './cad-viewer/DimensionAnnotations';
+import { OrientationCube } from './cad-viewer/OrientationCube';
+import { MeasurementTool } from './cad-viewer/MeasurementTool';
 
 interface CADViewerProps {
   file?: File;
@@ -36,6 +38,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   const [sectionPosition, setSectionPosition] = useState(0);
   const [showEdges, setShowEdges] = useState(true);
   const [showDimensions, setShowDimensions] = useState(false);
+  const [measurementMode, setMeasurementMode] = useState<'distance' | 'angle' | 'radius' | null>(null);
+  const controlsRef = useRef<any>(null);
+  const cameraRef = useRef<any>(null);
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isSTEP = ['step', 'stp'].includes(fileExtension);
@@ -129,15 +134,37 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     }
   };
   
+  const handleFitView = () => {
+    if (controlsRef.current && cameraRef.current) {
+      const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+      const distance = maxDim * 2;
+      
+      cameraRef.current.position.set(
+        boundingBox.center[0] + distance,
+        boundingBox.center[1] + distance,
+        boundingBox.center[2] + distance
+      );
+      
+      controlsRef.current.target.set(...boundingBox.center);
+      controlsRef.current.update();
+    }
+  };
+  
+  const handleViewChange = (position: [number, number, number]) => {
+    if (cameraRef.current && controlsRef.current) {
+      cameraRef.current.position.set(
+        boundingBox.center[0] + position[0],
+        boundingBox.center[1] + position[1],
+        boundingBox.center[2] + position[2]
+      );
+      controlsRef.current.target.set(...boundingBox.center);
+      controlsRef.current.update();
+    }
+  };
+  
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Box className="h-5 w-5 text-primary" />
-          3D Model Preview
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="h-[500px]">
+    <div className="h-full bg-white rounded-lg overflow-hidden">
+      <CardContent className="h-full p-0">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -166,7 +193,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
             </Button>
           </div>
         ) : hasValidModel ? (
-          <div className="relative h-full">
+          <div className="relative h-full bg-gradient-to-br from-slate-50 to-white">
             <ViewerControls
               showSectionCut={showSectionCut}
               onToggleSectionCut={() => setShowSectionCut(!showSectionCut)}
@@ -176,7 +203,15 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
               onToggleEdges={() => setShowEdges(!showEdges)}
               showDimensions={showDimensions}
               onToggleDimensions={() => setShowDimensions(!showDimensions)}
+              measurementMode={measurementMode}
+              onMeasurementModeChange={setMeasurementMode}
+              onFitView={handleFitView}
             />
+            
+            {/* Vectis Manufacturing Watermark */}
+            <div className="absolute bottom-4 right-4 z-10 text-xs text-muted-foreground/60">
+              Vectis Manufacturing | Automating Precision
+            </div>
             
             <Canvas
               camera={{ position: [150, 150, 150], fov: 45 }}
@@ -190,16 +225,21 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
               dpr={[1, 2]}
             >
               <Suspense fallback={null}>
-                {/* Professional lighting setup for proper surface contrast */}
-                <ambientLight intensity={0.7} />
-                <directionalLight position={[1, 1, 1]} intensity={0.8} />
-                <directionalLight position={[-1, -0.5, -1]} intensity={0.3} />
+                {/* Professional lighting setup */}
+                <ambientLight intensity={0.8} />
+                <directionalLight position={[5, 5, 5]} intensity={0.6} />
+                <directionalLight position={[-5, 3, -5]} intensity={0.4} />
+                <hemisphereLight groundColor="#f0f0f0" intensity={0.5} />
                 
-                {/* Subtle environment for better material appearance */}
-                <Environment preset="apartment" />
+                {/* Subtle grid for reference */}
+                <gridHelper args={[500, 50, '#cccccc', '#e0e0e0']} position={[0, -boundingBox.height / 2 - 10, 0]} />
+                
+                {/* Environment */}
+                <Environment preset="studio" />
                 
                 {/* Auto-framed camera */}
                 <PerspectiveCamera
+                  ref={cameraRef}
                   makeDefault
                   position={[
                     boundingBox.center[0] + boundingBox.width * 1.5,
@@ -209,7 +249,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   fov={45}
                 />
                 
-                {/* 3D Model with Meviy-style color classification (Phase 1 & 2) */}
+                {/* 3D Model with Meviy-style color classification */}
                 <MeshModel
                   meshData={meshData!}
                   showSectionCut={showSectionCut}
@@ -217,7 +257,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   showEdges={showEdges}
                 />
                 
-                {/* Dimension Annotations (Phase 4) */}
+                {/* Dimension Annotations */}
                 {showDimensions && detectedFeatures && (
                   <DimensionAnnotations
                     features={detectedFeatures}
@@ -225,8 +265,18 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   />
                 )}
                 
-                {/* Camera controls with smooth damping */}
+                {/* Measurement Tool */}
+                <MeasurementTool
+                  enabled={measurementMode !== null}
+                  mode={measurementMode}
+                />
+                
+                {/* Orientation Cube */}
+                <OrientationCube onViewChange={handleViewChange} />
+                
+                {/* Camera controls */}
                 <OrbitControls
+                  ref={controlsRef}
                   makeDefault
                   target={boundingBox.center}
                   enableDamping
@@ -234,6 +284,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   minDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth)}
                   maxDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 5}
                   rotateSpeed={0.5}
+                  panSpeed={0.8}
+                  zoomSpeed={1.2}
                 />
               </Suspense>
             </Canvas>
@@ -260,6 +312,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
           </div>
         )}
       </CardContent>
-    </Card>
+    </div>
   );
 }
