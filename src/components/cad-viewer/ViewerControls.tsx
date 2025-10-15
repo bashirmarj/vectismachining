@@ -3,7 +3,6 @@ import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { Scissors, Grid3x3, Ruler, Maximize2, Move3D, Circle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { useState, useEffect } from 'react';
 import {
   Tooltip,
   TooltipContent,
@@ -38,34 +37,9 @@ export function ViewerControls({
   onMeasurementModeChange,
   onFitView,
 }: ViewerControlsProps) {
-  const [isVisible, setIsVisible] = useState(true);
-  const [hideTimeout, setHideTimeout] = useState<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => setIsVisible(false), 3000);
-    setHideTimeout(timeout);
-    return () => clearTimeout(timeout);
-  }, []);
-
-  const handleMouseEnter = () => {
-    setIsVisible(true);
-    if (hideTimeout) clearTimeout(hideTimeout);
-  };
-
-  const handleMouseLeave = () => {
-    const timeout = setTimeout(() => setIsVisible(false), 3000);
-    setHideTimeout(timeout);
-  };
-
   return (
     <TooltipProvider>
-      <div
-        className={`absolute top-4 right-4 z-20 transition-all duration-300 ${
-          isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'
-        }`}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
+      <div className="absolute top-4 right-4 z-20">
         {/* Glass-morphism toolbar */}
         <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-xl p-3 shadow-2xl space-y-3">
           {/* View Controls Section */}
@@ -216,11 +190,6 @@ export function ViewerControls({
             </div>
           </div>
         </div>
-
-        {/* Hover indicator when hidden */}
-        {!isVisible && (
-          <div className="absolute top-0 right-0 w-1 h-full bg-white/20 rounded-r-full animate-pulse" />
-        )}
       </div>
     </TooltipProvider>
   );
