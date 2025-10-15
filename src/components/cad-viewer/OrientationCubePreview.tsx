@@ -103,9 +103,11 @@ export function OrientationCubePreview() {
     // Create cube
     const geometry = new THREE.BoxGeometry(2, 2, 2);
     const material = new THREE.MeshStandardMaterial({ 
-      color: 0xb0b8c0,
-      metalness: 0.2,
-      roughness: 0.7,
+      color: 0xe8e8e8,
+      metalness: 0.1,
+      roughness: 0.5,
+      transparent: true,
+      opacity: 0.85
     });
     const cube = new THREE.Mesh(geometry, material);
     cubeRef.current = cube;
@@ -113,10 +115,10 @@ export function OrientationCubePreview() {
     // Add edges
     const edges = new THREE.EdgesGeometry(geometry);
     const lineMaterial = new THREE.LineBasicMaterial({ 
-      color: 0x000000,
+      color: 0x444444,
       linewidth: 1,
       transparent: true,
-      opacity: 0.5
+      opacity: 0.6
     });
     const line = new THREE.LineSegments(edges, lineMaterial);
     cube.add(line);
@@ -143,9 +145,11 @@ export function OrientationCubePreview() {
     const edgeBevelSize = 0.15;
     const edgeGeometry = new THREE.BoxGeometry(2 - edgeBevelSize * 2, edgeBevelSize, edgeBevelSize);
     const edgeMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x909090,
-      metalness: 0.3,
+      color: 0xd0d0d0,
+      metalness: 0.2,
       roughness: 0.6,
+      transparent: true,
+      opacity: 0.85
     });
 
     // 12 edges of the cube
@@ -177,9 +181,11 @@ export function OrientationCubePreview() {
     // Add corner chamfers (small spheres at corners for clicking)
     const cornerGeometry = new THREE.SphereGeometry(edgeBevelSize * 1.2, 8, 8);
     const cornerMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x808080,
-      metalness: 0.4,
+      color: 0xc0c0c0,
+      metalness: 0.3,
       roughness: 0.5,
+      transparent: true,
+      opacity: 0.85
     });
 
     const cornerPositions = [
@@ -206,7 +212,7 @@ export function OrientationCubePreview() {
       { text: 'Right', position: [1, 0, 0], rotation: [0, Math.PI / 2, 0] },
       { text: 'Left', position: [-1, 0, 0], rotation: [0, -Math.PI / 2, 0] },
       { text: 'Top', position: [0, 1, 0], rotation: [-Math.PI / 2, 0, 0] },
-      { text: 'Bottom', position: [0, -1, 0], rotation: [Math.PI / 2, 0, 0] }
+      { text: 'Bottom', position: [0, -1, 0], rotation: [Math.PI / 2, 0, Math.PI] }
     ];
 
     faces.forEach(face => {
@@ -458,6 +464,68 @@ export function OrientationCubePreview() {
     cubeCamera.updateProjectionMatrix();
   };
 
+  const rotateCameraUp = () => {
+    const currentPos = cubeCamera.position.clone();
+    const angle = Math.PI / 8; // 22.5 degrees
+    
+    const distance = currentPos.length();
+    const phi = Math.atan2(Math.sqrt(currentPos.x ** 2 + currentPos.z ** 2), currentPos.y);
+    const theta = Math.atan2(currentPos.z, currentPos.x);
+    
+    const newPhi = Math.max(0.1, phi - angle);
+    
+    cubeCamera.position.set(
+      distance * Math.sin(newPhi) * Math.cos(theta),
+      distance * Math.cos(newPhi),
+      distance * Math.sin(newPhi) * Math.sin(theta)
+    );
+    cubeCamera.lookAt(0, 0, 0);
+    cubeCamera.updateProjectionMatrix();
+  };
+
+  const rotateCameraDown = () => {
+    const currentPos = cubeCamera.position.clone();
+    const angle = Math.PI / 8; // 22.5 degrees
+    
+    const distance = currentPos.length();
+    const phi = Math.atan2(Math.sqrt(currentPos.x ** 2 + currentPos.z ** 2), currentPos.y);
+    const theta = Math.atan2(currentPos.z, currentPos.x);
+    
+    const newPhi = Math.min(Math.PI - 0.1, phi + angle);
+    
+    cubeCamera.position.set(
+      distance * Math.sin(newPhi) * Math.cos(theta),
+      distance * Math.cos(newPhi),
+      distance * Math.sin(newPhi) * Math.sin(theta)
+    );
+    cubeCamera.lookAt(0, 0, 0);
+    cubeCamera.updateProjectionMatrix();
+  };
+
+  const rotateCameraLeft = () => {
+    const currentPos = cubeCamera.position.clone();
+    const angle = Math.PI / 8; // 22.5 degrees
+    
+    const newX = currentPos.x * Math.cos(-angle) - currentPos.z * Math.sin(-angle);
+    const newZ = currentPos.x * Math.sin(-angle) + currentPos.z * Math.cos(-angle);
+    
+    cubeCamera.position.set(newX, currentPos.y, newZ);
+    cubeCamera.lookAt(0, 0, 0);
+    cubeCamera.updateProjectionMatrix();
+  };
+
+  const rotateCameraRight = () => {
+    const currentPos = cubeCamera.position.clone();
+    const angle = Math.PI / 8; // 22.5 degrees
+    
+    const newX = currentPos.x * Math.cos(angle) - currentPos.z * Math.sin(angle);
+    const newZ = currentPos.x * Math.sin(angle) + currentPos.z * Math.cos(angle);
+    
+    cubeCamera.position.set(newX, currentPos.y, newZ);
+    cubeCamera.lookAt(0, 0, 0);
+    cubeCamera.updateProjectionMatrix();
+  };
+
   return (
     <div className="relative inline-block">
       {/* Isometric Reset Button */}
@@ -506,9 +574,9 @@ export function OrientationCubePreview() {
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => orientCameraToDirection(new THREE.Vector3(0, 1, 0))}
+        onClick={rotateCameraUp}
         className="absolute -top-10 left-1/2 -translate-x-1/2 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
-        title="Top View"
+        title="Rotate View Up"
       >
         <ChevronUp className="h-4 w-4" />
       </Button>
@@ -516,9 +584,9 @@ export function OrientationCubePreview() {
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => orientCameraToDirection(new THREE.Vector3(0, -1, 0))}
+        onClick={rotateCameraDown}
         className="absolute -bottom-10 left-1/2 -translate-x-1/2 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
-        title="Bottom View"
+        title="Rotate View Down"
       >
         <ChevronDown className="h-4 w-4" />
       </Button>
@@ -526,9 +594,9 @@ export function OrientationCubePreview() {
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => orientCameraToDirection(new THREE.Vector3(-1, 0, 0))}
+        onClick={rotateCameraLeft}
         className="absolute top-1/2 -left-10 -translate-y-1/2 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
-        title="Left View"
+        title="Rotate View Left"
       >
         <ChevronLeft className="h-4 w-4" />
       </Button>
@@ -536,9 +604,9 @@ export function OrientationCubePreview() {
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => orientCameraToDirection(new THREE.Vector3(1, 0, 0))}
+        onClick={rotateCameraRight}
         className="absolute top-1/2 -right-10 -translate-y-1/2 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
-        title="Right View"
+        title="Rotate View Right"
       >
         <ChevronRight className="h-4 w-4" />
       </Button>
