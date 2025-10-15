@@ -103,11 +103,11 @@ export function OrientationCubePreview() {
     // Create cube
     const geometry = new THREE.BoxGeometry(2, 2, 2);
     const material = new THREE.MeshStandardMaterial({ 
-      color: 0xe8e8e8,
-      metalness: 0.1,
-      roughness: 0.5,
+      color: 0xf0f0f0,
+      metalness: 0.05,
+      roughness: 0.6,
       transparent: true,
-      opacity: 0.85
+      opacity: 0.9
     });
     const cube = new THREE.Mesh(geometry, material);
     cubeRef.current = cube;
@@ -142,14 +142,14 @@ export function OrientationCubePreview() {
     cubeCamera.lookAt(0, 0, 0);
 
     // Add chamfered edges (thin rectangular meshes for edge clicking)
-    const edgeBevelSize = 0.15;
+    const edgeBevelSize = 0.35;
     const edgeGeometry = new THREE.BoxGeometry(2 - edgeBevelSize * 2, edgeBevelSize, edgeBevelSize);
     const edgeMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xd0d0d0,
-      metalness: 0.2,
+      color: 0xf0f0f0,
+      metalness: 0.05,
       roughness: 0.6,
       transparent: true,
-      opacity: 0.85
+      opacity: 0.9
     });
 
     // 12 edges of the cube
@@ -179,13 +179,13 @@ export function OrientationCubePreview() {
     });
 
     // Add corner chamfers (small spheres at corners for clicking)
-    const cornerGeometry = new THREE.SphereGeometry(edgeBevelSize * 1.2, 8, 8);
+    const cornerGeometry = new THREE.SphereGeometry(edgeBevelSize * 2.5, 12, 12);
     const cornerMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xc0c0c0,
-      metalness: 0.3,
-      roughness: 0.5,
+      color: 0xf0f0f0,
+      metalness: 0.05,
+      roughness: 0.6,
       transparent: true,
-      opacity: 0.85
+      opacity: 0.9
     });
 
     const cornerPositions = [
@@ -465,63 +465,149 @@ export function OrientationCubePreview() {
   };
 
   const rotateCameraUp = () => {
-    const currentPos = cubeCamera.position.clone();
-    const angle = Math.PI / 8; // 22.5 degrees
+    const currentPos = cubeCamera.position.clone().normalize();
+    const distance = 5;
     
-    const distance = currentPos.length();
-    const phi = Math.atan2(Math.sqrt(currentPos.x ** 2 + currentPos.z ** 2), currentPos.y);
-    const theta = Math.atan2(currentPos.z, currentPos.x);
+    // Front (0,0,1) → Top (0,1,0) → Back (0,0,-1) → Bottom (0,-1,0) → Front
+    const faces = [
+      new THREE.Vector3(0, 0, 1),   // Front
+      new THREE.Vector3(0, 1, 0),   // Top
+      new THREE.Vector3(0, 0, -1),  // Back
+      new THREE.Vector3(0, -1, 0),  // Bottom
+    ];
     
-    const newPhi = Math.max(0.1, phi - angle);
+    // Find closest face
+    let closestIndex = 0;
+    let maxDot = -Infinity;
     
-    cubeCamera.position.set(
-      distance * Math.sin(newPhi) * Math.cos(theta),
-      distance * Math.cos(newPhi),
-      distance * Math.sin(newPhi) * Math.sin(theta)
-    );
+    faces.forEach((face, index) => {
+      const dot = currentPos.dot(face);
+      if (dot > maxDot) {
+        maxDot = dot;
+        closestIndex = index;
+      }
+    });
+    
+    // Move to next face in cycle
+    const nextIndex = (closestIndex + 1) % faces.length;
+    const nextFace = faces[nextIndex];
+    
+    cubeCamera.position.copy(nextFace.clone().multiplyScalar(distance));
+    
+    // Handle up vector for top/bottom views
+    const up = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(nextFace.y) > 0.99) {
+      up.set(0, 0, nextFace.y > 0 ? 1 : -1);
+    }
+    cubeCamera.up.copy(up);
     cubeCamera.lookAt(0, 0, 0);
     cubeCamera.updateProjectionMatrix();
   };
 
   const rotateCameraDown = () => {
-    const currentPos = cubeCamera.position.clone();
-    const angle = Math.PI / 8; // 22.5 degrees
+    const currentPos = cubeCamera.position.clone().normalize();
+    const distance = 5;
     
-    const distance = currentPos.length();
-    const phi = Math.atan2(Math.sqrt(currentPos.x ** 2 + currentPos.z ** 2), currentPos.y);
-    const theta = Math.atan2(currentPos.z, currentPos.x);
+    // Front (0,0,1) → Bottom (0,-1,0) → Back (0,0,-1) → Top (0,1,0) → Front
+    const faces = [
+      new THREE.Vector3(0, 0, 1),   // Front
+      new THREE.Vector3(0, -1, 0),  // Bottom
+      new THREE.Vector3(0, 0, -1),  // Back
+      new THREE.Vector3(0, 1, 0),   // Top
+    ];
     
-    const newPhi = Math.min(Math.PI - 0.1, phi + angle);
+    // Find closest face
+    let closestIndex = 0;
+    let maxDot = -Infinity;
     
-    cubeCamera.position.set(
-      distance * Math.sin(newPhi) * Math.cos(theta),
-      distance * Math.cos(newPhi),
-      distance * Math.sin(newPhi) * Math.sin(theta)
-    );
+    faces.forEach((face, index) => {
+      const dot = currentPos.dot(face);
+      if (dot > maxDot) {
+        maxDot = dot;
+        closestIndex = index;
+      }
+    });
+    
+    // Move to next face in cycle
+    const nextIndex = (closestIndex + 1) % faces.length;
+    const nextFace = faces[nextIndex];
+    
+    cubeCamera.position.copy(nextFace.clone().multiplyScalar(distance));
+    
+    // Handle up vector for top/bottom views
+    const up = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(nextFace.y) > 0.99) {
+      up.set(0, 0, nextFace.y > 0 ? 1 : -1);
+    }
+    cubeCamera.up.copy(up);
     cubeCamera.lookAt(0, 0, 0);
     cubeCamera.updateProjectionMatrix();
   };
 
   const rotateCameraLeft = () => {
-    const currentPos = cubeCamera.position.clone();
-    const angle = Math.PI / 8; // 22.5 degrees
+    const currentPos = cubeCamera.position.clone().normalize();
+    const distance = 5;
     
-    const newX = currentPos.x * Math.cos(-angle) - currentPos.z * Math.sin(-angle);
-    const newZ = currentPos.x * Math.sin(-angle) + currentPos.z * Math.cos(-angle);
+    // Front (0,0,1) → Left (-1,0,0) → Back (0,0,-1) → Right (1,0,0) → Front
+    const faces = [
+      new THREE.Vector3(0, 0, 1),   // Front
+      new THREE.Vector3(-1, 0, 0),  // Left
+      new THREE.Vector3(0, 0, -1),  // Back
+      new THREE.Vector3(1, 0, 0),   // Right
+    ];
     
-    cubeCamera.position.set(newX, currentPos.y, newZ);
+    // Find closest face
+    let closestIndex = 0;
+    let maxDot = -Infinity;
+    
+    faces.forEach((face, index) => {
+      const dot = currentPos.dot(face);
+      if (dot > maxDot) {
+        maxDot = dot;
+        closestIndex = index;
+      }
+    });
+    
+    // Move to next face in cycle
+    const nextIndex = (closestIndex + 1) % faces.length;
+    const nextFace = faces[nextIndex];
+    
+    cubeCamera.position.copy(nextFace.clone().multiplyScalar(distance));
+    cubeCamera.up.set(0, 1, 0);
     cubeCamera.lookAt(0, 0, 0);
     cubeCamera.updateProjectionMatrix();
   };
 
   const rotateCameraRight = () => {
-    const currentPos = cubeCamera.position.clone();
-    const angle = Math.PI / 8; // 22.5 degrees
+    const currentPos = cubeCamera.position.clone().normalize();
+    const distance = 5;
     
-    const newX = currentPos.x * Math.cos(angle) - currentPos.z * Math.sin(angle);
-    const newZ = currentPos.x * Math.sin(angle) + currentPos.z * Math.cos(angle);
+    // Front (0,0,1) → Right (1,0,0) → Back (0,0,-1) → Left (-1,0,0) → Front
+    const faces = [
+      new THREE.Vector3(0, 0, 1),   // Front
+      new THREE.Vector3(1, 0, 0),   // Right
+      new THREE.Vector3(0, 0, -1),  // Back
+      new THREE.Vector3(-1, 0, 0),  // Left
+    ];
     
-    cubeCamera.position.set(newX, currentPos.y, newZ);
+    // Find closest face
+    let closestIndex = 0;
+    let maxDot = -Infinity;
+    
+    faces.forEach((face, index) => {
+      const dot = currentPos.dot(face);
+      if (dot > maxDot) {
+        maxDot = dot;
+        closestIndex = index;
+      }
+    });
+    
+    // Move to next face in cycle
+    const nextIndex = (closestIndex + 1) % faces.length;
+    const nextFace = faces[nextIndex];
+    
+    cubeCamera.position.copy(nextFace.clone().multiplyScalar(distance));
+    cubeCamera.up.set(0, 1, 0);
     cubeCamera.lookAt(0, 0, 0);
     cubeCamera.updateProjectionMatrix();
   };
