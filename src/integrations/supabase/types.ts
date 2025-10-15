@@ -470,6 +470,7 @@ export type Database = {
           created_at: string
           estimated_complexity_score: number | null
           estimated_machine_time_hours: number | null
+          estimated_machining_cost: number | null
           estimated_surface_area_cm2: number | null
           estimated_volume_cm3: number | null
           file_name: string
@@ -479,6 +480,7 @@ export type Database = {
           id: string
           lead_time_days: number | null
           machining_cost: number | null
+          machining_operations: Json | null
           material_cost: number | null
           material_type: string | null
           mesh_id: string | null
@@ -489,6 +491,8 @@ export type Database = {
           preliminary_unit_price: number | null
           quantity: number
           quotation_id: string
+          recommended_routings: string[] | null
+          routing_reasoning: string[] | null
           selected_process: string | null
           setup_cost: number | null
           unit_price: number | null
@@ -497,6 +501,7 @@ export type Database = {
           created_at?: string
           estimated_complexity_score?: number | null
           estimated_machine_time_hours?: number | null
+          estimated_machining_cost?: number | null
           estimated_surface_area_cm2?: number | null
           estimated_volume_cm3?: number | null
           file_name: string
@@ -506,6 +511,7 @@ export type Database = {
           id?: string
           lead_time_days?: number | null
           machining_cost?: number | null
+          machining_operations?: Json | null
           material_cost?: number | null
           material_type?: string | null
           mesh_id?: string | null
@@ -516,6 +522,8 @@ export type Database = {
           preliminary_unit_price?: number | null
           quantity?: number
           quotation_id: string
+          recommended_routings?: string[] | null
+          routing_reasoning?: string[] | null
           selected_process?: string | null
           setup_cost?: number | null
           unit_price?: number | null
@@ -524,6 +532,7 @@ export type Database = {
           created_at?: string
           estimated_complexity_score?: number | null
           estimated_machine_time_hours?: number | null
+          estimated_machining_cost?: number | null
           estimated_surface_area_cm2?: number | null
           estimated_volume_cm3?: number | null
           file_name?: string
@@ -533,6 +542,7 @@ export type Database = {
           id?: string
           lead_time_days?: number | null
           machining_cost?: number | null
+          machining_operations?: Json | null
           material_cost?: number | null
           material_type?: string | null
           mesh_id?: string | null
@@ -543,6 +553,8 @@ export type Database = {
           preliminary_unit_price?: number | null
           quantity?: number
           quotation_id?: string
+          recommended_routings?: string[] | null
+          routing_reasoning?: string[] | null
           selected_process?: string | null
           setup_cost?: number | null
           unit_price?: number | null

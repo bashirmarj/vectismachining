@@ -88,6 +88,12 @@ interface MeshData {
   triangle_count: number;
 }
 
+interface MachiningOperation {
+  routing: string;
+  machining_time_min: number;
+  machining_cost: number;
+}
+
 interface AnalysisResult {
   volume_cm3: number;
   surface_area_cm2: number;
@@ -104,6 +110,11 @@ interface AnalysisResult {
   detailed_features?: DetailedFeatures;
   feature_tree?: FeatureTree;
   mesh_id?: string;
+  // Industrial routing enhancements
+  recommended_routings?: string[];
+  routing_reasoning?: string[];
+  machining_summary?: MachiningOperation[];
+  estimated_total_cost_usd?: number;
 }
 
 interface Vector3 {
@@ -419,7 +430,12 @@ function detectRequiredProcesses(features: DetectedFeatures, complexity: number)
 }
 
 // STEP/IGES Analysis via External Python Microservice
-async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): Promise<AnalysisResult | null> {
+async function analyzeSTEPViaService(
+  fileData: ArrayBuffer, 
+  fileName: string,
+  material?: string,
+  tolerance?: number
+): Promise<AnalysisResult | null> {
   const GEOMETRY_SERVICE_URL = Deno.env.get('GEOMETRY_SERVICE_URL');
   
   console.log(`🔍 GEOMETRY_SERVICE_URL configured: ${GEOMETRY_SERVICE_URL ? 'YES - ' + GEOMETRY_SERVICE_URL : 'NO'}`);
@@ -431,9 +447,12 @@ async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): P
   
   try {
     console.log(`📞 Calling geometry service at ${GEOMETRY_SERVICE_URL}/analyze-cad for ${fileName}`);
+    console.log(`   Material: ${material || 'Cold Rolled Steel'}, Tolerance: ${tolerance || 0.02}mm`);
     
     const formData = new FormData();
     formData.append('file', new Blob([fileData]), fileName);
+    formData.append('material', material || 'Cold Rolled Steel');
+    formData.append('tolerance', (tolerance || 0.02).toString());
     
     const response = await fetch(`${GEOMETRY_SERVICE_URL}/analyze-cad`, {
       method: 'POST',
@@ -512,7 +531,12 @@ async function analyzeSTEPViaService(fileData: ArrayBuffer, fileName: string): P
       detailed_features,
       mesh_id,
       feature_tree,
-      triangle_count: data.mesh_data?.triangle_count
+      triangle_count: data.mesh_data?.triangle_count,
+      // Industrial routing data from geometry service
+      recommended_routings: data.recommended_routings,
+      routing_reasoning: data.routing_reasoning,
+      machining_summary: data.machining_summary,
+      estimated_total_cost_usd: data.estimated_total_cost_usd
     };
     
   } catch (error) {
@@ -922,6 +946,9 @@ const handler = async (req: Request): Promise<Response> => {
     let file_data: ArrayBuffer | null = null;
     let quantity: number = 1;
 
+    let material: string | undefined;
+    let tolerance: number | undefined;
+    
     // Handle both JSON (metadata only) and multipart/form-data (with file)
     if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData();
@@ -929,6 +956,9 @@ const handler = async (req: Request): Promise<Response> => {
       file_name = formData.get('file_name') as string || file?.name || '';
       file_size = file?.size || 0;
       quantity = parseInt(formData.get('quantity') as string) || 1;
+      material = formData.get('material') as string || undefined;
+      const toleranceStr = formData.get('tolerance') as string;
+      tolerance = toleranceStr ? parseFloat(toleranceStr) : undefined;
       
       if (file) {
         file_data = await file.arrayBuffer();
@@ -938,6 +968,8 @@ const handler = async (req: Request): Promise<Response> => {
       file_name = body.file_name;
       file_size = body.file_size;
       quantity = body.quantity || 1;
+      material = body.material;
+      tolerance = body.tolerance;
       
       // Decode base64 file data if provided
       if (body.file_data) {
@@ -979,7 +1011,7 @@ const handler = async (req: Request): Promise<Response> => {
     } else if (file_data && (isSTEP || isIGES)) {
       // STEP/IGES: Always call Python microservice for accurate geometry analysis
       console.log(`🔧 Attempting geometry service analysis for: ${file_name}`);
-      const serviceResult = await analyzeSTEPViaService(file_data, file_name);
+      const serviceResult = await analyzeSTEPViaService(file_data, file_name, material, tolerance);
       
       if (serviceResult && serviceResult.mesh_id) {
         analysis = serviceResult;

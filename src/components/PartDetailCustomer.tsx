@@ -45,6 +45,14 @@ interface PartDetailCustomerProps {
           features: any[];
         }>;
       };
+      recommended_routings?: string[];
+      routing_reasoning?: string[];
+      machining_summary?: Array<{
+        routing: string;
+        machining_time_min: number;
+        machining_cost: number;
+      }>;
+      estimated_total_cost_usd?: number;
     };
     quote?: {
       unit_price: number;
@@ -187,6 +195,27 @@ export function PartDetailCustomer({
                       value={file.analysis.complexity_score.toString()}
                     />
                   </div>
+
+                  {file.analysis.routing_reasoning && file.analysis.routing_reasoning.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Zap className="h-4 w-4 text-purple-600" />
+                          Industrial Routing Logic
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-2">
+                          {file.analysis.routing_reasoning.map((reason, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-sm">
+                              <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <span>{reason}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+                  )}
                   
                   {hasFeatures ? (
                     <FeatureTree 
@@ -257,6 +286,36 @@ export function PartDetailCustomer({
                         </p>
                       </div>
                     </div>
+
+                    {file.analysis?.machining_summary && file.analysis.machining_summary.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <Layers className="h-4 w-4 text-blue-600" />
+                            Machining Operations
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            {file.analysis.machining_summary.map((op, idx) => (
+                              <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-md">
+                                <div>
+                                  <div className="font-medium text-sm">{op.routing}</div>
+                                  <div className="text-xs text-muted-foreground">{op.machining_time_min.toFixed(1)} minutes</div>
+                                </div>
+                                <div className="text-sm font-semibold">${op.machining_cost.toFixed(2)}</div>
+                              </div>
+                            ))}
+                            {file.analysis.estimated_total_cost_usd && (
+                              <div className="pt-2 border-t flex justify-between items-center">
+                                <span className="text-sm font-semibold">Total Machining Cost</span>
+                                <span className="text-base font-bold text-purple-600">${file.analysis.estimated_total_cost_usd.toFixed(2)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     {file.analysis?.recommended_processes && file.analysis.recommended_processes.length > 0 && (
                       <Card>

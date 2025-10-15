@@ -8,6 +8,10 @@ import tempfile
 import os
 import logging
 
+# Import industrial routing modules
+from routing_selector_industrial import select_routings_industrial
+from machining_estimator import estimate_machining_time_and_cost
+
 # OCC imports for STEP parsing
 from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.BRepGProp import brepgprop
@@ -38,10 +42,15 @@ def health_check():
 @app.route('/analyze-cad', methods=['POST'])
 def analyze_cad():
     """
-    Analyze STEP/IGES file geometry
+    Analyze STEP/IGES file geometry with industrial routing selection
     
-    Accepts: multipart/form-data with 'file' field
-    Returns: JSON with geometry properties and detected features
+    Accepts: multipart/form-data with:
+        - file: CAD file (STEP/IGES)
+        - material (optional): Material name (default: "Cold Rolled Steel")
+        - tolerance (optional): Tolerance in mm (default: 0.02)
+        - quality (optional): Mesh quality 0-1 (default: 0.999)
+    
+    Returns: JSON with geometry properties, detected features, routing recommendations, and cost estimates
     """
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
@@ -50,7 +59,11 @@ def analyze_cad():
     if not file.filename:
         return jsonify({'error': 'Empty filename'}), 400
     
-    logger.info(f"Analyzing file: {file.filename}")
+    # Get material and tolerance from form data
+    material = request.form.get('material', 'Cold Rolled Steel')
+    tolerance = float(request.form.get('tolerance', 0.02))
+    
+    logger.info(f"Analyzing file: {file.filename}, material: {material}, tolerance: {tolerance}mm")
     
     # Save temporarily
     file_ext = os.path.splitext(file.filename)[1].lower()
@@ -130,6 +143,29 @@ def analyze_cad():
         quality = float(request.form.get('quality', 0.999))  # 0-1, higher = finer mesh
         mesh_data = tessellate_shape(shape, quality)
         
+        # Build geometry descriptor for routing selection
+        geometry_descriptor = {
+            "volume_cm3": round(volume_mm3 / 1000, 2),
+            "bounding_box": [width_mm, height_mm, depth_mm],
+            "is_cylindrical": is_cylindrical,
+            "has_flat_surfaces": has_flat_surfaces,
+            "holes_count": len(holes),
+            "grooves_count": len(grooves),
+            "complexity_score": complexity,
+            "tolerance": tolerance
+        }
+        
+        # ===== INDUSTRIAL ROUTING SELECTION =====
+        routing_result = select_routings_industrial(geometry_descriptor, material)
+        
+        # ===== MACHINING TIME & COST ESTIMATION =====
+        machining_estimate = estimate_machining_time_and_cost(
+            geometry_descriptor,
+            material,
+            routing_result["recommended_routings"]
+        )
+        
+        # Build enhanced result
         result = {
             'volume_cm3': round(volume_mm3 / 1000, 2),
             'surface_area_cm2': round(surface_area_mm2 / 100, 2),
@@ -150,10 +186,15 @@ def analyze_cad():
                 'flat_surfaces': flat_surfaces,
                 'primary_dimensions': primary_dims
             },
-            'mesh_data': mesh_data
+            'mesh_data': mesh_data,
+            # Industrial routing data
+            'recommended_routings': routing_result["recommended_routings"],
+            'routing_reasoning': routing_result["reasoning"],
+            'machining_summary': machining_estimate["machining_summary"],
+            'estimated_total_cost_usd': machining_estimate["total_cost_usd"]
         }
         
-        logger.info(f"Analysis complete: cylindrical={is_cylindrical}, complexity={complexity}, holes={len(holes)}, grooves={len(grooves)}, triangles={mesh_data['triangle_count']}")
+        logger.info(f"Analysis complete: cylindrical={is_cylindrical}, complexity={complexity}, holes={len(holes)}, routings={routing_result['recommended_routings']}, est_cost=${machining_estimate['total_cost_usd']}")
         return jsonify(result), 200
         
     except Exception as e:
