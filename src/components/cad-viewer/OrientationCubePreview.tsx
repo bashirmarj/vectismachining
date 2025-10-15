@@ -178,8 +178,8 @@ export function OrientationCubePreview() {
       cube.add(edgeMesh);
     });
 
-    // Add corner chamfers (small spheres at corners for clicking)
-    const cornerGeometry = new THREE.SphereGeometry(edgeBevelSize * 2.5, 12, 12);
+    // Add corner chamfers (octahedrons for proper chamfered look)
+    const cornerGeometry = new THREE.OctahedronGeometry(edgeBevelSize * 0.5, 0);
     const cornerMaterial = new THREE.MeshStandardMaterial({ 
       color: 0xf0f0f0,
       metalness: 0.05,
@@ -202,6 +202,8 @@ export function OrientationCubePreview() {
     cornerPositions.forEach(pos => {
       const cornerMesh = new THREE.Mesh(cornerGeometry, cornerMaterial);
       cornerMesh.position.set(pos[0], pos[1], pos[2]);
+      // Rotate octahedron 45° to align with cube corners
+      cornerMesh.rotation.set(Math.PI / 4, Math.PI / 4, 0);
       cube.add(cornerMesh);
     });
 
