@@ -163,6 +163,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     const h = 100;
     
     const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a1a); // Dark background
+    
     const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
     camera.position.set(0, 0, 8);
     
@@ -171,45 +173,45 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     host.appendChild(renderer.domElement);
     
-    // Create cube with proper geometry for 3D appearance
+    // Create cube with darker material for better contrast
     const cubeGeometry = new THREE.BoxGeometry(3, 3, 3);
     const cube = new THREE.Mesh(
       cubeGeometry,
       new THREE.MeshStandardMaterial({
-        color: 0x8f98a3,
-        metalness: 0.4,
-        roughness: 0.6,
-        flatShading: false // Smooth shading for depth
+        color: 0x606870, // Darker gray for better contrast
+        metalness: 0.5,
+        roughness: 0.5,
+        flatShading: false
       })
     );
     
-    // Add visible edge lines for 3D definition
-    const edges = new THREE.EdgesGeometry(cubeGeometry, 15);
+    // Add subtle white edge lines for definition
+    const edges = new THREE.EdgesGeometry(cubeGeometry, 1);
     const edgeLines = new THREE.LineSegments(
       edges,
       new THREE.LineBasicMaterial({
-        color: 0x1a1a1a, // Dark edges
-        linewidth: 2,
+        color: 0xffffff,
+        linewidth: 1,
         transparent: true,
-        opacity: 0.8
+        opacity: 0.15
       })
     );
     cube.add(edgeLines);
     
     scene.add(cube);
     
-    // Proper lighting setup for 3D depth
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    // Stronger lighting for dramatic face differentiation
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
     scene.add(ambientLight);
     
-    // Key light from top-right
-    const keyLight = new THREE.DirectionalLight(0xffffff, 0.7);
-    keyLight.position.set(5, 5, 5);
+    // Strong key light from top-front-right
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    keyLight.position.set(8, 8, 8);
     scene.add(keyLight);
     
-    // Fill light from bottom-left for softer shadows
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    fillLight.position.set(-3, -3, -3);
+    // Subtle fill light
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.2);
+    fillLight.position.set(-5, -3, -5);
     scene.add(fillLight);
     
     // Face labels helper
@@ -266,9 +268,15 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     
     cubeRef.current = { scene, camera, renderer, cube };
     
-    // Render loop
+    // Render loop with camera sync
     const render = () => {
       requestAnimationFrame(render);
+      
+      // Sync cube rotation with main camera inside render loop
+      if (cameraRef.current) {
+        cube.quaternion.copy(cameraRef.current.quaternion);
+      }
+      
       renderer.render(scene, camera);
     };
     render();
@@ -280,24 +288,27 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     };
   }, []);
   
-  // Sync cube orientation with main camera
-  useEffect(() => {
-    if (!cameraRef.current || !cubeRef.current) return;
+  // Isometric view helper
+  const setIsometricView = () => {
+    if (!cameraRef.current || !controlsRef.current) return;
     
-    let animationId: number;
-    const syncCubeToCamera = () => {
-      if (cubeRef.current?.cube && cameraRef.current) {
-        cubeRef.current.cube.quaternion.copy(cameraRef.current.quaternion);
-      }
-      animationId = requestAnimationFrame(syncCubeToCamera);
-    };
+    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+    const distance = maxDim * 2;
+    const target = new THREE.Vector3(...boundingBox.center);
     
-    syncCubeToCamera();
+    // Isometric angles: 45° horizontal, 35.264° vertical
+    const phi = Math.PI / 4; // 45°
+    const theta = Math.asin(Math.tan(Math.PI / 6)); // 35.264°
     
-    return () => {
-      if (animationId) cancelAnimationFrame(animationId);
-    };
-  }, [cameraRef.current]);
+    cameraRef.current.position.set(
+      target.x + distance * Math.sin(phi) * Math.cos(theta),
+      target.y + distance * Math.sin(theta),
+      target.z + distance * Math.cos(phi) * Math.cos(theta)
+    );
+    
+    controlsRef.current.target.copy(target);
+    controlsRef.current.update();
+  };
   
   // Smooth quaternion-based camera orientation
   const orientMainCameraToNormal = (normal: THREE.Vector3) => {
@@ -436,57 +447,72 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
               onFitView={handleFitView}
             />
             
-            {/* Orientation Cube */}
+            {/* Isometric Reset Button - Top Left */}
+            <button
+              onClick={setIsometricView}
+              className="absolute top-5 left-5 z-30 p-2 hover:bg-white/20 rounded-lg transition-all"
+              style={{
+                background: 'rgba(26, 26, 26, 0.95)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+              }}
+              title="Isometric View"
+            >
+              <Box className="w-4 h-4 text-white/80 hover:text-white" />
+            </button>
+            
+            {/* Orientation Cube - Meviy Style */}
             <div className="absolute bottom-5 right-5 z-30 flex flex-col items-center">
               {/* Top rotation icon */}
               <button
                 onClick={() => handleViewChange('up')}
-                className="mb-1 p-1 hover:bg-white/10 rounded transition-colors"
+                className="mb-1 p-1 hover:bg-white/20 rounded transition-colors"
                 title="View from top"
               >
-                <ChevronUp className="w-4 h-4 text-white/70 hover:text-white" />
+                <ChevronUp className="w-4 h-4 text-white/80 hover:text-white" />
               </button>
               
               <div className="flex items-center gap-1">
                 {/* Left rotation */}
                 <button
                   onClick={() => handleViewChange('left')}
-                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                  className="p-1 hover:bg-white/20 rounded transition-colors"
                   title="View from left"
                 >
-                  <ChevronLeft className="w-4 h-4 text-white/70 hover:text-white" />
+                  <ChevronLeft className="w-4 h-4 text-white/80 hover:text-white" />
                 </button>
                 
-                {/* Cube container - Meviy style */}
+                {/* Cube container - Dark Meviy style */}
                 <div
                   ref={cubeHostRef}
                   className="relative"
                   style={{
                     width: '100px',
                     height: '100px',
-                    background: 'rgba(255, 255, 255, 0.04)',
+                    background: 'rgba(26, 26, 26, 0.95)',
                     backdropFilter: 'blur(8px)',
                     borderRadius: '12px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
                   }}
                 />
                 
                 {/* Right rotation */}
                 <button
                   onClick={() => handleViewChange('right')}
-                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                  className="p-1 hover:bg-white/20 rounded transition-colors"
                   title="View from right"
                 >
-                  <ChevronRight className="w-4 h-4 text-white/70 hover:text-white" />
+                  <ChevronRight className="w-4 h-4 text-white/80 hover:text-white" />
                 </button>
               </div>
               
               {/* Bottom rotation icon */}
               <button
                 onClick={() => handleViewChange('down')}
-                className="mt-1 p-1 hover:bg-white/10 rounded transition-colors"
+                className="mt-1 p-1 hover:bg-white/20 rounded transition-colors"
                 title="View from bottom"
               >
-                <ChevronDown className="w-4 h-4 text-white/70 hover:text-white" />
+                <ChevronDown className="w-4 h-4 text-white/80 hover:text-white" />
               </button>
             </div>
             
