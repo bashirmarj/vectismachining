@@ -1,21 +1,8 @@
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Upload, File, CheckCircle2, AlertCircle, ChevronsUpDown, Check, Zap, Info, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import { Textarea } from "@/components/ui/textarea";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
-import { FeatureTree } from "./FeatureTree";
-import { PartDetailCustomer } from "./PartDetailCustomer";
-import { parseCADFile, Triangle } from "@/lib/geometryAnalyzer";
+import { FileUploadScreen } from "./part-upload/FileUploadScreen";
+import { PartConfigScreen } from "./part-upload/PartConfigScreen";
 
 const countryCodes = [
   { code: "+1", country: "Canada" },
@@ -97,26 +84,17 @@ interface FileWithQuantity {
 }
 
 export const PartUploadForm = () => {
-  const [name, setName] = useState("");
-  const [company, setCompany] = useState("");
-  const [email, setEmail] = useState("");
-  const [countryCode, setCountryCode] = useState("+1");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [shippingAddress, setShippingAddress] = useState("");
-  const [message, setMessage] = useState("");
+  const [currentScreen, setCurrentScreen] = useState<'upload' | 'configure'>('upload');
   const [files, setFiles] = useState<FileWithQuantity[]>([]);
-  const [drawingFiles, setDrawingFiles] = useState<File[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [materialOpen, setMaterialOpen] = useState<number | null>(null);
-  const [processOpen, setProcessOpen] = useState<number | null>(null);
   const [materials, setMaterials] = useState<string[]>([]);
   const [processes, setProcesses] = useState<string[]>([]);
+  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+  const [uploading, setUploading] = useState(false);
   const [rateLimitRemaining, setRateLimitRemaining] = useState<number | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const { toast } = useToast();
 
-  // Load available materials and processes on mount
+  // Load available materials and processes
   useEffect(() => {
     const fetchMaterials = async () => {
       const { data } = await supabase
@@ -146,11 +124,11 @@ export const PartUploadForm = () => {
     fetchProcesses();
   }, []);
 
-  // Load rate limit state from localStorage on mount
+  // Load rate limit state
   useEffect(() => {
     const stored = localStorage.getItem('quotation_rate_limit');
     if (stored) {
-      const { expiry, remainingSeconds } = JSON.parse(stored);
+      const { expiry } = JSON.parse(stored);
       const now = Date.now();
       
       if (now < expiry) {
@@ -163,7 +141,7 @@ export const PartUploadForm = () => {
     }
   }, []);
 
-  // Countdown timer for rate limit
+  // Countdown timer
   useEffect(() => {
     if (rateLimitRemaining === null || rateLimitRemaining <= 0) {
       setIsRateLimited(false);
@@ -186,18 +164,24 @@ export const PartUploadForm = () => {
     return () => clearInterval(interval);
   }, [rateLimitRemaining]);
 
+  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  };
+
   const analyzeFile = async (fileWithQty: FileWithQuantity, index: number) => {
     try {
-      // Mark as analyzing
       setFiles(prev => prev.map((f, i) => 
         i === index ? { ...f, isAnalyzing: true } : f
       ));
 
-      // Convert file to base64 for server-side analysis
       const arrayBuffer = await fileWithQty.file.arrayBuffer();
       const base64 = arrayBufferToBase64(arrayBuffer);
 
-      // Call server-side analyze-cad edge function
       const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze-cad', {
         body: {
           file_name: fileWithQty.file.name,
@@ -209,7 +193,6 @@ export const PartUploadForm = () => {
 
       if (analysisError) throw analysisError;
 
-      // Call pricing calculator if material is selected AND processes were detected
       let quoteData = null;
       if (fileWithQty.material && analysisData.recommended_processes && analysisData.recommended_processes.length > 0) {
         const { data, error: quoteError } = await supabase.functions.invoke('calculate-preliminary-quote', {
@@ -231,7 +214,6 @@ export const PartUploadForm = () => {
         quoteData = data;
       }
 
-      // Update file with analysis, meshId, and quote
       setFiles(prev => prev.map((f, i) => 
         i === index ? { 
           ...f,
@@ -277,140 +259,80 @@ export const PartUploadForm = () => {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
-    if (selectedFiles.length > 0) {
-      const validExtensions = [
-        '.step', '.stp', '.iges', '.igs', '.stl', '.obj',
-        '.sldprt', '.sldasm', '.slddrw',
-        '.ipt', '.iam', '.idw',
-        '.catpart', '.catproduct',
-        '.x_t', '.x_b', '.prt', '.asm',
-        '.pdf'
-      ];
-      
-      const invalidFiles = selectedFiles.filter(file => {
-        const fileName = file.name.toLowerCase();
-        return !validExtensions.some(ext => fileName.endsWith(ext));
-      });
+    if (selectedFiles.length === 0) return;
 
-      if (invalidFiles.length > 0) {
-        toast({
-          title: "Invalid file type",
-          description: `${invalidFiles.length} file(s) have unsupported formats`,
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      const filesWithQuantity = selectedFiles.map(file => ({ file, quantity: 1, material: undefined, process: undefined }));
-      const newFiles = [...files, ...filesWithQuantity];
-      setFiles(newFiles);
-      
-      // Analyze each new file
-      filesWithQuantity.forEach((fileWithQty, idx) => {
-        const fileIndex = files.length + idx;
-        analyzeFile(fileWithQty, fileIndex);
-      });
-    }
-  };
+    const invalidFiles = selectedFiles.filter(file => {
+      const fileName = file.name.toLowerCase();
+      return !fileName.endsWith('.step') && !fileName.endsWith('.stp') && 
+             !fileName.endsWith('.iges') && !fileName.endsWith('.igs');
+    });
 
-  const handleDrawingFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || []);
-    if (selectedFiles.length > 0) {
-      const invalidFiles = selectedFiles.filter(file => {
-        const fileName = file.name.toLowerCase();
-        return !fileName.endsWith('.dwg') && !fileName.endsWith('.dxf') && !fileName.endsWith('.pdf');
-      });
-
-      if (invalidFiles.length > 0) {
-        toast({
-          title: "Invalid file type",
-          description: `${invalidFiles.length} file(s) must be DWG, DXF, or PDF format`,
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      setDrawingFiles(prev => [...prev, ...selectedFiles]);
-    }
-  };
-
-  const removeFile = (index: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const updateFileQuantity = (index: number, quantity: number) => {
-    const newQuantity = Math.max(1, quantity);
-    setFiles(prev => prev.map((item, i) => 
-      i === index ? { ...item, quantity: newQuantity } : item
-    ));
-    
-    // Re-analyze with new quantity if both material and process selected
-    const fileWithQty = files[index];
-    if (fileWithQty && !fileWithQty.isAnalyzing && fileWithQty.material && fileWithQty.process) {
-      analyzeFile({ ...fileWithQty, quantity: newQuantity }, index);
-    }
-  };
-
-  const updateFileMaterial = (index: number, material: string) => {
-    setFiles(prev => prev.map((item, i) => 
-      i === index ? { ...item, material } : item
-    ));
-    
-    // Re-analyze if processes have been detected
-    const fileWithQty = files[index];
-    if (fileWithQty && 
-        !fileWithQty.isAnalyzing && 
-        fileWithQty.analysis?.recommended_processes && 
-        fileWithQty.analysis.recommended_processes.length > 0) {
-      analyzeFile({ ...fileWithQty, material }, index);
-    }
-  };
-
-  const removeDrawingFile = (index: number) => {
-    setDrawingFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  // Helper function to convert ArrayBuffer to base64 in chunks to avoid call stack overflow
-  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-    const bytes = new Uint8Array(buffer);
-    const chunkSize = 8192;
-    let binary = '';
-    
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-      binary += String.fromCharCode.apply(null, Array.from(chunk));
-    }
-    
-    return btoa(binary);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (files.length === 0 || !email || !name || !phoneNumber || !shippingAddress) {
+    if (invalidFiles.length > 0) {
       toast({
-        title: "Missing information",
-        description: "Please fill in all required fields and upload at least one CAD file",
+        title: "Invalid file type",
+        description: "Only STEP and IGES files are supported",
         variant: "destructive",
       });
       return;
     }
+    
+    const filesWithQuantity = selectedFiles.map(file => ({ 
+      file, 
+      quantity: 1, 
+      material: undefined, 
+      process: undefined 
+    }));
+    
+    const newFiles = [...files, ...filesWithQuantity];
+    setFiles(newFiles);
+    
+    // Analyze each new file
+    for (let idx = 0; idx < filesWithQuantity.length; idx++) {
+      const fileIndex = files.length + idx;
+      await analyzeFile(filesWithQuantity[idx], fileIndex);
+    }
+  };
 
-    // Check total file size (Resend has 40MB limit for attachments)
-    const totalSize = files.reduce((sum, f) => sum + f.file.size, 0) + 
-                      drawingFiles.reduce((sum, f) => sum + f.size, 0);
-    const totalSizeMB = totalSize / 1024 / 1024;
+  const handleRemoveFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+    if (selectedFileIndex >= files.length - 1) {
+      setSelectedFileIndex(Math.max(0, files.length - 2));
+    }
+  };
+
+  const handleContinue = () => {
+    setCurrentScreen('configure');
+  };
+
+  const handleBack = () => {
+    setCurrentScreen('upload');
+  };
+
+  const handleUpdateFile = (index: number, updates: Partial<FileWithQuantity>) => {
+    setFiles(prev => prev.map((item, i) => 
+      i === index ? { ...item, ...updates } : item
+    ));
     
-    console.log(`Total file size: ${totalSizeMB.toFixed(2)} MB`);
-    
-    if (totalSizeMB > 35) {
+    // Re-analyze if material changed
+    if (updates.material) {
+      const fileWithQty = files[index];
+      if (fileWithQty && 
+          !fileWithQty.isAnalyzing && 
+          fileWithQty.analysis?.recommended_processes && 
+          fileWithQty.analysis.recommended_processes.length > 0) {
+        analyzeFile({ ...fileWithQty, ...updates }, index);
+      }
+    }
+  };
+
+  const handleSubmit = async (formData: any) => {
+    if (isRateLimited) {
       toast({
-        title: "Files too large",
-        description: `Total file size (${totalSizeMB.toFixed(1)}MB) exceeds the 35MB limit. Please reduce file sizes or upload fewer files.`,
+        title: "Rate limit active",
+        description: `Please wait ${Math.ceil((rateLimitRemaining || 0) / 60)} minutes before submitting again.`,
         variant: "destructive",
-        duration: 8000,
       });
       return;
     }
@@ -418,410 +340,98 @@ export const PartUploadForm = () => {
     setUploading(true);
 
     try {
-      console.log('Converting files to base64...', files.length, 'CAD files,', drawingFiles.length, 'drawing files');
-      
-      // Convert files to base64 for sending to edge function
-      const filePromises = files.map(async (fileWithQty) => {
-        const arrayBuffer = await fileWithQty.file.arrayBuffer();
-        const base64 = arrayBufferToBase64(arrayBuffer);
-        return {
-          name: fileWithQty.file.name,
-          content: base64,
-          size: fileWithQty.file.size,
-          quantity: fileWithQty.quantity
-        };
-      });
-
-      const drawingFilePromises = drawingFiles.map(async (file) => {
-        const arrayBuffer = await file.arrayBuffer();
-        const base64 = arrayBufferToBase64(arrayBuffer);
-        return {
-          name: file.name,
-          content: base64,
-          size: file.size
-        };
-      });
-
-      const uploadedFiles = await Promise.all(filePromises);
-      const uploadedDrawingFiles = await Promise.all(drawingFilePromises);
-
-      console.log('Files converted. Calling edge function...');
-      console.log('Sending quotation request with', uploadedFiles.length, 'files');
-
-      const response = await supabase.functions.invoke(
-        'send-quotation-request',
-        {
-          body: {
-            name,
-            company,
-            email,
-            phone: `${countryCode} ${phoneNumber}`,
-            shippingAddress,
-            message,
-            files: uploadedFiles,
-            drawingFiles: uploadedDrawingFiles,
-          },
-        }
+      // Convert files to base64
+      const filesData = await Promise.all(
+        files.map(async (fileItem) => {
+          const arrayBuffer = await fileItem.file.arrayBuffer();
+          const base64 = arrayBufferToBase64(arrayBuffer);
+          
+          return {
+            file_name: fileItem.file.name,
+            file_size: fileItem.file.size,
+            file_data: base64,
+            quantity: fileItem.quantity,
+            material: fileItem.material,
+            process: fileItem.process,
+            analysis: fileItem.analysis,
+            quote: fileItem.quote,
+            mesh_id: fileItem.meshId
+          };
+        })
       );
 
-      console.log('Response received:', response);
-      console.log('Response error:', response.error);
-      console.log('Response data:', response.data);
-
-      // When Supabase functions return non-200 status, error details are in response.data
-      const responseData = response.data;
-      const hasError = response.error || (responseData && responseData.error);
-      
-      if (hasError) {
-        // Check for rate limit error
-        if (responseData && responseData.error === 'rate_limit_exceeded') {
-          const remainingSeconds = responseData.remainingSeconds || 300;
-          
-          // Store in localStorage for persistence
-          const expiry = Date.now() + (remainingSeconds * 1000);
-          localStorage.setItem('quotation_rate_limit', JSON.stringify({
-            expiry,
-            remainingSeconds
-          }));
-          
-          setRateLimitRemaining(remainingSeconds);
-          setIsRateLimited(true);
-
-          const minutes = Math.floor(remainingSeconds / 60);
-          const seconds = remainingSeconds % 60;
-          
-          toast({
-            title: "⏱️ Rate Limit Exceeded",
-            description: `You've recently submitted a request. Please wait ${minutes} minute${minutes !== 1 ? 's' : ''} ${seconds} second${seconds !== 1 ? 's' : ''} before submitting another.`,
-            variant: "destructive",
-            duration: 10000,
-          });
-          
-          setUploading(false);
-          return;
+      const { data, error } = await supabase.functions.invoke('send-quotation-request', {
+        body: {
+          name: formData.name,
+          company: formData.company,
+          email: formData.email,
+          phone: formData.phone,
+          shipping_address: formData.address,
+          message: formData.message,
+          files: filesData,
+          drawing_files: []
         }
-        
-        // Check for file size error
-        if (responseData && responseData.error === 'file_size_exceeded') {
-          toast({
-            title: "Files too large",
-            description: `Total file size (${responseData.totalSizeMB?.toFixed(1)}MB) exceeds the limit. Please reduce file sizes.`,
-            variant: "destructive",
-            duration: 8000,
-          });
-          setUploading(false);
-          return;
-        }
-        
-        // Generic error
-        throw new Error(responseData?.message || response.error?.message || 'Unknown error occurred');
+      });
+
+      if (error) throw error;
+
+      if (data.rateLimitInfo) {
+        const { waitTimeSeconds } = data.rateLimitInfo;
+        const expiry = Date.now() + (waitTimeSeconds * 1000);
+        localStorage.setItem('quotation_rate_limit', JSON.stringify({
+          expiry,
+          remainingSeconds: waitTimeSeconds
+        }));
+        setRateLimitRemaining(waitTimeSeconds);
+        setIsRateLimited(true);
       }
 
-      const quoteNumber = response.data?.quoteNumber;
-
       toast({
-        title: "✅ Success!",
-        description: quoteNumber 
-          ? `Your quotation request has been submitted with reference number: ${quoteNumber}. We'll contact you soon.`
-          : "Your quotation request has been submitted. We'll contact you soon.",
-        duration: 8000,
+        title: "Quote Request Submitted!",
+        description: "We'll review your parts and send you a detailed quote within 24 hours.",
       });
 
       // Reset form
-      setName("");
-      setCompany("");
-      setEmail("");
-      setCountryCode("+1");
-      setPhoneNumber("");
-      setShippingAddress("");
-      setMessage("");
       setFiles([]);
-      setDrawingFiles([]);
-      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-      if (fileInput) fileInput.value = '';
-      const drawingInput = document.getElementById('drawing-upload') as HTMLInputElement;
-      if (drawingInput) drawingInput.value = '';
-
+      setCurrentScreen('upload');
+      setSelectedFileIndex(0);
     } catch (error: any) {
-      console.error('Upload error:', error);
+      console.error('Error submitting quote request:', error);
       toast({
-        title: "Upload failed",
-        description: error.message || "Failed to submit quotation request. Please try again.",
+        title: "Submission Failed",
+        description: error.message || "Please try again later.",
         variant: "destructive",
-        duration: 8000,
       });
     } finally {
       setUploading(false);
     }
   };
 
-  const formatTimeRemaining = () => {
-    if (!rateLimitRemaining) return '';
-    const minutes = Math.floor(rateLimitRemaining / 60);
-    const seconds = rateLimitRemaining % 60;
-    return `${minutes}m ${seconds}s`;
-  };
+  const isAnalyzing = files.some(f => f.isAnalyzing);
+
+  if (currentScreen === 'upload') {
+    return (
+      <FileUploadScreen
+        files={files}
+        onFileSelect={handleFileSelect}
+        onRemoveFile={handleRemoveFile}
+        onContinue={handleContinue}
+        isAnalyzing={isAnalyzing}
+      />
+    );
+  }
 
   return (
-    <Card className="max-w-2xl mx-auto">
-      <CardContent className="p-6">
-          <div className="mb-6">
-          <h3 className="text-2xl font-bold mb-2">Request a Quotation</h3>
-          <p className="text-muted-foreground">
-            Upload your CAD file in any major format (STEP, SolidWorks, Inventor, CATIA, etc.) and optionally include a drawing file (DWG/DXF) for a detailed manufacturing quote.
-          </p>
-        </div>
-
-        {isRateLimited && rateLimitRemaining && (
-          <div className="mb-4 p-4 bg-destructive/10 border border-destructive rounded-lg">
-            <p className="text-sm font-medium text-destructive">
-              ⏱️ Please wait {formatTimeRemaining()} before submitting another request.
-            </p>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="John Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="company">Company Name</Label>
-              <Input
-                id="company"
-                type="text"
-                placeholder="Your Company"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email Address *</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone Number *</Label>
-            <div className="flex gap-2">
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-[140px] justify-between"
-                  >
-                    {countryCode}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[300px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Search country..." />
-                    <CommandList>
-                      <CommandEmpty>No country found.</CommandEmpty>
-                      <CommandGroup>
-                        {countryCodes.map((item) => (
-                          <CommandItem
-                            key={item.code}
-                            value={`${item.country} ${item.code}`}
-                            onSelect={() => {
-                              setCountryCode(item.code);
-                              setOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                countryCode === item.code ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            {item.code} - {item.country}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="1234567890"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className="flex-1"
-                required
-              />
-          </div>
-
-
-          <div className="space-y-2">
-            <Label htmlFor="message">Additional Instructions (Optional)</Label>
-            <Textarea
-              id="message"
-              placeholder="Any special requirements or instructions for your parts..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              rows={3}
-            />
-          </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="address">Shipping Address *</Label>
-            <Textarea
-              id="address"
-              placeholder="Enter your full shipping address"
-              value={shippingAddress}
-              onChange={(e) => setShippingAddress(e.target.value)}
-              rows={3}
-              required
-            />
-          </div>
-
-
-          <div className="space-y-2">
-            <Label htmlFor="file-upload">CAD Files * (Multiple files supported)</Label>
-            
-            {/* Display uploaded files OUTSIDE the label to prevent click interference */}
-            {files.length > 0 && (
-              <div className="w-full space-y-3 mb-4">
-                {files.map((fileWithQty, index) => (
-                  <PartDetailCustomer
-                    key={index}
-                    file={fileWithQty}
-                    materials={materials}
-                    onUpdateMaterial={(material) => updateFileMaterial(index, material)}
-                    onAnalyze={() => analyzeFile(fileWithQty, index)}
-                    onRemove={() => removeFile(index)}
-                  />
-                ))}
-              </div>
-            )}
-            
-            {/* Upload area - only the upload UI should be inside the label */}
-            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
-              <input
-                id="file-upload"
-                type="file"
-                multiple
-                accept=".step,.stp,.iges,.igs,.stl,.obj,.sldprt,.sldasm,.slddrw,.ipt,.iam,.idw,.catpart,.catproduct,.x_t,.x_b,.prt,.asm,.pdf"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <label
-                htmlFor="file-upload"
-                className="cursor-pointer flex flex-col items-center"
-              >
-                <Upload className="h-12 w-12 text-muted-foreground mb-3" />
-                <p className="text-sm font-medium mb-1">
-                  {files.length > 0 ? 'Click to add more files' : 'Click to upload or drag and drop'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  STEP, IGES, STL, SolidWorks, Inventor, CATIA, and more
-                </p>
-              </label>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="drawing-upload">Drawing Files (Optional - Multiple files supported)</Label>
-            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
-              <input
-                id="drawing-upload"
-                type="file"
-                multiple
-                accept=".dwg,.dxf,.pdf"
-                onChange={handleDrawingFileChange}
-                className="hidden"
-              />
-              <label
-                htmlFor="drawing-upload"
-                className="cursor-pointer flex flex-col items-center"
-              >
-                {drawingFiles.length > 0 ? (
-                  <div className="w-full space-y-2">
-                    {drawingFiles.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between gap-3 p-2 bg-primary/5 rounded">
-                        <div className="flex items-center gap-3">
-                          <File className="h-6 w-6 text-primary flex-shrink-0" />
-                          <div className="text-left">
-                            <p className="font-medium text-sm">{file.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {(file.size / 1024 / 1024).toFixed(2)} MB
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            removeDrawingFile(index);
-                          }}
-                          className="h-8 w-8 p-0"
-                        >
-                          ×
-                        </Button>
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-center gap-2 text-primary pt-2">
-                      <Upload className="h-5 w-5" />
-                      <span className="text-sm">Click to add more drawing files</span>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <Upload className="h-12 w-12 text-muted-foreground mb-3" />
-                    <p className="text-sm font-medium mb-1">
-                      Click to upload or drag and drop
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      DWG or DXF files only (optional)
-                    </p>
-                  </>
-                )}
-              </label>
-            </div>
-          </div>
-
-          <Button type="submit" size="lg" className="w-full" disabled={uploading || isRateLimited}>
-            {uploading ? (
-              <div className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
-                Uploading {files.length + drawingFiles.length} file(s)...
-              </div>
-            ) : isRateLimited ? (
-              <>⏱️ Please wait {formatTimeRemaining()}</>
-            ) : (
-              <>
-                <Upload className="mr-2 h-4 w-4" />
-                Submit Quotation Request
-              </>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <PartConfigScreen
+      files={files}
+      materials={materials}
+      processes={processes}
+      onBack={handleBack}
+      onSubmit={handleSubmit}
+      onUpdateFile={handleUpdateFile}
+      selectedFileIndex={selectedFileIndex}
+      onSelectFile={setSelectedFileIndex}
+      isSubmitting={uploading}
+    />
   );
 };
