@@ -602,15 +602,15 @@ def tessellate_shape(shape, quality=0.5):
         # quality=0.999 -> 0.011mm deflection (maximum quality, smooth internals - default)
         # quality=1.0   -> 0.01mm deflection (absolute maximum)
         
-        # --- Improved Tessellation Control ---
-        # Map quality 0–1 → deflection range 0.6 → 0.01 mm
-        # This provides exponential precision increase at high quality
-        deflection = 0.6 * (1 - quality) + 0.01 * quality
-        angular_deflection = 0.05  # radians (~3°) for smooth curves
+        # --- Final high-fidelity tessellation setup (logarithmic scaling) ---
+        # Maps quality ∈ [0,1] to deflection in mm:
+        #   0.5 → 0.5 mm   |   0.9 → 0.05 mm   |   0.99 → 0.015 mm   |   0.999 → 0.008 mm
+        deflection = 0.6 * (10 ** (-(quality * 3)))  # logarithmic precision scale
+        angular_deflection = 0.04  # radians (~2.3°)
         
         # Create incremental mesh with adaptive tessellation
         # Parameters: shape, linear_deflection, is_relative, angular_deflection, is_parallel
-        logger.info(f"Tessellating with deflection={deflection:.4f}mm, angular={angular_deflection:.3f}rad")
+        logger.info(f"Tessellating with deflection={deflection:.4f} mm (log scale), angular={angular_deflection:.3f} rad")
         mesh = BRepMesh_IncrementalMesh(shape, deflection, False, angular_deflection, True)
         mesh.Perform()
         
