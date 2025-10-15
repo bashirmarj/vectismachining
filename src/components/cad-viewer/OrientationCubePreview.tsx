@@ -3,6 +3,43 @@ import * as THREE from 'three';
 import { Button } from '@/components/ui/button';
 import { Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, RotateCw, RotateCcw } from 'lucide-react';
 
+// Helper function to create a beveled box geometry
+function createBeveledBoxGeometry(
+  width: number,
+  height: number,
+  depth: number,
+  bevelRadius: number,
+  segments: number = 3
+): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  const halfWidth = width / 2 - bevelRadius;
+  const halfHeight = height / 2 - bevelRadius;
+  
+  // Draw rounded rectangle
+  shape.moveTo(-halfWidth, -halfHeight + bevelRadius);
+  shape.lineTo(-halfWidth, halfHeight - bevelRadius);
+  shape.quadraticCurveTo(-halfWidth, halfHeight, -halfWidth + bevelRadius, halfHeight);
+  shape.lineTo(halfWidth - bevelRadius, halfHeight);
+  shape.quadraticCurveTo(halfWidth, halfHeight, halfWidth, halfHeight - bevelRadius);
+  shape.lineTo(halfWidth, -halfHeight + bevelRadius);
+  shape.quadraticCurveTo(halfWidth, -halfHeight, halfWidth - bevelRadius, -halfHeight);
+  shape.lineTo(-halfWidth + bevelRadius, -halfHeight);
+  shape.quadraticCurveTo(-halfWidth, -halfHeight, -halfWidth, -halfHeight + bevelRadius);
+  
+  // Extrude settings
+  const extrudeSettings = {
+    depth: depth - bevelRadius * 2,
+    bevelEnabled: true,
+    bevelThickness: bevelRadius,
+    bevelSize: bevelRadius,
+    bevelSegments: segments,
+  };
+  
+  const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+  geometry.center();
+  return geometry;
+}
+
 export function OrientationCubePreview() {
   const cubeContainerRef = useRef<HTMLDivElement>(null);
   const [cubeScene] = useState(() => new THREE.Scene());
@@ -100,8 +137,9 @@ export function OrientationCubePreview() {
     // Setup scene
     cubeScene.background = new THREE.Color(0x2a2a3a);
 
-    // Create cube
-    const geometry = new THREE.BoxGeometry(2, 2, 2);
+    // Create beveled cube
+    const bevelRadius = 0.15;
+    const geometry = createBeveledBoxGeometry(2, 2, 2, bevelRadius, 3);
     const material = new THREE.MeshStandardMaterial({ 
       color: 0xf0f0f0,
       metalness: 0.05,
@@ -112,8 +150,8 @@ export function OrientationCubePreview() {
     const cube = new THREE.Mesh(geometry, material);
     cubeRef.current = cube;
 
-    // Add edges
-    const edges = new THREE.EdgesGeometry(geometry);
+    // Add edges (adjusted threshold for beveled geometry)
+    const edges = new THREE.EdgesGeometry(geometry, 15);
     const lineMaterial = new THREE.LineBasicMaterial({ 
       color: 0x444444,
       linewidth: 1,
@@ -141,71 +179,7 @@ export function OrientationCubePreview() {
     cubeCamera.position.set(3, 3, 3);
     cubeCamera.lookAt(0, 0, 0);
 
-    // Add chamfered edges (thin rectangular meshes for edge clicking)
-    const edgeBevelSize = 0.35;
-    const edgeGeometry = new THREE.BoxGeometry(2 - edgeBevelSize * 2, edgeBevelSize, edgeBevelSize);
-    const edgeMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xf0f0f0,
-      metalness: 0.05,
-      roughness: 0.6,
-      transparent: true,
-      opacity: 0.9
-    });
-
-    // 12 edges of the cube
-    const edgePositions = [
-      // Top edges (4)
-      { pos: [0, 1 - edgeBevelSize / 2, 1 - edgeBevelSize / 2], rot: [0, 0, 0] },
-      { pos: [0, 1 - edgeBevelSize / 2, -1 + edgeBevelSize / 2], rot: [0, 0, 0] },
-      { pos: [1 - edgeBevelSize / 2, 1 - edgeBevelSize / 2, 0], rot: [0, Math.PI / 2, 0] },
-      { pos: [-1 + edgeBevelSize / 2, 1 - edgeBevelSize / 2, 0], rot: [0, Math.PI / 2, 0] },
-      // Bottom edges (4)
-      { pos: [0, -1 + edgeBevelSize / 2, 1 - edgeBevelSize / 2], rot: [0, 0, 0] },
-      { pos: [0, -1 + edgeBevelSize / 2, -1 + edgeBevelSize / 2], rot: [0, 0, 0] },
-      { pos: [1 - edgeBevelSize / 2, -1 + edgeBevelSize / 2, 0], rot: [0, Math.PI / 2, 0] },
-      { pos: [-1 + edgeBevelSize / 2, -1 + edgeBevelSize / 2, 0], rot: [0, Math.PI / 2, 0] },
-      // Vertical edges (4)
-      { pos: [1 - edgeBevelSize / 2, 0, 1 - edgeBevelSize / 2], rot: [0, 0, Math.PI / 2] },
-      { pos: [-1 + edgeBevelSize / 2, 0, 1 - edgeBevelSize / 2], rot: [0, 0, Math.PI / 2] },
-      { pos: [1 - edgeBevelSize / 2, 0, -1 + edgeBevelSize / 2], rot: [0, 0, Math.PI / 2] },
-      { pos: [-1 + edgeBevelSize / 2, 0, -1 + edgeBevelSize / 2], rot: [0, 0, Math.PI / 2] },
-    ];
-
-    edgePositions.forEach(({ pos, rot }) => {
-      const edgeMesh = new THREE.Mesh(edgeGeometry, edgeMaterial);
-      edgeMesh.position.set(pos[0], pos[1], pos[2]);
-      edgeMesh.rotation.set(rot[0], rot[1], rot[2]);
-      cube.add(edgeMesh);
-    });
-
-    // Add corner chamfers (octahedrons for proper chamfered look)
-    const cornerGeometry = new THREE.OctahedronGeometry(edgeBevelSize * 0.5, 0);
-    const cornerMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xf0f0f0,
-      metalness: 0.05,
-      roughness: 0.6,
-      transparent: true,
-      opacity: 0.9
-    });
-
-    const cornerPositions = [
-      [1 - edgeBevelSize, 1 - edgeBevelSize, 1 - edgeBevelSize],
-      [1 - edgeBevelSize, 1 - edgeBevelSize, -1 + edgeBevelSize],
-      [1 - edgeBevelSize, -1 + edgeBevelSize, 1 - edgeBevelSize],
-      [1 - edgeBevelSize, -1 + edgeBevelSize, -1 + edgeBevelSize],
-      [-1 + edgeBevelSize, 1 - edgeBevelSize, 1 - edgeBevelSize],
-      [-1 + edgeBevelSize, 1 - edgeBevelSize, -1 + edgeBevelSize],
-      [-1 + edgeBevelSize, -1 + edgeBevelSize, 1 - edgeBevelSize],
-      [-1 + edgeBevelSize, -1 + edgeBevelSize, -1 + edgeBevelSize],
-    ];
-
-    cornerPositions.forEach(pos => {
-      const cornerMesh = new THREE.Mesh(cornerGeometry, cornerMaterial);
-      cornerMesh.position.set(pos[0], pos[1], pos[2]);
-      // Rotate octahedron 45° to align with cube corners
-      cornerMesh.rotation.set(Math.PI / 4, Math.PI / 4, 0);
-      cube.add(cornerMesh);
-    });
+    // Edge and corner beveling is now integrated into the geometry itself
 
     // Add face labels using Planes instead of Sprites (fixed to face orientation)
     const faces = [
