@@ -435,7 +435,8 @@ async function analyzeSTEPViaService(
   fileData: ArrayBuffer, 
   fileName: string,
   material?: string,
-  tolerance?: number
+  tolerance?: number,
+  forceReanalyze?: boolean
 ): Promise<AnalysisResult | null> {
   const GEOMETRY_SERVICE_URL = Deno.env.get('GEOMETRY_SERVICE_URL');
   
@@ -512,7 +513,7 @@ async function analyzeSTEPViaService(
     let mesh_id: string | undefined;
     if (data.mesh_data && data.mesh_data.vertices && data.mesh_data.vertices.length > 0) {
       console.log(`💾 Storing mesh data: ${data.mesh_data.triangle_count} triangles`);
-      mesh_id = await storeMeshData(data.mesh_data, fileName, fileData);
+      mesh_id = await storeMeshData(data.mesh_data, fileName, fileData, forceReanalyze);
       console.log(`✅ Mesh stored with ID: ${mesh_id}`);
       console.log(`📐 Mesh includes ${(data.mesh_data.feature_edges || []).length} feature edges`);
     } else {
@@ -558,7 +559,8 @@ async function calculateFileHash(fileData: ArrayBuffer): Promise<string> {
 async function storeMeshData(
   meshData: MeshData,
   fileName: string,
-  fileData: ArrayBuffer
+  fileData: ArrayBuffer,
+  forceReanalyze?: boolean
 ): Promise<string | undefined> {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -568,16 +570,20 @@ async function storeMeshData(
     // Calculate file hash for caching
     const fileHash = await calculateFileHash(fileData);
     
-    // Check if mesh already exists
-    const { data: existingMesh } = await supabase
-      .from('cad_meshes')
-      .select('id')
-      .eq('file_hash', fileHash)
-      .maybeSingle();
-    
-    if (existingMesh) {
-      console.log(`Mesh already cached for ${fileName} (hash: ${fileHash})`);
-      return existingMesh.id;
+    // Check if mesh already exists (unless force reanalyze is enabled)
+    if (!forceReanalyze) {
+      const { data: existingMesh } = await supabase
+        .from('cad_meshes')
+        .select('id')
+        .eq('file_hash', fileHash)
+        .maybeSingle();
+      
+      if (existingMesh) {
+        console.log(`Mesh already cached for ${fileName} (hash: ${fileHash})`);
+        return existingMesh.id;
+      }
+    } else {
+      console.log(`🔄 Force reanalyze enabled - bypassing cache for ${fileName}`);
     }
     
     // Store new mesh
@@ -948,9 +954,9 @@ const handler = async (req: Request): Promise<Response> => {
     let file_size: number;
     let file_data: ArrayBuffer | null = null;
     let quantity: number = 1;
-
     let material: string | undefined;
     let tolerance: number | undefined;
+    let force_reanalyze: boolean = false;
     
     // Handle both JSON (metadata only) and multipart/form-data (with file)
     if (contentType.includes('multipart/form-data')) {
@@ -973,6 +979,7 @@ const handler = async (req: Request): Promise<Response> => {
       quantity = body.quantity || 1;
       material = body.material;
       tolerance = body.tolerance;
+      force_reanalyze = body.force_reanalyze || false;
       
       // Decode base64 file data if provided
       if (body.file_data) {
@@ -1014,7 +1021,7 @@ const handler = async (req: Request): Promise<Response> => {
     } else if (file_data && (isSTEP || isIGES)) {
       // STEP/IGES: Always call Python microservice for accurate geometry analysis
       console.log(`🔧 Attempting geometry service analysis for: ${file_name}`);
-      const serviceResult = await analyzeSTEPViaService(file_data, file_name, material, tolerance);
+      const serviceResult = await analyzeSTEPViaService(file_data, file_name, material, tolerance, force_reanalyze);
       
       if (serviceResult && serviceResult.mesh_id) {
         analysis = serviceResult;
