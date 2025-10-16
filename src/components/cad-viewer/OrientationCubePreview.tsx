@@ -660,7 +660,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
   };
 
   return (
-    <div className="relative inline-block">
+    <div className="relative inline-block -mt-2">
       {/* Cube Container */}
       <div 
         ref={cubeContainerRef} 
@@ -727,7 +727,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       {/* Curved Rotation Arrows */}
       <button
         onClick={rotateCameraClockwise}
-        className="absolute top-0.5 right-0.5 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute -top-0.5 -right-0.5 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate Clockwise"
       >
         <RotateCw className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
@@ -735,7 +735,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
 
       <button
         onClick={rotateCameraCounterClockwise}
-        className="absolute top-0.5 left-0.5 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute -top-0.5 -left-0.5 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate Counter-Clockwise"
       >
         <RotateCcw className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
