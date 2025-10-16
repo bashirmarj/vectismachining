@@ -441,11 +441,9 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     const angle = Math.PI / 4; // 45 degrees
     const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
     
-    const offset = cubeCamera.position.clone().sub(target);
-    offset.applyQuaternion(quaternion);
-    
-    const newPosition = target.clone().add(offset);
-    cubeCamera.position.copy(newPosition);
+    // Rotate the UP vector around the viewing axis
+    const newUp = cubeCamera.up.clone().applyQuaternion(quaternion);
+    cubeCamera.up.copy(newUp);
     cubeCamera.lookAt(target);
     cubeCamera.updateProjectionMatrix();
     
@@ -465,11 +463,9 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     const angle = -Math.PI / 4; // -45 degrees
     const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
     
-    const offset = cubeCamera.position.clone().sub(target);
-    offset.applyQuaternion(quaternion);
-    
-    const newPosition = target.clone().add(offset);
-    cubeCamera.position.copy(newPosition);
+    // Rotate the UP vector around the viewing axis
+    const newUp = cubeCamera.up.clone().applyQuaternion(quaternion);
+    cubeCamera.up.copy(newUp);
     cubeCamera.lookAt(target);
     cubeCamera.updateProjectionMatrix();
     

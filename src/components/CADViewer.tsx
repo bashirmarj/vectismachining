@@ -310,19 +310,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     const angle = Math.PI / 4; // 45 degrees
     const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
     
-    const offset = cameraRef.current.position.clone().sub(target);
-    offset.applyQuaternion(quaternion);
-    
-    const newPosition = target.clone().add(offset);
-    
-    // Animate to new position
-    const startPos = cameraRef.current.position.clone();
-    const startQuat = cameraRef.current.quaternion.clone();
-    
-    const tempCamera = cameraRef.current.clone();
-    tempCamera.position.copy(newPosition);
-    tempCamera.lookAt(target);
-    const targetQuat = tempCamera.quaternion.clone();
+    // Animate the UP vector rotation
+    const startUp = cameraRef.current.up.clone();
+    const newUp = startUp.clone().applyQuaternion(quaternion);
     
     const duration = 400;
     const t0 = performance.now();
@@ -332,8 +322,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
       const k = Math.min(1, elapsed / duration);
       const easedK = 1 - Math.pow(1 - k, 3);
       
-      cameraRef.current.position.lerpVectors(startPos, newPosition, easedK);
-      cameraRef.current.quaternion.slerpQuaternions(startQuat, targetQuat, easedK);
+      // Interpolate the up vector
+      const currentUp = startUp.clone().lerp(newUp, easedK).normalize();
+      cameraRef.current.up.copy(currentUp);
+      cameraRef.current.lookAt(target);
       
       controlsRef.current.target.copy(target);
       controlsRef.current.update();
@@ -358,19 +350,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     const angle = -Math.PI / 4; // -45 degrees
     const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
     
-    const offset = cameraRef.current.position.clone().sub(target);
-    offset.applyQuaternion(quaternion);
-    
-    const newPosition = target.clone().add(offset);
-    
-    // Animate to new position
-    const startPos = cameraRef.current.position.clone();
-    const startQuat = cameraRef.current.quaternion.clone();
-    
-    const tempCamera = cameraRef.current.clone();
-    tempCamera.position.copy(newPosition);
-    tempCamera.lookAt(target);
-    const targetQuat = tempCamera.quaternion.clone();
+    // Animate the UP vector rotation
+    const startUp = cameraRef.current.up.clone();
+    const newUp = startUp.clone().applyQuaternion(quaternion);
     
     const duration = 400;
     const t0 = performance.now();
@@ -380,8 +362,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
       const k = Math.min(1, elapsed / duration);
       const easedK = 1 - Math.pow(1 - k, 3);
       
-      cameraRef.current.position.lerpVectors(startPos, newPosition, easedK);
-      cameraRef.current.quaternion.slerpQuaternions(startQuat, targetQuat, easedK);
+      // Interpolate the up vector
+      const currentUp = startUp.clone().lerp(newUp, easedK).normalize();
+      cameraRef.current.up.copy(currentUp);
+      cameraRef.current.lookAt(target);
       
       controlsRef.current.target.copy(target);
       controlsRef.current.update();
