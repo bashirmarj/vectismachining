@@ -11,8 +11,8 @@ import {
 } from '@/components/ui/tooltip';
 
 interface ViewerControlsProps {
-  showSectionCut: boolean;
-  onToggleSectionCut: () => void;
+  sectionPlane: 'none' | 'xy' | 'xz' | 'yz';
+  onSectionPlaneChange: (plane: 'none' | 'xy' | 'xz' | 'yz') => void;
   sectionPosition: number;
   onSectionPositionChange: (value: number) => void;
   showEdges: boolean;
@@ -25,8 +25,8 @@ interface ViewerControlsProps {
 }
 
 export function ViewerControls({
-  showSectionCut,
-  onToggleSectionCut,
+  sectionPlane,
+  onSectionPlaneChange,
   sectionPosition,
   onSectionPositionChange,
   showEdges,
@@ -63,23 +63,60 @@ export function ViewerControls({
               </TooltipContent>
             </Tooltip>
 
+            {/* XY Plane Section */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onToggleSectionCut}
+                  onClick={() => onSectionPlaneChange(sectionPlane === 'xy' ? 'none' : 'xy')}
                   className={`h-8 w-8 rounded-full transition-all border ${
-                    showSectionCut
+                    sectionPlane === 'xy'
                       ? 'bg-primary/20 border-primary/40 text-white'
                       : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
                   }`}
                 >
-                  <Scissors className="h-4 w-4" />
+                  <span className="text-[10px] font-bold">XY</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="bg-black/90 text-white border-white/20">
-                <p className="text-xs">Section Cut</p>
+                <p className="text-xs">XY Plane Section</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* XZ Plane Section */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={() => onSectionPlaneChange(sectionPlane === 'xz' ? 'none' : 'xz')}
+                  className={`h-8 w-8 rounded-full transition-all border ${
+                    sectionPlane === 'xz'
+                      ? 'bg-primary/20 border-primary/40 text-white'
+                      : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
+                  }`}
+                >
+                  <span className="text-[10px] font-bold">XZ</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-black/90 text-white border-white/20">
+                <p className="text-xs">XZ Plane Section</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* YZ Plane Section */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={() => onSectionPlaneChange(sectionPlane === 'yz' ? 'none' : 'yz')}
+                  className={`h-8 w-8 rounded-full transition-all border ${
+                    sectionPlane === 'yz'
+                      ? 'bg-primary/20 border-primary/40 text-white'
+                      : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
+                  }`}
+                >
+                  <span className="text-[10px] font-bold">YZ</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-black/90 text-white border-white/20">
+                <p className="text-xs">YZ Plane Section</p>
               </TooltipContent>
             </Tooltip>
 
@@ -174,9 +211,11 @@ export function ViewerControls({
         </div>
         
         {/* Section Cut Slider - Appears below toolbar when active */}
-        {showSectionCut && (
+        {sectionPlane !== 'none' && (
           <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 backdrop-blur-md bg-white/10 border border-white/20 rounded-lg px-4 py-2">
-            <Label className="text-[9px] text-white/60 mb-1 block">Section Position</Label>
+            <Label className="text-[9px] text-white/60 mb-1 block">
+              Section Position ({sectionPlane.toUpperCase()})
+            </Label>
             <Slider
               value={[sectionPosition]}
               onValueChange={(values) => onSectionPositionChange(values[0])}

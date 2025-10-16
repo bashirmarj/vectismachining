@@ -34,7 +34,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   const [meshData, setMeshData] = useState<MeshData | null>(null);
   
   // Professional viewer controls
-  const [showSectionCut, setShowSectionCut] = useState(false);
+  const [sectionPlane, setSectionPlane] = useState<'none' | 'xy' | 'xz' | 'yz'>('none');
   const [sectionPosition, setSectionPosition] = useState(0);
   const [showEdges, setShowEdges] = useState(true);
   const [showDimensions, setShowDimensions] = useState(false);
@@ -406,19 +406,19 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
           </div>
         ) : hasValidModel ? (
           <div className="relative h-full" style={{ background: 'linear-gradient(180deg, #202020 0%, #1b1b1b 100%)' }}>
-            <ViewerControls
-              showSectionCut={showSectionCut}
-              onToggleSectionCut={() => setShowSectionCut(!showSectionCut)}
-              sectionPosition={sectionPosition}
-              onSectionPositionChange={setSectionPosition}
-              showEdges={showEdges}
-              onToggleEdges={() => setShowEdges(!showEdges)}
-              showDimensions={showDimensions}
-              onToggleDimensions={() => setShowDimensions(!showDimensions)}
-              measurementMode={measurementMode}
-              onMeasurementModeChange={setMeasurementMode}
-              onFitView={handleFitView}
-            />
+        <ViewerControls
+          sectionPlane={sectionPlane}
+          onSectionPlaneChange={setSectionPlane}
+          sectionPosition={sectionPosition}
+          onSectionPositionChange={setSectionPosition}
+          showEdges={showEdges}
+          onToggleEdges={() => setShowEdges(!showEdges)}
+          showDimensions={showDimensions}
+          onToggleDimensions={() => setShowDimensions(!showDimensions)}
+          measurementMode={measurementMode}
+          onMeasurementModeChange={setMeasurementMode}
+          onFitView={handleFitView}
+        />
             
             {/* Isometric Reset Button - Bottom Left */}
             <button
@@ -504,7 +504,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                 {/* 3D Model */}
                 <MeshModel
                   meshData={meshData!}
-                  showSectionCut={showSectionCut}
+                  sectionPlane={sectionPlane}
                   sectionPosition={sectionPosition}
                   showEdges={showEdges}
                 />

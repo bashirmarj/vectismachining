@@ -11,7 +11,7 @@ interface MeshData {
 
 interface MeshModelProps {
   meshData: MeshData;
-  showSectionCut: boolean;
+  sectionPlane: 'none' | 'xy' | 'xz' | 'yz';
   sectionPosition: number;
   showEdges: boolean;
 }
@@ -24,7 +24,7 @@ const FACE_COLORS = {
   planar: '#a8c8e8',        // Light blue - planar surfaces
 };
 
-export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges }: MeshModelProps) {
+export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges }: MeshModelProps) {
   // Create separate geometries for each face type (Meviy-style color classification)
   const geometries = useMemo(() => {
     if (!meshData.face_types || meshData.face_types.length === 0) {
@@ -127,12 +127,25 @@ export function MeshModel({ meshData, showSectionCut, sectionPosition, showEdges
   
   // Section cut plane
   const clippingPlane = useMemo(() => {
-    if (!showSectionCut) return null;
+    if (sectionPlane === 'none') return null;
     
-    // Create a cutting plane perpendicular to view direction
-    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -sectionPosition);
-    return [plane];
-  }, [showSectionCut, sectionPosition]);
+    let normal: THREE.Vector3;
+    switch (sectionPlane) {
+      case 'xy': // Cut along Z-axis (shows XY plane)
+        normal = new THREE.Vector3(0, 0, 1);
+        break;
+      case 'xz': // Cut along Y-axis (shows XZ plane)
+        normal = new THREE.Vector3(0, 1, 0);
+        break;
+      case 'yz': // Cut along X-axis (shows YZ plane)
+        normal = new THREE.Vector3(1, 0, 0);
+        break;
+      default:
+        return null;
+    }
+    
+    return [new THREE.Plane(normal, -sectionPosition)];
+  }, [sectionPlane, sectionPosition]);
   
   return (
     <group castShadow receiveShadow>

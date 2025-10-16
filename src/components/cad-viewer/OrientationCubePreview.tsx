@@ -702,67 +702,55 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         </div>
       )}
 
-      {/* Directional Arrow Buttons */}
-      <Button
-        variant="ghost"
-        size="icon"
+      {/* Directional Arrow Buttons - Clean minimal style */}
+      <button
         onClick={rotateCameraUp}
-        className="absolute -top-6 left-1/2 -translate-x-1/2 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute -top-8 left-1/2 -translate-x-1/2 p-1 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Up"
       >
-        <ChevronUp className="h-3 w-3" />
-      </Button>
+        <ChevronUp className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+      </button>
 
-      <Button
-        variant="ghost"
-        size="icon"
+      <button
         onClick={rotateCameraDown}
-        className="absolute -bottom-6 left-1/2 -translate-x-1/2 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute -bottom-8 left-1/2 -translate-x-1/2 p-1 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Down"
       >
-        <ChevronDown className="h-3 w-3" />
-      </Button>
+        <ChevronDown className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+      </button>
 
-      <Button
-        variant="ghost"
-        size="icon"
+      <button
         onClick={rotateCameraLeft}
-        className="absolute top-1/2 -left-6 -translate-y-1/2 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute top-1/2 -left-8 -translate-y-1/2 p-1 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Left"
       >
-        <ChevronLeft className="h-3 w-3" />
-      </Button>
+        <ChevronLeft className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+      </button>
 
-      <Button
-        variant="ghost"
-        size="icon"
+      <button
         onClick={rotateCameraRight}
-        className="absolute top-1/2 -right-6 -translate-y-1/2 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute top-1/2 -right-8 -translate-y-1/2 p-1 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Right"
       >
-        <ChevronRight className="h-3 w-3" />
-      </Button>
+        <ChevronRight className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+      </button>
 
       {/* Curved Rotation Arrows */}
-      <Button
-        variant="ghost"
-        size="icon"
+      <button
         onClick={rotateCameraClockwise}
-        className="absolute -top-6 -right-6 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute -top-8 -right-8 p-1 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate Clockwise"
       >
-        <RotateCw className="h-3 w-3" />
-      </Button>
+        <RotateCw className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+      </button>
 
-      <Button
-        variant="ghost"
-        size="icon"
+      <button
         onClick={rotateCameraCounterClockwise}
-        className="absolute -top-6 -left-6 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute -top-8 -left-8 p-1 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate Counter-Clockwise"
       >
-        <RotateCcw className="h-3 w-3" />
-      </Button>
+        <RotateCcw className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+      </button>
     </div>
   );
 });
