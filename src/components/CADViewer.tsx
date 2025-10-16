@@ -301,6 +301,102 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     requestAnimationFrame(animate);
   };
   
+  // Rotate main camera clockwise around viewing axis
+  const rotateMainCameraClockwise = () => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    
+    const target = new THREE.Vector3(...boundingBox.center);
+    const viewDirection = target.clone()
+      .sub(cameraRef.current.position)
+      .normalize();
+    
+    const angle = Math.PI / 4; // 45 degrees
+    const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
+    
+    const offset = cameraRef.current.position.clone().sub(target);
+    offset.applyQuaternion(quaternion);
+    
+    const newPosition = target.clone().add(offset);
+    
+    // Animate to new position
+    const startPos = cameraRef.current.position.clone();
+    const startQuat = cameraRef.current.quaternion.clone();
+    
+    const tempCamera = cameraRef.current.clone();
+    tempCamera.position.copy(newPosition);
+    tempCamera.lookAt(target);
+    const targetQuat = tempCamera.quaternion.clone();
+    
+    const duration = 400;
+    const t0 = performance.now();
+    
+    const animate = (t: number) => {
+      const elapsed = t - t0;
+      const k = Math.min(1, elapsed / duration);
+      const easedK = 1 - Math.pow(1 - k, 3);
+      
+      cameraRef.current.position.lerpVectors(startPos, newPosition, easedK);
+      cameraRef.current.quaternion.slerpQuaternions(startQuat, targetQuat, easedK);
+      
+      controlsRef.current.target.copy(target);
+      controlsRef.current.update();
+      
+      if (k < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  };
+  
+  // Rotate main camera counter-clockwise around viewing axis
+  const rotateMainCameraCounterClockwise = () => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    
+    const target = new THREE.Vector3(...boundingBox.center);
+    const viewDirection = target.clone()
+      .sub(cameraRef.current.position)
+      .normalize();
+    
+    const angle = -Math.PI / 4; // -45 degrees
+    const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
+    
+    const offset = cameraRef.current.position.clone().sub(target);
+    offset.applyQuaternion(quaternion);
+    
+    const newPosition = target.clone().add(offset);
+    
+    // Animate to new position
+    const startPos = cameraRef.current.position.clone();
+    const startQuat = cameraRef.current.quaternion.clone();
+    
+    const tempCamera = cameraRef.current.clone();
+    tempCamera.position.copy(newPosition);
+    tempCamera.lookAt(target);
+    const targetQuat = tempCamera.quaternion.clone();
+    
+    const duration = 400;
+    const t0 = performance.now();
+    
+    const animate = (t: number) => {
+      const elapsed = t - t0;
+      const k = Math.min(1, elapsed / duration);
+      const easedK = 1 - Math.pow(1 - k, 3);
+      
+      cameraRef.current.position.lerpVectors(startPos, newPosition, easedK);
+      cameraRef.current.quaternion.slerpQuaternions(startQuat, targetQuat, easedK);
+      
+      controlsRef.current.target.copy(target);
+      controlsRef.current.update();
+      
+      if (k < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  };
+  
   const handleViewChange = (direction: 'up' | 'down' | 'left' | 'right') => {
     const rotationMap = {
       up: new THREE.Vector3(0, 1, 0),

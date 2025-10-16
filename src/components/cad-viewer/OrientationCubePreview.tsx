@@ -11,6 +11,8 @@ interface OrientationCubePreviewProps {
 
 export interface OrientationCubeHandle {
   rotateCube: (direction: THREE.Vector3) => void;
+  rotateClockwise: () => void;
+  rotateCounterClockwise: () => void;
 }
 
 export const OrientationCubePreview = forwardRef<OrientationCubeHandle, OrientationCubePreviewProps>(
@@ -411,7 +413,9 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
-    rotateCube: orientCameraToDirection
+    rotateCube: orientCameraToDirection,
+    rotateClockwise: rotateCameraClockwise,
+    rotateCounterClockwise: rotateCameraCounterClockwise,
   }));
 
   const setIsometricView = () => {
@@ -429,27 +433,51 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
   };
 
   const rotateCameraClockwise = () => {
-    const currentPos = cubeCamera.position.clone();
+    const target = new THREE.Vector3(0, 0, 0);
+    const viewDirection = target.clone()
+      .sub(cubeCamera.position)
+      .normalize();
+    
     const angle = Math.PI / 4; // 45 degrees
+    const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
     
-    const newX = currentPos.x * Math.cos(angle) - currentPos.z * Math.sin(angle);
-    const newZ = currentPos.x * Math.sin(angle) + currentPos.z * Math.cos(angle);
+    const offset = cubeCamera.position.clone().sub(target);
+    offset.applyQuaternion(quaternion);
     
-    cubeCamera.position.set(newX, currentPos.y, newZ);
-    cubeCamera.lookAt(0, 0, 0);
+    const newPosition = target.clone().add(offset);
+    cubeCamera.position.copy(newPosition);
+    cubeCamera.lookAt(target);
     cubeCamera.updateProjectionMatrix();
+    
+    // Notify parent of rotation
+    if (onOrientationChange) {
+      const newDirection = cubeCamera.position.clone().normalize();
+      onOrientationChange(newDirection);
+    }
   };
 
   const rotateCameraCounterClockwise = () => {
-    const currentPos = cubeCamera.position.clone();
+    const target = new THREE.Vector3(0, 0, 0);
+    const viewDirection = target.clone()
+      .sub(cubeCamera.position)
+      .normalize();
+    
     const angle = -Math.PI / 4; // -45 degrees
+    const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
     
-    const newX = currentPos.x * Math.cos(angle) - currentPos.z * Math.sin(angle);
-    const newZ = currentPos.x * Math.sin(angle) + currentPos.z * Math.cos(angle);
+    const offset = cubeCamera.position.clone().sub(target);
+    offset.applyQuaternion(quaternion);
     
-    cubeCamera.position.set(newX, currentPos.y, newZ);
-    cubeCamera.lookAt(0, 0, 0);
+    const newPosition = target.clone().add(offset);
+    cubeCamera.position.copy(newPosition);
+    cubeCamera.lookAt(target);
     cubeCamera.updateProjectionMatrix();
+    
+    // Notify parent of rotation
+    if (onOrientationChange) {
+      const newDirection = cubeCamera.position.clone().normalize();
+      onOrientationChange(newDirection);
+    }
   };
 
   const rotateCameraUp = () => {
