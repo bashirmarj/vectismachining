@@ -131,7 +131,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       geometry.center();
       
       const material = new THREE.MeshBasicMaterial({ 
-        color: 0xe8e8e8, // Soft light gray instead of pure white
+        color: 0x4a5568, // Medium-dark gray for contrast on light background
         transparent: false,
         opacity: 1
       });
@@ -141,10 +141,10 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       // Add subtle edges
       const edges = new THREE.EdgesGeometry(geometry, 30);
       const lineMaterial = new THREE.LineBasicMaterial({ 
-        color: 0xcccccc, // Slightly darker gray for better visibility
+        color: 0x1f2937, // Very dark gray for strong contrast
         linewidth: 1,
         transparent: true,
-        opacity: 0.3 // Slightly more visible
+        opacity: 0.6 // More visible edges
       });
       const line = new THREE.LineSegments(edges, lineMaterial);
       cube.add(line);
@@ -152,7 +152,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       // Add blue highlight edges (initially hidden)
       const highlightEdges = new THREE.EdgesGeometry(geometry, 30);
       const highlightLineMaterial = new THREE.LineBasicMaterial({
-        color: 0x3b82f6, // Blue highlight
+        color: 0x2563eb, // Darker blue for better visibility
         linewidth: 2,
         transparent: true,
         opacity: 0 // Initially invisible
@@ -186,13 +186,13 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         canvas.width = 512;
         canvas.height = 512;
 
-        // White text with shadow for better readability
-        context.shadowColor = 'rgba(0, 0, 0, 0.9)';
-        context.shadowBlur = 10;
-        context.shadowOffsetX = 3;
-        context.shadowOffsetY = 3;
+        // Black text with light shadow for better readability on gray cube
+        context.shadowColor = 'rgba(255, 255, 255, 0.8)';
+        context.shadowBlur = 8;
+        context.shadowOffsetX = 2;
+        context.shadowOffsetY = 2;
         
-        context.fillStyle = '#ffffff';
+        context.fillStyle = '#000000';
         context.font = 'bold 80px Arial';
         context.textAlign = 'center';
         context.textBaseline = 'middle';
@@ -712,7 +712,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         className="absolute -top-0.5 left-1/2 -translate-x-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Up"
       >
-        <ChevronUp className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
+        <ChevronUp className="h-3 w-3 text-gray-800 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" strokeWidth={2} />
       </button>
 
       <button
@@ -720,7 +720,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Down"
       >
-        <ChevronDown className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
+        <ChevronDown className="h-3 w-3 text-gray-800 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" strokeWidth={2} />
       </button>
 
       <button
@@ -728,7 +728,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         className="absolute top-1/2 -left-0.5 -translate-y-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Left"
       >
-        <ChevronLeft className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
+        <ChevronLeft className="h-3 w-3 text-gray-800 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" strokeWidth={2} />
       </button>
 
       <button
@@ -736,7 +736,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         className="absolute top-1/2 -right-0.5 -translate-y-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Right"
       >
-        <ChevronRight className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
+        <ChevronRight className="h-3 w-3 text-gray-800 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" strokeWidth={2} />
       </button>
 
       {/* Curved Rotation Arrows */}
@@ -745,7 +745,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         className="absolute -top-0.5 -right-0.5 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate Clockwise"
       >
-        <RotateCw className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
+        <RotateCw className="h-3 w-3 text-gray-800 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" strokeWidth={2} />
       </button>
 
       <button
@@ -753,7 +753,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         className="absolute -top-0.5 -left-0.5 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate Counter-Clockwise"
       >
-        <RotateCcw className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
+        <RotateCcw className="h-3 w-3 text-gray-800 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" strokeWidth={2} />
       </button>
       </div>
       
