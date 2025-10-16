@@ -16,6 +16,7 @@ interface MeshModelProps {
   sectionPlane: 'none' | 'xy' | 'xz' | 'yz';
   sectionPosition: number;
   showEdges: boolean;
+  showHiddenEdges?: boolean;
   displayStyle?: 'solid' | 'wireframe' | 'translucent';
 }
 
@@ -27,7 +28,7 @@ const FACE_COLORS = {
   planar: '#a8c8e8',        // Light blue - planar surfaces
 };
 
-export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, displayStyle = 'solid' }: MeshModelProps) {
+export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid' }: MeshModelProps) {
   // Create separate geometries for each face type (Meviy-style color classification)
   const geometries = useMemo(() => {
     if (!meshData.face_types || meshData.face_types.length === 0) {
@@ -114,35 +115,63 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return result;
   }, [meshData]);
   
+  // Debug: Verify backend feature edges are received
+  console.log("Received feature_edges:", meshData.feature_edges?.length || 0);
+  if (meshData.feature_edges && meshData.feature_edges.length > 0) {
+    const totalSegments = meshData.feature_edges.reduce((sum, edge) => sum + edge.length - 1, 0);
+    console.log(`Feature edges: ${meshData.feature_edges.length} polylines, ~${totalSegments} segments`);
+  }
+
   // Create feature edges from backend CAD geometry (Meviy-quality clean edges)
-  // Create feature edges from backend CAD geometry (Meviy-quality clean edges)
-const featureEdges = useMemo(() => {
+  const featureEdges = useMemo(() => {
     if (!showEdges) return null;
 
     // Prefer backend feature edges if available (true CAD edges, no tessellation)
     if (meshData.feature_edges && meshData.feature_edges.length > 0) {
-        const positions: number[] = [];
+      const positions: number[] = [];
 
-        // Convert backend edge polylines to Three.js line segments
-        for (const edge of meshData.feature_edges) {
-            for (let i = 0; i < edge.length - 1; i++) {
-                const p1 = edge[i];
-                const p2 = edge[i + 1];
-
-                // Add each line segment (two points)
-                positions.push(p1[0], p1[1], p1[2]);
-                positions.push(p2[0], p2[1], p2[2]);
-            }
+      // Filter small or degenerate edges (< 0.2 mm) to reduce noise
+      const minLength = 0.2;
+      let filteredCount = 0;
+      
+      for (const edge of meshData.feature_edges) {
+        for (let i = 0; i < edge.length - 1; i++) {
+          const p1 = edge[i];
+          const p2 = edge[i + 1];
+          
+          // Calculate segment length
+          const dx = p2[0] - p1[0];
+          const dy = p2[1] - p1[1];
+          const dz = p2[2] - p1[2];
+          const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          
+          // Skip tiny edges (tessellation artifacts, numerical noise)
+          if (len < minLength) {
+            filteredCount++;
+            continue;
+          }
+          
+          // Add valid line segment (two points)
+          positions.push(p1[0], p1[1], p1[2]);
+          positions.push(p2[0], p2[1], p2[2]);
         }
+      }
 
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      if (positions.length === 0) {
+        console.warn("No valid edges after filtering - all edges too short");
+        return null;
+      }
 
-        // ✅ Return clean backend geometry only — skip tessellation fallback
-        return geometry;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.computeBoundingSphere(); // Important for culling and rendering
+
+      console.log(`✅ Rendering ${positions.length / 6} clean edges (filtered ${filteredCount} tiny segments)`);
+      return geometry;
     }
 
-    // Fallback: Generate edges from mesh tessellation (old method)
+    // Fallback: Generate edges from mesh tessellation (old method for files without feature_edges)
+    console.warn("⚠️ Using fallback tessellation edges - backend feature_edges not available");
     const combinedGeo = new THREE.BufferGeometry();
     combinedGeo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
     combinedGeo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
@@ -150,7 +179,7 @@ const featureEdges = useMemo(() => {
 
     const creaseAngle = THREE.MathUtils.degToRad(45);
     return new THREE.EdgesGeometry(combinedGeo, creaseAngle);
-}, [meshData, showEdges]);
+  }, [meshData, showEdges]);
 
   
   // Section cut plane
@@ -239,22 +268,36 @@ const featureEdges = useMemo(() => {
         </>
       )}
       
-      {/* Clean feature edges (silhouette, crease, boundary only) */}
+      {/* Clean feature edges (Meviy-style: visible solid + optional hidden dashed) */}
       {showEdges && featureEdges && (
-        <lineSegments
-          geometry={featureEdges}
-          renderOrder={2}
-        >
-          <lineBasicMaterial
-            color="#111111"
-            transparent={true}
-            opacity={0.9}
-            depthTest={true}
-            polygonOffset={true}
-            polygonOffsetFactor={-1}
-            polygonOffsetUnits={-1}
-          />
-        </lineSegments>
+        <group>
+          {/* Layer 1: Primary visible edges (crisp black outlines) */}
+          <lineSegments geometry={featureEdges} renderOrder={2}>
+            <lineBasicMaterial
+              color="#000000"
+              transparent={true}
+              opacity={0.95}
+              depthTest={false}
+              linewidth={1}
+            />
+          </lineSegments>
+
+          {/* Layer 2: Optional hidden edges (faint dashed lines behind surfaces) */}
+          {showHiddenEdges && (
+            <lineSegments geometry={featureEdges} renderOrder={1}>
+              <lineDashedMaterial
+                color="#333333"
+                transparent={true}
+                opacity={0.3}
+                depthTest={true}
+                depthFunc={THREE.GreaterDepth}
+                dashSize={1.5}
+                gapSize={1.5}
+                scale={1}
+              />
+            </lineSegments>
+          )}
+        </group>
       )}
     </group>
   );

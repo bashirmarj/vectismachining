@@ -38,6 +38,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   const [sectionPlane, setSectionPlane] = useState<'none' | 'xy' | 'xz' | 'yz'>('none');
   const [sectionPosition, setSectionPosition] = useState(0);
   const [showEdges, setShowEdges] = useState(true);
+  const [showHiddenEdges, setShowHiddenEdges] = useState(false);
   const [showDimensions, setShowDimensions] = useState(false);
   const [measurementMode, setMeasurementMode] = useState<'distance' | 'angle' | 'radius' | null>(null);
   const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
@@ -415,6 +416,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
           onSectionPositionChange={setSectionPosition}
           showEdges={showEdges}
           onToggleEdges={() => setShowEdges(!showEdges)}
+          showHiddenEdges={showHiddenEdges}
+          onToggleHiddenEdges={() => setShowHiddenEdges(!showHiddenEdges)}
           showDimensions={showDimensions}
           onToggleDimensions={() => setShowDimensions(!showDimensions)}
           measurementMode={measurementMode}
@@ -511,6 +514,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   sectionPlane={sectionPlane}
                   sectionPosition={sectionPosition}
                   showEdges={showEdges}
+                  showHiddenEdges={showHiddenEdges}
                   displayStyle={displayStyle}
                 />
                 

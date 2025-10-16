@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
-import { Scissors, Grid3x3, Ruler, Maximize2, Move3D, Circle } from 'lucide-react';
+import { Scissors, Grid3x3, Ruler, Maximize2, Move3D, Circle, Eye } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
@@ -17,6 +17,8 @@ interface ViewerControlsProps {
   onSectionPositionChange: (value: number) => void;
   showEdges: boolean;
   onToggleEdges: () => void;
+  showHiddenEdges: boolean;
+  onToggleHiddenEdges: () => void;
   showDimensions: boolean;
   onToggleDimensions: () => void;
   measurementMode: 'distance' | 'angle' | 'radius' | null;
@@ -31,6 +33,8 @@ export function ViewerControls({
   onSectionPositionChange,
   showEdges,
   onToggleEdges,
+  showHiddenEdges,
+  onToggleHiddenEdges,
   showDimensions,
   onToggleDimensions,
   measurementMode,
@@ -136,7 +140,27 @@ export function ViewerControls({
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="bg-black/90 text-white border-white/20">
-                <p className="text-xs">Toggle Edges (E)</p>
+                <p className="text-xs">Edges (E)</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onToggleHiddenEdges}
+                  className={`h-8 w-8 rounded-full transition-all border ${
+                    showHiddenEdges
+                      ? 'bg-primary/20 border-primary/40 text-white'
+                      : 'bg-white/5 hover:bg-white/15 border-white/10 text-white'
+                  }`}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-black/90 text-white border-white/20">
+                <p className="text-xs">Hidden Edges</p>
               </TooltipContent>
             </Tooltip>
           </div>
