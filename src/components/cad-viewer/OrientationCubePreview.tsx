@@ -107,7 +107,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     if (!cubeContainerRef.current) return;
 
     // Setup renderer
-    cubeRenderer.setSize(220, 220);
+    cubeRenderer.setSize(110, 110);
     cubeRenderer.setClearColor(0x000000, 0); // Transparent background
     cubeContainerRef.current.appendChild(cubeRenderer.domElement);
 
@@ -666,10 +666,10 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         variant="ghost"
         size="icon"
         onClick={setIsometricView}
-        className="absolute top-2 left-2 z-10 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute top-1 left-1 z-10 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
         title="Reset to Isometric View"
       >
-        <Box className="h-4 w-4" />
+        <Box className="h-3 w-3" />
       </Button>
 
       {/* Cube Container */}
@@ -677,8 +677,8 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         ref={cubeContainerRef} 
         className="relative rounded-lg overflow-visible"
         style={{
-          width: '220px',
-          height: '220px',
+          width: '110px',
+          height: '110px',
           filter: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3))'
         }}
       />
@@ -707,40 +707,40 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         variant="ghost"
         size="icon"
         onClick={rotateCameraUp}
-        className="absolute -top-10 left-1/2 -translate-x-1/2 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute -top-6 left-1/2 -translate-x-1/2 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
         title="Rotate View Up"
       >
-        <ChevronUp className="h-4 w-4" />
+        <ChevronUp className="h-3 w-3" />
       </Button>
 
       <Button
         variant="ghost"
         size="icon"
         onClick={rotateCameraDown}
-        className="absolute -bottom-10 left-1/2 -translate-x-1/2 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute -bottom-6 left-1/2 -translate-x-1/2 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
         title="Rotate View Down"
       >
-        <ChevronDown className="h-4 w-4" />
+        <ChevronDown className="h-3 w-3" />
       </Button>
 
       <Button
         variant="ghost"
         size="icon"
         onClick={rotateCameraLeft}
-        className="absolute top-1/2 -left-10 -translate-y-1/2 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute top-1/2 -left-6 -translate-y-1/2 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
         title="Rotate View Left"
       >
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className="h-3 w-3" />
       </Button>
 
       <Button
         variant="ghost"
         size="icon"
         onClick={rotateCameraRight}
-        className="absolute top-1/2 -right-10 -translate-y-1/2 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute top-1/2 -right-6 -translate-y-1/2 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
         title="Rotate View Right"
       >
-        <ChevronRight className="h-4 w-4" />
+        <ChevronRight className="h-3 w-3" />
       </Button>
 
       {/* Curved Rotation Arrows */}
@@ -748,20 +748,20 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
         variant="ghost"
         size="icon"
         onClick={rotateCameraClockwise}
-        className="absolute -top-10 -right-10 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute -top-6 -right-6 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
         title="Rotate Clockwise"
       >
-        <RotateCw className="h-4 w-4" />
+        <RotateCw className="h-3 w-3" />
       </Button>
 
       <Button
         variant="ghost"
         size="icon"
         onClick={rotateCameraCounterClockwise}
-        className="absolute -top-10 -left-10 h-8 w-8 bg-background/95 hover:bg-accent border border-border/10"
+        className="absolute -top-6 -left-6 h-6 w-6 bg-background/95 hover:bg-accent border border-border/10"
         title="Rotate Counter-Clockwise"
       >
-        <RotateCcw className="h-4 w-4" />
+        <RotateCcw className="h-3 w-3" />
       </Button>
     </div>
   );

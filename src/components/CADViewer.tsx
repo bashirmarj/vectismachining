@@ -420,10 +420,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
               onFitView={handleFitView}
             />
             
-            {/* Isometric Reset Button - Top Left */}
+            {/* Isometric Reset Button - Bottom Left */}
             <button
               onClick={setIsometricView}
-              className="absolute top-5 left-5 z-30 p-2 hover:bg-white/20 rounded-lg transition-all"
+              className="absolute bottom-5 left-5 z-30 p-2 hover:bg-white/20 rounded-lg transition-all"
               style={{
                 background: 'rgba(26, 26, 26, 0.95)',
                 backdropFilter: 'blur(8px)',
@@ -434,54 +434,13 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
               <Box className="w-4 h-4 text-white/80 hover:text-white" />
             </button>
             
-            {/* Orientation Cube - Meviy Style */}
-            <div className="absolute bottom-5 right-5 z-30 flex flex-col items-center">
-              {/* Top rotation icon */}
-              <button
-                onClick={() => handleViewChange('up')}
-                className="mb-1 p-1 hover:bg-white/20 rounded transition-colors"
-                title="View from top"
-              >
-                <ChevronUp className="w-4 h-4 text-white/80 hover:text-white" />
-              </button>
-              
-              <div className="flex items-center gap-1">
-                {/* Left rotation */}
-                <button
-                  onClick={() => handleViewChange('left')}
-                  className="p-1 hover:bg-white/20 rounded transition-colors"
-                  title="View from left"
-                >
-                  <ChevronLeft className="w-4 h-4 text-white/80 hover:text-white" />
-                </button>
-                
-                {/* Orientation Cube Preview */}
-                <div className="relative">
-                  <OrientationCubePreview 
-                    ref={orientationCubeRef}
-                    onOrientationChange={orientMainCameraToDirection}
-                    onUpVectorChange={handleCubeUpVectorChange}
-                  />
-                </div>
-                
-                {/* Right rotation */}
-                <button
-                  onClick={() => handleViewChange('right')}
-                  className="p-1 hover:bg-white/20 rounded transition-colors"
-                  title="View from right"
-                >
-                  <ChevronRight className="w-4 h-4 text-white/80 hover:text-white" />
-                </button>
-              </div>
-              
-              {/* Bottom rotation icon */}
-              <button
-                onClick={() => handleViewChange('down')}
-                className="mt-1 p-1 hover:bg-white/20 rounded transition-colors"
-                title="View from bottom"
-              >
-                <ChevronDown className="w-4 h-4 text-white/80 hover:text-white" />
-              </button>
+            {/* Orientation Cube - Top Right */}
+            <div className="absolute top-5 right-5 z-30">
+              <OrientationCubePreview 
+                ref={orientationCubeRef}
+                onOrientationChange={orientMainCameraToDirection}
+                onUpVectorChange={handleCubeUpVectorChange}
+              />
             </div>
             
             {/* Vectis Manufacturing Watermark */}
