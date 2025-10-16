@@ -846,15 +846,15 @@ def tessellate_shape(shape, quality=0.5):
     feature_edges = extract_feature_edges(shape)
 
     logger.info(f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles, {len(face_types)} face classifications, {len(feature_edges)} feature edges")
-        
-        return {
-            'vertices': vertices,
-            'indices': indices,
-            'normals': normals,
-            'face_types': face_types,  # Face classification for each vertex
-            'triangle_count': triangle_count,
-            'feature_edges': feature_edges
-        }
+    
+    return {
+        'vertices': vertices,
+        'indices': indices,
+        'normals': normals,
+        'face_types': face_types,  # Face classification for each vertex
+        'triangle_count': triangle_count,
+        'feature_edges': feature_edges
+    }
         
     except Exception as e:
         logger.error(f"Error tessellating shape: {e}")
