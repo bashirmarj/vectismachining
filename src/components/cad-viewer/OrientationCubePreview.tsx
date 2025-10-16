@@ -108,11 +108,11 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
 
     // Setup renderer
     cubeRenderer.setSize(220, 220);
-    cubeRenderer.setClearColor(0x2a2a3a, 1);
+    cubeRenderer.setClearColor(0x000000, 0); // Transparent background
     cubeContainerRef.current.appendChild(cubeRenderer.domElement);
 
     // Setup scene
-    cubeScene.background = new THREE.Color(0x2a2a3a);
+    cubeScene.background = null; // No background
 
     // Load chamfered cube from STL
     const loader = new STLLoader();
@@ -433,6 +433,12 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     cubeCamera.updateProjectionMatrix();
   };
 
+  /**
+   * ROTATION BUTTON FUNCTIONS - DO NOT MODIFY
+   * These functions rotate the camera's UP vector by 90 degrees around the viewing axis.
+   * They work in tandem with the main camera through onUpVectorChange callback.
+   * Last validated: 2025-10-16
+   */
   const rotateCameraClockwise = () => {
     const target = new THREE.Vector3(0, 0, 0);
     const viewDirection = target.clone()
@@ -475,6 +481,12 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     }
   };
 
+  /**
+   * ARROW BUTTON FUNCTIONS - DO NOT MODIFY
+   * These functions rotate the camera position through predefined face sequences.
+   * They work in tandem with the main camera through onOrientationChange callback.
+   * Last validated: 2025-10-16
+   */
   const rotateCameraUp = () => {
     const currentPos = cubeCamera.position.clone().normalize();
     const distance = 5;
@@ -663,12 +675,11 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       {/* Cube Container */}
       <div 
         ref={cubeContainerRef} 
-        className="relative rounded-lg overflow-hidden shadow-lg"
+        className="relative rounded-lg overflow-visible"
         style={{
           width: '220px',
           height: '220px',
-          background: 'rgba(42, 42, 58, 0.95)',
-          border: '1px solid rgba(255, 255, 255, 0.15)'
+          filter: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3))'
         }}
       />
 
