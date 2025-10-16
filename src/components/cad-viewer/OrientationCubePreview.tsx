@@ -694,7 +694,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       {/* Directional Arrow Buttons - Clean minimal style */}
       <button
         onClick={rotateCameraUp}
-        className="absolute -top-3 left-1/2 -translate-x-1/2 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute -top-1 left-1/2 -translate-x-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Up"
       >
         <ChevronUp className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
@@ -702,7 +702,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
 
       <button
         onClick={rotateCameraDown}
-        className="absolute -bottom-3 left-1/2 -translate-x-1/2 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute -bottom-1 left-1/2 -translate-x-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Down"
       >
         <ChevronDown className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
@@ -710,7 +710,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
 
       <button
         onClick={rotateCameraLeft}
-        className="absolute top-1/2 -left-3 -translate-y-1/2 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute top-1/2 -left-1 -translate-y-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Left"
       >
         <ChevronLeft className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
@@ -718,7 +718,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
 
       <button
         onClick={rotateCameraRight}
-        className="absolute top-1/2 -right-3 -translate-y-1/2 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute top-1/2 -right-1 -translate-y-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Right"
       >
         <ChevronRight className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
@@ -727,7 +727,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       {/* Curved Rotation Arrows */}
       <button
         onClick={rotateCameraClockwise}
-        className="absolute -top-2 -right-2 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute -top-1 -right-1 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate Clockwise"
       >
         <RotateCw className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
@@ -735,7 +735,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
 
       <button
         onClick={rotateCameraCounterClockwise}
-        className="absolute -top-2 -left-2 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute -top-1 -left-1 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate Counter-Clockwise"
       >
         <RotateCcw className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
