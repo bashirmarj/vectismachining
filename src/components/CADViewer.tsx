@@ -39,6 +39,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   const [showEdges, setShowEdges] = useState(true);
   const [showDimensions, setShowDimensions] = useState(false);
   const [measurementMode, setMeasurementMode] = useState<'distance' | 'angle' | 'radius' | null>(null);
+  const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const orientationCubeRef = useRef<OrientationCubeHandle>(null);
@@ -440,6 +441,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                 ref={orientationCubeRef}
                 onOrientationChange={orientMainCameraToDirection}
                 onUpVectorChange={handleCubeUpVectorChange}
+                onDisplayStyleChange={setDisplayStyle}
               />
             </div>
             
@@ -507,6 +509,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   sectionPlane={sectionPlane}
                   sectionPosition={sectionPosition}
                   showEdges={showEdges}
+                  displayStyle={displayStyle}
                 />
                 
                 {/* Soft contact shadow */}

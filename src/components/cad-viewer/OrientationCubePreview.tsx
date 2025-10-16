@@ -3,11 +3,19 @@ import * as THREE from 'three';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { Button } from '@/components/ui/button';
 import { Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, RotateCw, RotateCcw } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import orientationCubeSTL from '@/assets/orientation-cube.stl?url';
 
 interface OrientationCubePreviewProps {
   onOrientationChange?: (direction: THREE.Vector3) => void;
   onUpVectorChange?: (upVector: THREE.Vector3) => void;
+  onDisplayStyleChange?: (style: 'solid' | 'wireframe' | 'translucent') => void;
 }
 
 export interface OrientationCubeHandle {
@@ -17,7 +25,7 @@ export interface OrientationCubeHandle {
 }
 
 export const OrientationCubePreview = forwardRef<OrientationCubeHandle, OrientationCubePreviewProps>(
-  ({ onOrientationChange, onUpVectorChange }, ref) => {
+  ({ onOrientationChange, onUpVectorChange, onDisplayStyleChange }, ref) => {
   const cubeContainerRef = useRef<HTMLDivElement>(null);
   const [cubeScene] = useState(() => new THREE.Scene());
   const [cubeCamera] = useState(() => new THREE.PerspectiveCamera(50, 1, 0.1, 1000));
@@ -32,6 +40,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     type: 'face' | 'edge' | 'corner';
     description: string;
   } | null>(null);
+  const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
 
   // Helper function to classify click region (face, edge, or corner)
   const classifyClickRegion = (localPoint: THREE.Vector3) => {
@@ -658,9 +667,15 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       onOrientationChange(newDirection);
     }
   };
+  
+  const handleDisplayStyleChange = (value: 'solid' | 'wireframe' | 'translucent') => {
+    setDisplayStyle(value);
+    onDisplayStyleChange?.(value);
+  };
 
   return (
-    <div className="relative inline-block -mt-2">
+    <div className="flex flex-col items-center gap-2 -mt-2">
+      <div className="relative inline-block">
       {/* Cube Container */}
       <div 
         ref={cubeContainerRef} 
@@ -740,6 +755,25 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       >
         <RotateCcw className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
       </button>
+      </div>
+      
+      {/* Display Style Dropdown */}
+      <Select value={displayStyle} onValueChange={handleDisplayStyleChange}>
+        <SelectTrigger className="w-[200px] h-8 text-xs bg-black/80 border-white/20 text-white hover:bg-black/90">
+          <SelectValue placeholder="Display Style" />
+        </SelectTrigger>
+        <SelectContent className="bg-gray-900 border-white/20 z-50">
+          <SelectItem value="solid" className="text-white text-xs hover:bg-white/10 cursor-pointer">
+            Display Solid Model
+          </SelectItem>
+          <SelectItem value="wireframe" className="text-white text-xs hover:bg-white/10 cursor-pointer">
+            Display Wire Frames
+          </SelectItem>
+          <SelectItem value="translucent" className="text-white text-xs hover:bg-white/10 cursor-pointer">
+            Display Solid Model (translucent)
+          </SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   );
 });

@@ -15,6 +15,7 @@ interface MeshModelProps {
   sectionPlane: 'none' | 'xy' | 'xz' | 'yz';
   sectionPosition: number;
   showEdges: boolean;
+  displayStyle?: 'solid' | 'wireframe' | 'translucent';
 }
 
 // Meviy-style color scheme
@@ -25,7 +26,7 @@ const FACE_COLORS = {
   planar: '#a8c8e8',        // Light blue - planar surfaces
 };
 
-export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges }: MeshModelProps) {
+export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, displayStyle = 'solid' }: MeshModelProps) {
   // Create separate geometries for each face type (Meviy-style color classification)
   const geometries = useMemo(() => {
     if (!meshData.face_types || meshData.face_types.length === 0) {
@@ -156,6 +157,27 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges }
     gl.clippingPlanes = [];
   }, [sectionPlane, gl]);
   
+  // Calculate material properties based on display style
+  const materialProps = useMemo(() => {
+    const base = {
+      color: '#5b9bd5',
+      side: THREE.DoubleSide,
+      clippingPlanes: clippingPlane,
+      clipIntersection: false,
+      metalness: 0.15,
+      roughness: 0.6,
+      envMapIntensity: 0.4,
+    };
+    
+    if (displayStyle === 'wireframe') {
+      return { ...base, wireframe: true, transparent: false, opacity: 1 };
+    } else if (displayStyle === 'translucent') {
+      return { ...base, transparent: true, opacity: 0.4, wireframe: false };
+    }
+    
+    return { ...base, transparent: true, opacity: 0.95, wireframe: false };
+  }, [displayStyle, clippingPlane]);
+  
   return (
     <group castShadow receiveShadow>
       {/* Render each face type with its specific color */}
@@ -164,15 +186,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges }
           {/* Main colored mesh */}
           <mesh geometry={geo} castShadow receiveShadow>
             <meshStandardMaterial
+              {...materialProps}
               color={FACE_COLORS[type as keyof typeof FACE_COLORS] || FACE_COLORS.external}
-              side={THREE.DoubleSide}
-              clippingPlanes={clippingPlane}
-              clipIntersection={false}
-              metalness={0.15}
-              roughness={0.6}
-              transparent={true}
-              opacity={0.95}
-              envMapIntensity={0.4}
             />
           </mesh>
           
