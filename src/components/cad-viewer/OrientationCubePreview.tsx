@@ -185,7 +185,7 @@ export function OrientationCubePreview() {
         const planeMaterial = new THREE.MeshBasicMaterial({ 
           map: texture,
           transparent: true,
-          side: THREE.DoubleSide,
+          side: THREE.FrontSide,
           fog: false
         });
         const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
