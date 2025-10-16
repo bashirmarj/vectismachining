@@ -460,6 +460,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                 localClippingEnabled: true,
                 toneMapping: THREE.ACESFilmicToneMapping,
                 toneMappingExposure: 1.2,
+                sortObjects: true,
               }}
               dpr={[1, 2]}
             >
