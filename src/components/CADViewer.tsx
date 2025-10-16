@@ -11,7 +11,7 @@ import { ViewerControls } from './cad-viewer/ViewerControls';
 import { DimensionAnnotations } from './cad-viewer/DimensionAnnotations';
 import { MeasurementTool } from './cad-viewer/MeasurementTool';
 import { AutoRotate } from './cad-viewer/AutoRotate';
-import { OrientationCubePreview } from './cad-viewer/OrientationCubePreview';
+import { OrientationCubePreview, OrientationCubeHandle } from './cad-viewer/OrientationCubePreview';
 
 interface CADViewerProps {
   file?: File;
@@ -44,6 +44,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const orientationCubeRef = useRef<OrientationCubeHandle>(null);
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isSTEP = ['step', 'stp'].includes(fileExtension);
@@ -303,7 +304,16 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
       left: new THREE.Vector3(-1, 0, 0),
       right: new THREE.Vector3(1, 0, 0),
     };
-    orientMainCameraToDirection(rotationMap[direction]);
+    
+    const directionVector = rotationMap[direction];
+    
+    // Rotate main camera
+    orientMainCameraToDirection(directionVector);
+    
+    // Also rotate the orientation cube preview
+    if (orientationCubeRef.current) {
+      orientationCubeRef.current.rotateCube(directionVector);
+    }
   };
   
   // Keyboard shortcuts
@@ -433,7 +443,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                 
                 {/* Orientation Cube Preview */}
                 <div className="relative">
-                  <OrientationCubePreview onOrientationChange={orientMainCameraToDirection} />
+                  <OrientationCubePreview 
+                    ref={orientationCubeRef}
+                    onOrientationChange={orientMainCameraToDirection} 
+                  />
                 </div>
                 
                 {/* Right rotation */}

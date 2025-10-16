@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import * as THREE from 'three';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,12 @@ interface OrientationCubePreviewProps {
   onOrientationChange?: (direction: THREE.Vector3) => void;
 }
 
-export function OrientationCubePreview({ onOrientationChange }: OrientationCubePreviewProps = {}) {
+export interface OrientationCubeHandle {
+  rotateCube: (direction: THREE.Vector3) => void;
+}
+
+export const OrientationCubePreview = forwardRef<OrientationCubeHandle, OrientationCubePreviewProps>(
+  ({ onOrientationChange }, ref) => {
   const cubeContainerRef = useRef<HTMLDivElement>(null);
   const [cubeScene] = useState(() => new THREE.Scene());
   const [cubeCamera] = useState(() => new THREE.PerspectiveCamera(50, 1, 0.1, 1000));
@@ -400,6 +405,11 @@ export function OrientationCubePreview({ onOrientationChange }: OrientationCubeP
     cubeCamera.updateProjectionMatrix();
   };
 
+  // Expose methods to parent component
+  useImperativeHandle(ref, () => ({
+    rotateCube: orientCameraToDirection
+  }));
+
   const setIsometricView = () => {
     const distance = 5;
     const angle = Math.PI / 4; // 45 degrees
@@ -693,4 +703,6 @@ export function OrientationCubePreview({ onOrientationChange }: OrientationCubeP
       </Button>
     </div>
   );
-}
+});
+
+OrientationCubePreview.displayName = 'OrientationCubePreview';
