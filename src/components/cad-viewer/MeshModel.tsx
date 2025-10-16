@@ -113,8 +113,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return result;
   }, [meshData]);
   
-  // Create Meviy-style dual-layer edge geometry for hidden-line removal
-  const edgeGeometries = useMemo(() => {
+  // Create feature edges geometry (only silhouette, crease, boundary - no tessellation)
+  const featureEdges = useMemo(() => {
     if (!showEdges) return null;
     
     const combinedGeo = new THREE.BufferGeometry();
@@ -122,14 +122,10 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     combinedGeo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     combinedGeo.setIndex(meshData.indices);
     
-    // 3 degree threshold: Meviy-quality captures all design-significant edges
-    const baseEdges = new THREE.EdgesGeometry(combinedGeo, 3);
-    
-    // Create separate geometries for visible and hidden edges
-    const visibleEdges = baseEdges.clone();
-    const hiddenEdges = baseEdges.clone();
-    
-    return { visibleEdges, hiddenEdges };
+    // 45-degree threshold: shows only strong feature edges (corners, chamfers, boundaries)
+    // Filters out smooth surface tessellation and gentle curves
+    const creaseAngle = THREE.MathUtils.degToRad(45);
+    return new THREE.EdgesGeometry(combinedGeo, creaseAngle);
   }, [meshData, showEdges]);
   
   // Section cut plane
@@ -218,41 +214,22 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         </>
       )}
       
-      {/* Meviy-style wireframe with hidden-line removal */}
-      {showEdges && edgeGeometries && (
-        <>
-          {/* Layer 1: Hidden edges (dashed, faint, behind surfaces) */}
-          <lineSegments
-            geometry={edgeGeometries.hiddenEdges}
-            renderOrder={1}
-          >
-            <lineDashedMaterial
-              color="#888888"
-              dashSize={3}
-              gapSize={2}
-              transparent={true}
-              opacity={0.25}
-              depthTest={true}
-              depthFunc={THREE.GreaterDepth}
-            />
-          </lineSegments>
-          
-          {/* Layer 2: Visible edges (solid, dark, in front) */}
-          <lineSegments
-            geometry={edgeGeometries.visibleEdges}
-            renderOrder={2}
-          >
-            <lineBasicMaterial
-              color="#111111"
-              transparent={true}
-              opacity={0.9}
-              depthTest={true}
-              polygonOffset={true}
-              polygonOffsetFactor={-1}
-              polygonOffsetUnits={-1}
-            />
-          </lineSegments>
-        </>
+      {/* Clean feature edges (silhouette, crease, boundary only) */}
+      {showEdges && featureEdges && (
+        <lineSegments
+          geometry={featureEdges}
+          renderOrder={2}
+        >
+          <lineBasicMaterial
+            color="#111111"
+            transparent={true}
+            opacity={0.9}
+            depthTest={true}
+            polygonOffset={true}
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
+        </lineSegments>
       )}
     </group>
   );
