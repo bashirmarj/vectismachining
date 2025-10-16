@@ -518,6 +518,12 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     cubeCamera.up.copy(up);
     cubeCamera.lookAt(0, 0, 0);
     cubeCamera.updateProjectionMatrix();
+    
+    // Notify parent of rotation
+    if (onOrientationChange) {
+      const newDirection = cubeCamera.position.clone().normalize();
+      onOrientationChange(newDirection);
+    }
   };
 
   const rotateCameraDown = () => {
@@ -558,6 +564,12 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     cubeCamera.up.copy(up);
     cubeCamera.lookAt(0, 0, 0);
     cubeCamera.updateProjectionMatrix();
+    
+    // Notify parent of rotation
+    if (onOrientationChange) {
+      const newDirection = cubeCamera.position.clone().normalize();
+      onOrientationChange(newDirection);
+    }
   };
 
   const rotateCameraLeft = () => {
@@ -592,6 +604,12 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     cubeCamera.up.set(0, 1, 0);
     cubeCamera.lookAt(0, 0, 0);
     cubeCamera.updateProjectionMatrix();
+    
+    // Notify parent of rotation
+    if (onOrientationChange) {
+      const newDirection = cubeCamera.position.clone().normalize();
+      onOrientationChange(newDirection);
+    }
   };
 
   const rotateCameraRight = () => {
@@ -626,6 +644,12 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     cubeCamera.up.set(0, 1, 0);
     cubeCamera.lookAt(0, 0, 0);
     cubeCamera.updateProjectionMatrix();
+    
+    // Notify parent of rotation
+    if (onOrientationChange) {
+      const newDirection = cubeCamera.position.clone().normalize();
+      onOrientationChange(newDirection);
+    }
   };
 
   return (
