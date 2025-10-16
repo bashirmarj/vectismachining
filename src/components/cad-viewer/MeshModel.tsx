@@ -122,9 +122,9 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     combinedGeo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     combinedGeo.setIndex(meshData.indices);
     
-    // 30 degree threshold: shows ONLY major design edges (corners, holes, features)
-    // Higher threshold filters out curved surface tessellation artifacts
-    return new THREE.EdgesGeometry(combinedGeo, 30);
+    // 5 degree threshold: captures curved edges and fine details
+    // Lower threshold shows more edges including cylindrical features
+    return new THREE.EdgesGeometry(combinedGeo, 5);
   }, [meshData, showEdges]);
   
   // Section cut plane

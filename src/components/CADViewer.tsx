@@ -406,7 +406,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
             </Button>
           </div>
         ) : hasValidModel ? (
-          <div className="relative h-full" style={{ background: '#ffffff' }}>
+          <div className="relative h-full" style={{ background: '#f8f9fa' }}>
         <ViewerControls
           sectionPlane={sectionPlane}
           onSectionPlaneChange={setSectionPlane}
@@ -465,8 +465,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
             >
               <Suspense fallback={null}>
                 {/* Clean white background */}
-                <color attach="background" args={['#ffffff']} />
-                <fog attach="fog" args={['#ffffff', 300, 1000]} />
+                <color attach="background" args={['#f8f9fa']} />
+                <fog attach="fog" args={['#f8f9fa', 300, 1000]} />
                 
                 {/* Multi-point lighting for industrial look */}
                 <ambientLight intensity={0.4} />

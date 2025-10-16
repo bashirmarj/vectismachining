@@ -41,7 +41,7 @@ export function ViewerControls({
     <TooltipProvider>
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
         {/* Glass-morphism horizontal toolbar */}
-        <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-full px-6 py-2 shadow-2xl flex items-center gap-4">
+        <div className="backdrop-blur-md bg-gray-800/90 border border-gray-700/50 rounded-full px-6 py-2 shadow-2xl flex items-center gap-4">
           {/* View Controls Section */}
           <div className="flex items-center gap-1.5">
             <Label className="text-[10px] font-semibold text-white/70 uppercase tracking-wider mr-2">
@@ -212,7 +212,7 @@ export function ViewerControls({
         
         {/* Section Cut Slider - Appears below toolbar when active */}
         {sectionPlane !== 'none' && (
-          <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 backdrop-blur-md bg-white/10 border border-white/20 rounded-lg px-4 py-2">
+          <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 backdrop-blur-md bg-gray-800/90 border border-gray-700/50 rounded-lg px-4 py-2">
             <Label className="text-[9px] text-white/60 mb-1 block">
               Section Position ({sectionPlane.toUpperCase()})
             </Label>

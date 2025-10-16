@@ -674,7 +674,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
   };
 
   return (
-    <div className="flex flex-col items-center gap-2 -mt-2">
+    <div className="flex flex-col items-end gap-2 -mt-2">
       <div className="relative inline-block">
       {/* Cube Container */}
       <div 
