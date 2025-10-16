@@ -144,6 +144,12 @@ def analyze_cad():
         quality = float(request.form.get('quality', 0.999))  # 0-1, higher = finer mesh
         mesh_data = tessellate_shape(shape, quality)
         
+        # Debug: Verify feature edges are being extracted
+        logger.info(f"📐 Mesh data includes {len(mesh_data.get('feature_edges', []))} feature edges")
+        if mesh_data.get('feature_edges'):
+            total_segments = sum(len(edge) - 1 for edge in mesh_data['feature_edges'])
+            logger.info(f"   Total edge segments: {total_segments}")
+        
         # Build geometry descriptor for routing selection
         geometry_descriptor = {
             "volume_cm3": round(volume_mm3 / 1000, 2),
@@ -198,6 +204,9 @@ def analyze_cad():
             'machining_summary': machining_estimate["machining_summary"],
             'estimated_total_cost_usd': machining_estimate["total_cost_usd"]
         }
+        
+        # Debug: Verify feature edges in final response
+        logger.info(f"✅ Response includes mesh_data with {len(result['mesh_data'].get('feature_edges', []))} feature edges")
         
         logger.info(f"Analysis complete: cylindrical={is_cylindrical}, complexity={complexity}, holes={len(holes)}, routings={routing_result['recommended_routings']}, est_cost=${machining_estimate['total_cost_usd']}")
         return jsonify(result), 200
@@ -831,13 +840,12 @@ def tessellate_shape(shape, quality=0.5):
             
             face_explorer.Next()
         
-        triangle_count = len(indices) // 3
-        
-        logger.info(f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles, classified faces")
-        # Extract clean feature edges from B-Rep geometry
-        feature_edges = extract_feature_edges(shape)
-        
-        logger.info(f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles, {len(face_types)} face classifications, {len(feature_edges)} feature edges")
+    triangle_count = len(indices) // 3
+
+    # Extract clean feature edges from B-Rep geometry
+    feature_edges = extract_feature_edges(shape)
+
+    logger.info(f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles, {len(face_types)} face classifications, {len(feature_edges)} feature edges")
         
         return {
             'vertices': vertices,
@@ -850,12 +858,14 @@ def tessellate_shape(shape, quality=0.5):
         
     except Exception as e:
         logger.error(f"Error tessellating shape: {e}")
-        # Return minimal mesh on error
+        # Return minimal mesh on error (must include feature_edges key for consistency)
         return {
             'vertices': [],
             'indices': [],
             'normals': [],
-            'triangle_count': 0
+            'face_types': [],
+            'triangle_count': 0,
+            'feature_edges': []
         }
 
 if __name__ == '__main__':

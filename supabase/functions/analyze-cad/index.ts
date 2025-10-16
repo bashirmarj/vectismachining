@@ -514,6 +514,7 @@ async function analyzeSTEPViaService(
       console.log(`💾 Storing mesh data: ${data.mesh_data.triangle_count} triangles`);
       mesh_id = await storeMeshData(data.mesh_data, fileName, fileData);
       console.log(`✅ Mesh stored with ID: ${mesh_id}`);
+      console.log(`📐 Mesh includes ${(data.mesh_data.feature_edges || []).length} feature edges`);
     } else {
       console.log(`⚠️ No mesh data available to store`);
     }
@@ -589,7 +590,7 @@ async function storeMeshData(
         indices: meshData.indices,
         normals: meshData.normals,
         triangle_count: meshData.triangle_count,
-        feature_edges: meshData.feature_edges || []
+        feature_edges: Array.isArray(meshData.feature_edges) ? meshData.feature_edges : []
       })
       .select('id')
       .single();
