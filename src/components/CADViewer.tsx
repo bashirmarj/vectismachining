@@ -254,15 +254,19 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     const distance = maxDim * 2.5;
     const target = new THREE.Vector3(...boundingBox.center);
     
+    // INVERT direction: to look AT a face, camera must be OPPOSITE to it
+    const cameraDirection = direction.clone().normalize().multiplyScalar(-1);
+    
     // Calculate new camera position
     const newPosition = target.clone().add(
-      direction.clone().multiplyScalar(distance)
+      cameraDirection.multiplyScalar(distance)
     );
     
     // Handle up vector for top/bottom views
     const up = new THREE.Vector3(0, 1, 0);
+    // Check the ORIGINAL direction for top/bottom (before inverting)
     if (Math.abs(direction.y) > 0.99) {
-      up.set(0, 0, direction.y > 0 ? 1 : -1);
+      up.set(0, 0, direction.y > 0 ? -1 : 1);
     }
     
     const lookAtMatrix = new THREE.Matrix4().lookAt(
