@@ -5,7 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, RotateCw, RotateCcw } from 'lucide-react';
 import orientationCubeSTL from '@/assets/orientation-cube.stl?url';
 
-export function OrientationCubePreview() {
+interface OrientationCubePreviewProps {
+  onOrientationChange?: (direction: THREE.Vector3) => void;
+}
+
+export function OrientationCubePreview({ onOrientationChange }: OrientationCubePreviewProps = {}) {
   const cubeContainerRef = useRef<HTMLDivElement>(null);
   const [cubeScene] = useState(() => new THREE.Scene());
   const [cubeCamera] = useState(() => new THREE.PerspectiveCamera(50, 1, 0.1, 1000));
@@ -222,7 +226,14 @@ export function OrientationCubePreview() {
         const region = classifyClickRegion(localPoint);
         
         console.log(`Clicked ${region.type}: ${region.description}`);
+        
+        // Rotate the cube's own camera (for preview visual feedback)
         orientCameraToDirection(region.direction);
+        
+        // Also notify parent to rotate main camera (if callback provided)
+        if (onOrientationChange) {
+          onOrientationChange(region.direction);
+        }
       };
 
       // Hover handler for visual feedback

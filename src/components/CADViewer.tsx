@@ -433,7 +433,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                 
                 {/* Orientation Cube Preview */}
                 <div className="relative">
-                  <OrientationCubePreview />
+                  <OrientationCubePreview onOrientationChange={orientMainCameraToDirection} />
                 </div>
                 
                 {/* Right rotation */}
