@@ -10,7 +10,6 @@ import { MeshModel } from './cad-viewer/MeshModel';
 import { ViewerControls } from './cad-viewer/ViewerControls';
 import { DimensionAnnotations } from './cad-viewer/DimensionAnnotations';
 import { MeasurementTool } from './cad-viewer/MeasurementTool';
-import { AutoRotate } from './cad-viewer/AutoRotate';
 import { OrientationCubePreview, OrientationCubeHandle } from './cad-viewer/OrientationCubePreview';
 
 interface CADViewerProps {
@@ -40,10 +39,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   const [showEdges, setShowEdges] = useState(true);
   const [showDimensions, setShowDimensions] = useState(false);
   const [measurementMode, setMeasurementMode] = useState<'distance' | 'angle' | 'radius' | null>(null);
-  const [isIdle, setIsIdle] = useState(false);
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
-  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const orientationCubeRef = useRef<OrientationCubeHandle>(null);
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
@@ -441,24 +438,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [showEdges, measurementMode]);
   
-  // Idle detection for auto-rotation
-  useEffect(() => {
-    const resetIdleTimer = () => {
-      setIsIdle(false);
-      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
-      idleTimeoutRef.current = setTimeout(() => setIsIdle(true), 5000);
-    };
-    
-    window.addEventListener('mousemove', resetIdleTimer);
-    window.addEventListener('mousedown', resetIdleTimer);
-    resetIdleTimer();
-    
-    return () => {
-      window.removeEventListener('mousemove', resetIdleTimer);
-      window.removeEventListener('mousedown', resetIdleTimer);
-      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
-    };
-  }, []);
   
   return (
     <div className="h-full bg-white rounded-lg overflow-hidden">
@@ -627,15 +606,13 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   fov={45}
                 />
                 
-                {/* 3D Model with auto-rotation when idle */}
-                <AutoRotate enabled={isIdle}>
-                  <MeshModel
-                    meshData={meshData!}
-                    showSectionCut={showSectionCut}
-                    sectionPosition={sectionPosition}
-                    showEdges={showEdges}
-                  />
-                </AutoRotate>
+                {/* 3D Model */}
+                <MeshModel
+                  meshData={meshData!}
+                  showSectionCut={showSectionCut}
+                  sectionPosition={sectionPosition}
+                  showEdges={showEdges}
+                />
                 
                 {/* Soft contact shadow */}
                 <mesh
@@ -673,7 +650,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   rotateSpeed={0.6}
                   panSpeed={0.8}
                   zoomSpeed={1.2}
-                  enabled={!isIdle}
                 />
               </Suspense>
             </Canvas>
