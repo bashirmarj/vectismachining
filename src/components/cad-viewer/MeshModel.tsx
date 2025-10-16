@@ -115,37 +115,43 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   }, [meshData]);
   
   // Create feature edges from backend CAD geometry (Meviy-quality clean edges)
-  const featureEdges = useMemo(() => {
+  // Create feature edges from backend CAD geometry (Meviy-quality clean edges)
+const featureEdges = useMemo(() => {
     if (!showEdges) return null;
-    
+
     // Prefer backend feature edges if available (true CAD edges, no tessellation)
     if (meshData.feature_edges && meshData.feature_edges.length > 0) {
-      const positions: number[] = [];
-      
-      // Convert backend edge polylines to Three.js line segments
-      for (const edge of meshData.feature_edges) {
-        for (let i = 0; i < edge.length - 1; i++) {
-          // Add line segment (two points)
-          positions.push(...edge[i]);
-          positions.push(...edge[i + 1]);
+        const positions: number[] = [];
+
+        // Convert backend edge polylines to Three.js line segments
+        for (const edge of meshData.feature_edges) {
+            for (let i = 0; i < edge.length - 1; i++) {
+                const p1 = edge[i];
+                const p2 = edge[i + 1];
+
+                // Add each line segment (two points)
+                positions.push(p1[0], p1[1], p1[2]);
+                positions.push(p2[0], p2[1], p2[2]);
+            }
         }
-      }
-      
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      
-      return geometry;
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+        // ✅ Return clean backend geometry only — skip tessellation fallback
+        return geometry;
     }
-    
+
     // Fallback: Generate edges from mesh tessellation (old method)
     const combinedGeo = new THREE.BufferGeometry();
     combinedGeo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
     combinedGeo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     combinedGeo.setIndex(meshData.indices);
-    
+
     const creaseAngle = THREE.MathUtils.degToRad(45);
     return new THREE.EdgesGeometry(combinedGeo, creaseAngle);
-  }, [meshData, showEdges]);
+}, [meshData, showEdges]);
+
   
   // Section cut plane
   const clippingPlane = useMemo(() => {
