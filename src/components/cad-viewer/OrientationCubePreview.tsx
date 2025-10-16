@@ -105,8 +105,12 @@ export function OrientationCubePreview() {
     // Load chamfered cube from STL
     const loader = new STLLoader();
     loader.load(orientationCubeSTL, (geometry) => {
+      // Center the geometry at origin for proper rotation
+      geometry.computeBoundingBox();
+      geometry.center();
+      
       const material = new THREE.MeshBasicMaterial({ 
-        color: 0xffffff, // Pure solid white
+        color: 0xe8e8e8, // Soft light gray instead of pure white
         transparent: false,
         opacity: 1
       });
@@ -137,17 +141,7 @@ export function OrientationCubePreview() {
 
       cubeScene.add(cube);
 
-      // Add lighting
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-      cubeScene.add(ambientLight);
-
-      const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
-      keyLight.position.set(8, 8, 8);
-      cubeScene.add(keyLight);
-
-      const fillLight = new THREE.DirectionalLight(0xffffff, 0.2);
-      fillLight.position.set(-5, -3, -5);
-      cubeScene.add(fillLight);
+      // No lighting needed for MeshBasicMaterial (unlit material)
 
       // Add face labels using Planes instead of Sprites (fixed to face orientation)
       const faces = [
@@ -158,6 +152,12 @@ export function OrientationCubePreview() {
         { text: 'Top', position: [0, 1, 0], rotation: [-Math.PI / 2, 0, 0] },
         { text: 'Bottom', position: [0, -1, 0], rotation: [Math.PI / 2, 0, Math.PI] }
       ];
+
+      // Calculate label distance based on actual cube size
+      const box = new THREE.Box3().setFromObject(cube);
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const labelDistance = maxDim / 2 + 0.05; // Slightly beyond surface
 
       faces.forEach(face => {
         const canvas = document.createElement('canvas');
@@ -190,11 +190,11 @@ export function OrientationCubePreview() {
         });
         const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
         
-        // Position and rotate to match face orientation
+        // Position and rotate to match face orientation using calculated distance
         planeMesh.position.set(
-          face.position[0] * 1.02,
-          face.position[1] * 1.02,
-          face.position[2] * 1.02
+          face.position[0] * labelDistance,
+          face.position[1] * labelDistance,
+          face.position[2] * labelDistance
         );
         planeMesh.rotation.set(face.rotation[0], face.rotation[1], face.rotation[2]);
         
