@@ -1,39 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { Button } from '@/components/ui/button';
 import { Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, RotateCw, RotateCcw } from 'lucide-react';
-
-// Helper function to create a chamfered box geometry with true 45° planar edge chamfers
-function createChamferedBoxGeometry(
-  width: number,
-  height: number,
-  depth: number,
-  chamferSize: number
-): THREE.BufferGeometry {
-  const w = width / 2;
-  const h = height / 2;
-  const d = depth / 2;
-  const c = chamferSize;
-  
-  // 8 chamfered corner vertices - each moved inward by c on all 3 axes
-  // This creates a convex hull with 6 square faces, 12 trapezoidal edge chamfers at 45°, and 8 corner vertices
-  const points = [
-    new THREE.Vector3(w - c, h - c, d - c),    // Front-top-right
-    new THREE.Vector3(-w + c, h - c, d - c),   // Front-top-left
-    new THREE.Vector3(-w + c, -h + c, d - c),  // Front-bottom-left
-    new THREE.Vector3(w - c, -h + c, d - c),   // Front-bottom-right
-    new THREE.Vector3(w - c, h - c, -d + c),   // Back-top-right
-    new THREE.Vector3(-w + c, h - c, -d + c),  // Back-top-left
-    new THREE.Vector3(-w + c, -h + c, -d + c), // Back-bottom-left
-    new THREE.Vector3(w - c, -h + c, -d + c),  // Back-bottom-right
-  ];
-  
-  // ConvexGeometry automatically creates the convex hull with single planar faces
-  const geometry = new ConvexGeometry(points);
-  geometry.computeVertexNormals();
-  return geometry;
-}
+import orientationCubeSTL from '@/assets/orientation-cube.stl?url';
 
 export function OrientationCubePreview() {
   const cubeContainerRef = useRef<HTMLDivElement>(null);
@@ -132,260 +102,268 @@ export function OrientationCubePreview() {
     // Setup scene
     cubeScene.background = new THREE.Color(0x2a2a3a);
 
-    // Create beveled cube
-    const chamferSize = 0.5; // Sharp chamfer size (2x larger)
-    const geometry = createChamferedBoxGeometry(2, 2, 2, chamferSize);
-    const material = new THREE.MeshBasicMaterial({ 
-      color: 0xffffff, // Pure solid white
-      transparent: false,
-      opacity: 1
+    // Load chamfered cube from STL
+    const loader = new STLLoader();
+    loader.load(orientationCubeSTL, (geometry) => {
+      const material = new THREE.MeshBasicMaterial({ 
+        color: 0xffffff, // Pure solid white
+        transparent: false,
+        opacity: 1
+      });
+      const cube = new THREE.Mesh(geometry, material);
+      cubeRef.current = cube;
+
+      // Add subtle edges
+      const edges = new THREE.EdgesGeometry(geometry, 10);
+      const lineMaterial = new THREE.LineBasicMaterial({ 
+        color: 0xcccccc, // Slightly darker gray for better visibility
+        linewidth: 1,
+        transparent: true,
+        opacity: 0.3 // Slightly more visible
+      });
+      const line = new THREE.LineSegments(edges, lineMaterial);
+      cube.add(line);
+
+      // Add blue highlight edges (initially hidden)
+      const highlightEdges = new THREE.EdgesGeometry(geometry, 10);
+      const highlightLineMaterial = new THREE.LineBasicMaterial({
+        color: 0x3b82f6, // Blue highlight
+        linewidth: 2,
+        transparent: true,
+        opacity: 0 // Initially invisible
+      });
+      const highlightLine = new THREE.LineSegments(highlightEdges, highlightLineMaterial);
+      cube.add(highlightLine);
+
+      cubeScene.add(cube);
+
+      // Add lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      cubeScene.add(ambientLight);
+
+      const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      keyLight.position.set(8, 8, 8);
+      cubeScene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0xffffff, 0.2);
+      fillLight.position.set(-5, -3, -5);
+      cubeScene.add(fillLight);
+
+      // Add face labels using Planes instead of Sprites (fixed to face orientation)
+      const faces = [
+        { text: 'Front', position: [0, 0, 1], rotation: [0, 0, 0] },
+        { text: 'Back', position: [0, 0, -1], rotation: [0, Math.PI, 0] },
+        { text: 'Right', position: [1, 0, 0], rotation: [0, Math.PI / 2, 0] },
+        { text: 'Left', position: [-1, 0, 0], rotation: [0, -Math.PI / 2, 0] },
+        { text: 'Top', position: [0, 1, 0], rotation: [-Math.PI / 2, 0, 0] },
+        { text: 'Bottom', position: [0, -1, 0], rotation: [Math.PI / 2, 0, Math.PI] }
+      ];
+
+      faces.forEach(face => {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d')!;
+        canvas.width = 512;
+        canvas.height = 512;
+
+        // White text with shadow for better readability
+        context.shadowColor = 'rgba(0, 0, 0, 0.9)';
+        context.shadowBlur = 10;
+        context.shadowOffsetX = 3;
+        context.shadowOffsetY = 3;
+        
+        context.fillStyle = '#ffffff';
+        context.font = 'bold 80px Arial';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText(face.text, 256, 256);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        
+        // Use PlaneGeometry instead of Sprite to fix orientation to face
+        const planeGeometry = new THREE.PlaneGeometry(1.8, 1.8);
+        const planeMaterial = new THREE.MeshBasicMaterial({ 
+          map: texture,
+          transparent: true,
+          side: THREE.DoubleSide,
+          fog: false
+        });
+        const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
+        
+        // Position and rotate to match face orientation
+        planeMesh.position.set(
+          face.position[0] * 1.02,
+          face.position[1] * 1.02,
+          face.position[2] * 1.02
+        );
+        planeMesh.rotation.set(face.rotation[0], face.rotation[1], face.rotation[2]);
+        
+        cube.add(planeMesh);
+      });
+
+      // Click handler for interactive orientation
+      const onClick = (e: MouseEvent) => {
+        const rect = cubeRenderer.domElement.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, cubeCamera);
+        const intersects = raycaster.intersectObject(cube, false);
+        
+        if (intersects.length === 0) return;
+        
+        const hit = intersects[0];
+        if (!hit || !hit.point) return;
+        
+        const localPoint = cube.worldToLocal(hit.point.clone());
+        const region = classifyClickRegion(localPoint);
+        
+        console.log(`Clicked ${region.type}: ${region.description}`);
+        orientCameraToDirection(region.direction);
+      };
+
+      // Hover handler for visual feedback
+      const onMouseMove = (e: MouseEvent) => {
+        const rect = cubeRenderer.domElement.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, cubeCamera);
+        const intersects = raycaster.intersectObject(cube, false);
+        
+        if (intersects.length === 0) {
+          highlightLineMaterial.opacity = 0; // Hide blue highlight
+          setHoveredRegion(null);
+          cubeRenderer.domElement.style.cursor = 'default';
+          return;
+        }
+        
+        const hit = intersects[0];
+        if (!hit || !hit.point) {
+          highlightLineMaterial.opacity = 0; // Hide blue highlight
+          setHoveredRegion(null);
+          return;
+        }
+        
+        const localPoint = cube.worldToLocal(hit.point.clone());
+        const region = classifyClickRegion(localPoint);
+        
+        highlightLineMaterial.opacity = 0.9; // Show blue highlight on hover
+        
+        setHoveredRegion({
+          type: region.type,
+          description: region.description
+        });
+        
+        cubeRenderer.domElement.style.cursor = 'pointer';
+      };
+
+      const onMouseLeave = () => {
+        highlightLineMaterial.opacity = 0; // Hide blue highlight
+        setHoveredRegion(null);
+        cubeRenderer.domElement.style.cursor = 'default';
+      };
+
+      cubeRenderer.domElement.addEventListener('click', onClick);
+      cubeRenderer.domElement.addEventListener('mousemove', onMouseMove);
+      cubeRenderer.domElement.addEventListener('mouseleave', onMouseLeave);
+
+      // Context loss/restore handlers
+      const handleContextLost = (e: Event) => {
+        e.preventDefault();
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+        console.log('WebGL context lost - orientation cube');
+      };
+
+      const handleContextRestored = () => {
+        console.log('WebGL context restored - orientation cube');
+        animate();
+      };
+
+      cubeRenderer.domElement.addEventListener('webglcontextlost', handleContextLost);
+      cubeRenderer.domElement.addEventListener('webglcontextrestored', handleContextRestored);
+
+      // Animation loop
+      const animate = () => {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        cubeRenderer.render(cubeScene, cubeCamera);
+      };
+      animate();
+
+      // Cleanup function
+      const cleanup = () => {
+        // Cancel animation frame
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+
+        // Remove event listeners
+        cubeRenderer.domElement.removeEventListener('click', onClick);
+        cubeRenderer.domElement.removeEventListener('mousemove', onMouseMove);
+        cubeRenderer.domElement.removeEventListener('mouseleave', onMouseLeave);
+        cubeRenderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
+        cubeRenderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
+
+        // Dispose geometries
+        geometry.dispose();
+        edges.dispose();
+        highlightEdges.dispose();
+
+        // Dispose materials
+        material.dispose();
+        lineMaterial.dispose();
+        highlightLineMaterial.dispose();
+
+        // Dispose all mesh materials, textures, and geometries
+        cube.children.forEach(child => {
+          if (child instanceof THREE.Mesh) {
+            if (child.geometry) {
+              child.geometry.dispose();
+            }
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach(mat => {
+                  if (mat.map) mat.map.dispose();
+                  mat.dispose();
+                });
+              } else {
+                if (child.material.map) child.material.map.dispose();
+                child.material.dispose();
+              }
+            }
+          }
+        });
+
+        // Dispose renderer and force context loss
+        cubeRenderer.dispose();
+        cubeRenderer.forceContextLoss();
+
+        // Remove DOM element
+        if (cubeContainerRef.current && cubeRenderer.domElement.parentNode === cubeContainerRef.current) {
+          cubeContainerRef.current.removeChild(cubeRenderer.domElement);
+        }
+      };
+
+      // Return cleanup to parent scope
+      return cleanup;
     });
-    const cube = new THREE.Mesh(geometry, material);
-    cubeRef.current = cube;
-
-    // Add subtle edges
-    const edges = new THREE.EdgesGeometry(geometry, 10);
-    const lineMaterial = new THREE.LineBasicMaterial({ 
-      color: 0xcccccc, // Slightly darker gray for better visibility
-      linewidth: 1,
-      transparent: true,
-      opacity: 0.3 // Slightly more visible
-    });
-    const line = new THREE.LineSegments(edges, lineMaterial);
-    cube.add(line);
-
-    // Add blue highlight edges (initially hidden)
-    const highlightEdges = new THREE.EdgesGeometry(geometry, 10);
-    const highlightLineMaterial = new THREE.LineBasicMaterial({
-      color: 0x3b82f6, // Blue highlight
-      linewidth: 2,
-      transparent: true,
-      opacity: 0 // Initially invisible
-    });
-    const highlightLine = new THREE.LineSegments(highlightEdges, highlightLineMaterial);
-    cube.add(highlightLine);
-
-    cubeScene.add(cube);
-
-    // Add lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    cubeScene.add(ambientLight);
-
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    keyLight.position.set(8, 8, 8);
-    cubeScene.add(keyLight);
-
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.2);
-    fillLight.position.set(-5, -3, -5);
-    cubeScene.add(fillLight);
 
     // Position camera
     cubeCamera.position.set(3, 3, 3);
     cubeCamera.lookAt(0, 0, 0);
 
-    // Edge and corner beveling is now integrated into the geometry itself
-
-    // Add face labels using Planes instead of Sprites (fixed to face orientation)
-    const faces = [
-      { text: 'Front', position: [0, 0, 1], rotation: [0, 0, 0] },
-      { text: 'Back', position: [0, 0, -1], rotation: [0, Math.PI, 0] },
-      { text: 'Right', position: [1, 0, 0], rotation: [0, Math.PI / 2, 0] },
-      { text: 'Left', position: [-1, 0, 0], rotation: [0, -Math.PI / 2, 0] },
-      { text: 'Top', position: [0, 1, 0], rotation: [-Math.PI / 2, 0, 0] },
-      { text: 'Bottom', position: [0, -1, 0], rotation: [Math.PI / 2, 0, Math.PI] }
-    ];
-
-    faces.forEach(face => {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d')!;
-      canvas.width = 512;
-      canvas.height = 512;
-
-      // No background for clean look
-
-      // White text with shadow for better readability
-      context.shadowColor = 'rgba(0, 0, 0, 0.9)';
-      context.shadowBlur = 10;
-      context.shadowOffsetX = 3;
-      context.shadowOffsetY = 3;
-      
-      context.fillStyle = '#ffffff';
-      context.font = 'bold 80px Arial';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(face.text, 256, 256);
-
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.needsUpdate = true;
-      
-      // Use PlaneGeometry instead of Sprite to fix orientation to face
-      const planeGeometry = new THREE.PlaneGeometry(1.8, 1.8);
-      const planeMaterial = new THREE.MeshBasicMaterial({ 
-        map: texture,
-        transparent: true,
-        side: THREE.DoubleSide,
-        fog: false
-      });
-      const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
-      
-      // Position and rotate to match face orientation
-      planeMesh.position.set(
-        face.position[0] * 1.02,
-        face.position[1] * 1.02,
-        face.position[2] * 1.02
-      );
-      planeMesh.rotation.set(face.rotation[0], face.rotation[1], face.rotation[2]);
-      
-      cube.add(planeMesh);
-    });
-
-    // Click handler for interactive orientation
-    const onClick = (e: MouseEvent) => {
-      const rect = cubeRenderer.domElement.getBoundingClientRect();
-      const mouse = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1
-      );
-      
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(mouse, cubeCamera);
-      const intersects = raycaster.intersectObject(cube, false);
-      
-      if (intersects.length === 0) return;
-      
-      const hit = intersects[0];
-      if (!hit || !hit.point) return;
-      
-      const localPoint = cube.worldToLocal(hit.point.clone());
-      const region = classifyClickRegion(localPoint);
-      
-      console.log(`Clicked ${region.type}: ${region.description}`);
-      orientCameraToDirection(region.direction);
-    };
-
-    // Hover handler for visual feedback
-    const onMouseMove = (e: MouseEvent) => {
-      const rect = cubeRenderer.domElement.getBoundingClientRect();
-      const mouse = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1
-      );
-      
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(mouse, cubeCamera);
-      const intersects = raycaster.intersectObject(cube, false);
-      
-      if (intersects.length === 0) {
-        highlightLineMaterial.opacity = 0; // Hide blue highlight
-        setHoveredRegion(null);
-        cubeRenderer.domElement.style.cursor = 'default';
-        return;
-      }
-      
-      const hit = intersects[0];
-      if (!hit || !hit.point) {
-        highlightLineMaterial.opacity = 0; // Hide blue highlight
-        setHoveredRegion(null);
-        return;
-      }
-      
-      const localPoint = cube.worldToLocal(hit.point.clone());
-      const region = classifyClickRegion(localPoint);
-      
-      highlightLineMaterial.opacity = 0.9; // Show blue highlight on hover
-      
-      setHoveredRegion({
-        type: region.type,
-        description: region.description
-      });
-      
-      cubeRenderer.domElement.style.cursor = 'pointer';
-    };
-
-    const onMouseLeave = () => {
-      highlightLineMaterial.opacity = 0; // Hide blue highlight
-      setHoveredRegion(null);
-      cubeRenderer.domElement.style.cursor = 'default';
-    };
-
-    cubeRenderer.domElement.addEventListener('click', onClick);
-    cubeRenderer.domElement.addEventListener('mousemove', onMouseMove);
-    cubeRenderer.domElement.addEventListener('mouseleave', onMouseLeave);
-
-    // Context loss/restore handlers
-    const handleContextLost = (e: Event) => {
-      e.preventDefault();
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      console.log('WebGL context lost - orientation cube');
-    };
-
-    const handleContextRestored = () => {
-      console.log('WebGL context restored - orientation cube');
-      animate();
-    };
-
-    cubeRenderer.domElement.addEventListener('webglcontextlost', handleContextLost);
-    cubeRenderer.domElement.addEventListener('webglcontextrestored', handleContextRestored);
-
-    // Animation loop
-    const animate = () => {
-      animationFrameRef.current = requestAnimationFrame(animate);
-      cubeRenderer.render(cubeScene, cubeCamera);
-    };
-    animate();
-
+    // Placeholder return for before STL loads
     return () => {
-      // Cancel animation frame
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
-      }
-
-      // Remove event listeners
-      cubeRenderer.domElement.removeEventListener('click', onClick);
-      cubeRenderer.domElement.removeEventListener('mousemove', onMouseMove);
-      cubeRenderer.domElement.removeEventListener('mouseleave', onMouseLeave);
-      cubeRenderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
-      cubeRenderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
-
-      // Dispose geometries
-      geometry.dispose();
-      edges.dispose();
-      highlightEdges.dispose();
-
-      // Dispose materials
-      material.dispose();
-      lineMaterial.dispose();
-      highlightLineMaterial.dispose();
-
-      // Dispose all mesh materials, textures, and geometries
-      cube.children.forEach(child => {
-        if (child instanceof THREE.Mesh) {
-          if (child.geometry) {
-            child.geometry.dispose();
-          }
-          if (child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach(mat => {
-                if (mat.map) mat.map.dispose();
-                mat.dispose();
-              });
-            } else {
-              if (child.material.map) child.material.map.dispose();
-              child.material.dispose();
-            }
-          }
-        }
-      });
-
-      // Dispose renderer and force context loss
-      cubeRenderer.dispose();
-      cubeRenderer.forceContextLoss();
-
-      // Remove DOM element
-      if (cubeContainerRef.current && cubeRenderer.domElement.parentNode === cubeContainerRef.current) {
-        cubeContainerRef.current.removeChild(cubeRenderer.domElement);
       }
     };
   }, [cubeScene, cubeCamera, cubeRenderer]);
