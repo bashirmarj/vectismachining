@@ -11,6 +11,7 @@ import { ViewerControls } from './cad-viewer/ViewerControls';
 import { DimensionAnnotations } from './cad-viewer/DimensionAnnotations';
 import { MeasurementTool } from './cad-viewer/MeasurementTool';
 import { AutoRotate } from './cad-viewer/AutoRotate';
+import { OrientationCubePreview } from './cad-viewer/OrientationCubePreview';
 
 interface CADViewerProps {
   file?: File;
@@ -43,12 +44,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const cubeHostRef = useRef<HTMLDivElement>(null);
-  const cubeRef = useRef<{ scene: THREE.Scene; camera: THREE.PerspectiveCamera; renderer: THREE.WebGLRenderer; cube: THREE.Mesh } | null>(null);
-  const [hoveredRegion, setHoveredRegion] = useState<{
-    type: 'face' | 'edge' | 'corner';
-    description: string;
-  } | null>(null);
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isSTEP = ['step', 'stp'].includes(fileExtension);
@@ -436,39 +431,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                   <ChevronLeft className="w-4 h-4 text-white/80 hover:text-white" />
                 </button>
                 
-                {/* Cube container - Professional style */}
+                {/* Orientation Cube Preview */}
                 <div className="relative">
-                  {/* Hover tooltip */}
-                  {hoveredRegion && (
-                    <div 
-                      className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-md text-xs font-medium text-white whitespace-nowrap pointer-events-none z-50"
-                      style={{
-                        background: 'rgba(0, 0, 0, 0.9)',
-                        backdropFilter: 'blur(8px)',
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                      }}
-                    >
-                      {hoveredRegion.description}
-                      <div className="text-[10px] text-white/60 mt-0.5">
-                        {hoveredRegion.type === 'face' && 'Orthogonal view'}
-                        {hoveredRegion.type === 'edge' && 'Two-axis view'}
-                        {hoveredRegion.type === 'corner' && 'Tri-axial view'}
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div
-                    ref={cubeHostRef}
-                    className="relative"
-                    style={{
-                      width: '100px',
-                      height: '100px',
-                      background: 'rgba(42, 42, 58, 0.95)',
-                      backdropFilter: 'blur(8px)',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                    }}
-                  />
+                  <OrientationCubePreview />
                 </div>
                 
                 {/* Right rotation */}
