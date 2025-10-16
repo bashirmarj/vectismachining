@@ -7,6 +7,7 @@ import orientationCubeSTL from '@/assets/orientation-cube.stl?url';
 
 interface OrientationCubePreviewProps {
   onOrientationChange?: (direction: THREE.Vector3) => void;
+  onUpVectorChange?: (upVector: THREE.Vector3) => void;
 }
 
 export interface OrientationCubeHandle {
@@ -16,7 +17,7 @@ export interface OrientationCubeHandle {
 }
 
 export const OrientationCubePreview = forwardRef<OrientationCubeHandle, OrientationCubePreviewProps>(
-  ({ onOrientationChange }, ref) => {
+  ({ onOrientationChange, onUpVectorChange }, ref) => {
   const cubeContainerRef = useRef<HTMLDivElement>(null);
   const [cubeScene] = useState(() => new THREE.Scene());
   const [cubeCamera] = useState(() => new THREE.PerspectiveCamera(50, 1, 0.1, 1000));
@@ -438,7 +439,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       .sub(cubeCamera.position)
       .normalize();
     
-    const angle = Math.PI / 4; // 45 degrees
+    const angle = Math.PI / 2; // 90 degrees
     const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
     
     // Rotate the UP vector around the viewing axis
@@ -447,10 +448,9 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     cubeCamera.lookAt(target);
     cubeCamera.updateProjectionMatrix();
     
-    // Notify parent of rotation
-    if (onOrientationChange) {
-      const newDirection = cubeCamera.position.clone().normalize();
-      onOrientationChange(newDirection);
+    // Notify parent of UP vector change
+    if (onUpVectorChange) {
+      onUpVectorChange(newUp.clone());
     }
   };
 
@@ -460,7 +460,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       .sub(cubeCamera.position)
       .normalize();
     
-    const angle = -Math.PI / 4; // -45 degrees
+    const angle = -Math.PI / 2; // -90 degrees
     const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
     
     // Rotate the UP vector around the viewing axis
@@ -469,10 +469,9 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     cubeCamera.lookAt(target);
     cubeCamera.updateProjectionMatrix();
     
-    // Notify parent of rotation
-    if (onOrientationChange) {
-      const newDirection = cubeCamera.position.clone().normalize();
-      onOrientationChange(newDirection);
+    // Notify parent of UP vector change
+    if (onUpVectorChange) {
+      onUpVectorChange(newUp.clone());
     }
   };
 

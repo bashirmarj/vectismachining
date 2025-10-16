@@ -298,22 +298,14 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     requestAnimationFrame(animate);
   };
   
-  // Rotate main camera clockwise around viewing axis
-  const rotateMainCameraClockwise = () => {
+  // Handle UP vector change from orientation cube
+  const handleCubeUpVectorChange = (newUpVector: THREE.Vector3) => {
     if (!cameraRef.current || !controlsRef.current) return;
     
     const target = new THREE.Vector3(...boundingBox.center);
-    const viewDirection = target.clone()
-      .sub(cameraRef.current.position)
-      .normalize();
     
-    const angle = Math.PI / 4; // 45 degrees
-    const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
-    
-    // Animate the UP vector rotation
+    // Animate the main camera's UP vector
     const startUp = cameraRef.current.up.clone();
-    const newUp = startUp.clone().applyQuaternion(quaternion);
-    
     const duration = 400;
     const t0 = performance.now();
     
@@ -322,48 +314,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
       const k = Math.min(1, elapsed / duration);
       const easedK = 1 - Math.pow(1 - k, 3);
       
-      // Interpolate the up vector
-      const currentUp = startUp.clone().lerp(newUp, easedK).normalize();
-      cameraRef.current.up.copy(currentUp);
-      cameraRef.current.lookAt(target);
-      
-      controlsRef.current.target.copy(target);
-      controlsRef.current.update();
-      
-      if (k < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    
-    requestAnimationFrame(animate);
-  };
-  
-  // Rotate main camera counter-clockwise around viewing axis
-  const rotateMainCameraCounterClockwise = () => {
-    if (!cameraRef.current || !controlsRef.current) return;
-    
-    const target = new THREE.Vector3(...boundingBox.center);
-    const viewDirection = target.clone()
-      .sub(cameraRef.current.position)
-      .normalize();
-    
-    const angle = -Math.PI / 4; // -45 degrees
-    const quaternion = new THREE.Quaternion().setFromAxisAngle(viewDirection, angle);
-    
-    // Animate the UP vector rotation
-    const startUp = cameraRef.current.up.clone();
-    const newUp = startUp.clone().applyQuaternion(quaternion);
-    
-    const duration = 400;
-    const t0 = performance.now();
-    
-    const animate = (t: number) => {
-      const elapsed = t - t0;
-      const k = Math.min(1, elapsed / duration);
-      const easedK = 1 - Math.pow(1 - k, 3);
-      
-      // Interpolate the up vector
-      const currentUp = startUp.clone().lerp(newUp, easedK).normalize();
+      const currentUp = startUp.clone().lerp(newUpVector, easedK).normalize();
       cameraRef.current.up.copy(currentUp);
       cameraRef.current.lookAt(target);
       
@@ -508,7 +459,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                 <div className="relative">
                   <OrientationCubePreview 
                     ref={orientationCubeRef}
-                    onOrientationChange={orientMainCameraToDirection} 
+                    onOrientationChange={orientMainCameraToDirection}
+                    onUpVectorChange={handleCubeUpVectorChange}
                   />
                 </div>
                 
