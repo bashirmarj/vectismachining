@@ -113,7 +113,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return result;
   }, [meshData]);
   
-  // Create unified edge geometry (3-degree threshold for ALL design edges)
+  // Create unified edge geometry (30-degree threshold for clean technical drawing)
   const edges = useMemo(() => {
     if (!showEdges) return null;
     
@@ -122,9 +122,9 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     combinedGeo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     combinedGeo.setIndex(meshData.indices);
     
-    // 3 degree threshold: shows ALL design edges (corners, chamfers, fillets, holes)
-    // Lower threshold captures smaller feature edges after high-fidelity tessellation
-    return new THREE.EdgesGeometry(combinedGeo, 3);
+    // 30 degree threshold: shows ONLY major design edges (corners, holes, features)
+    // Higher threshold filters out curved surface tessellation artifacts
+    return new THREE.EdgesGeometry(combinedGeo, 30);
   }, [meshData, showEdges]);
   
   // Section cut plane
@@ -180,38 +180,42 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   
   return (
     <group castShadow receiveShadow>
-      {/* Render each face type with its specific color */}
-      {Object.entries(geometries).map(([type, geo]) => (
-        <group key={type}>
-          {/* Main colored mesh */}
-          <mesh geometry={geo} castShadow receiveShadow>
-            <meshStandardMaterial
-              {...materialProps}
-              color={FACE_COLORS[type as keyof typeof FACE_COLORS] || FACE_COLORS.external}
-            />
-          </mesh>
-          
-          {/* Silhouette outline for crisp contours */}
-          <mesh geometry={geo} scale={1.002} castShadow>
-            <meshBasicMaterial
-              color="#0a0a0a"
-              side={THREE.BackSide}
-              clippingPlanes={clippingPlane}
-              clipIntersection={false}
-            />
-          </mesh>
-        </group>
-      ))}
+      {/* Render colored meshes only in solid/translucent modes */}
+      {displayStyle !== 'wireframe' && (
+        <>
+          {Object.entries(geometries).map(([type, geo]) => (
+            <group key={type}>
+              {/* Main colored mesh */}
+              <mesh geometry={geo} castShadow receiveShadow>
+                <meshStandardMaterial
+                  {...materialProps}
+                  color={FACE_COLORS[type as keyof typeof FACE_COLORS] || FACE_COLORS.external}
+                />
+              </mesh>
+              
+              {/* Silhouette outline for crisp contours */}
+              <mesh geometry={geo} scale={1.002} castShadow>
+                <meshBasicMaterial
+                  color="#0a0a0a"
+                  side={THREE.BackSide}
+                  clippingPlanes={clippingPlane}
+                  clipIntersection={false}
+                />
+              </mesh>
+            </group>
+          ))}
+        </>
+      )}
       
-      {/* Edge lines for clarity - prominent and visible through surfaces */}
+      {/* Edge lines - clean technical drawing style */}
       {showEdges && edges && (
         <lineSegments geometry={edges}>
           <lineBasicMaterial
-            color="#0a1f2e"
-            linewidth={2}
-            depthTest={false}
-            opacity={0.8}
-            transparent
+            color="#000000"
+            linewidth={1}
+            depthTest={true}
+            opacity={1}
+            transparent={false}
           />
         </lineSegments>
       )}

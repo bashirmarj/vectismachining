@@ -406,7 +406,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
             </Button>
           </div>
         ) : hasValidModel ? (
-          <div className="relative h-full" style={{ background: 'linear-gradient(180deg, #202020 0%, #1b1b1b 100%)' }}>
+          <div className="relative h-full" style={{ background: '#ffffff' }}>
         <ViewerControls
           sectionPlane={sectionPlane}
           onSectionPlaneChange={setSectionPlane}
@@ -424,15 +424,15 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
             {/* Isometric Reset Button - Top Left */}
             <button
               onClick={setIsometricView}
-              className="absolute top-5 left-5 z-30 p-2 hover:bg-white/20 rounded-lg transition-all"
+              className="absolute top-5 left-5 z-30 p-2 hover:bg-gray-100 rounded-lg transition-all"
               style={{
-                background: 'rgba(26, 26, 26, 0.95)',
+                background: 'rgba(255, 255, 255, 0.95)',
                 backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(0, 0, 0, 0.1)',
               }}
               title="Isometric View"
             >
-              <Box className="w-4 h-4 text-white/80 hover:text-white" />
+              <Box className="w-4 h-4 text-gray-700 hover:text-gray-900" />
             </button>
             
             {/* Orientation Cube - Top Right */}
@@ -446,7 +446,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
             </div>
             
             {/* Vectis Manufacturing Watermark */}
-            <div className="absolute bottom-4 left-4 z-10 text-xs text-white/30 font-medium">
+            <div className="absolute bottom-4 left-4 z-10 text-xs text-black/30 font-medium">
               Vectis Manufacturing | Automating Precision
             </div>
             
@@ -464,9 +464,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
               dpr={[1, 2]}
             >
               <Suspense fallback={null}>
-                {/* Professional dark scene lighting */}
-                <color attach="background" args={['#1b1b1b']} />
-                <fog attach="fog" args={['#1b1b1b', 300, 1000]} />
+                {/* Clean white background */}
+                <color attach="background" args={['#ffffff']} />
+                <fog attach="fog" args={['#ffffff', 300, 1000]} />
                 
                 {/* Multi-point lighting for industrial look */}
                 <ambientLight intensity={0.4} />
@@ -480,11 +480,11 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                 <directionalLight position={[-10, 5, -5]} intensity={0.3} />
                 <hemisphereLight args={['#ffffff', '#3a3a3a', 0.3]} />
                 
-                {/* Subtle grid (faint gray) */}
+                {/* Subtle grid (light gray) */}
                 <gridHelper
-                  args={[500, 50, '#3a3a3a', '#3a3a3a']}
+                  args={[500, 50, '#e0e0e0', '#f0f0f0']}
                   position={[0, -boundingBox.height / 2 - 10, 0]}
-                  material-opacity={0.25}
+                  material-opacity={0.5}
                   material-transparent
                 />
                 
