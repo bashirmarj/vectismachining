@@ -694,51 +694,51 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
       {/* Directional Arrow Buttons - Clean minimal style */}
       <button
         onClick={rotateCameraUp}
-        className="absolute -top-5 left-1/2 -translate-x-1/2 p-1 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute -top-3 left-1/2 -translate-x-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Up"
       >
-        <ChevronUp className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+        <ChevronUp className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
       </button>
 
       <button
         onClick={rotateCameraDown}
-        className="absolute -bottom-5 left-1/2 -translate-x-1/2 p-1 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute -bottom-3 left-1/2 -translate-x-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Down"
       >
-        <ChevronDown className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+        <ChevronDown className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
       </button>
 
       <button
         onClick={rotateCameraLeft}
-        className="absolute top-1/2 -left-5 -translate-y-1/2 p-1 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute top-1/2 -left-3 -translate-y-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Left"
       >
-        <ChevronLeft className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+        <ChevronLeft className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
       </button>
 
       <button
         onClick={rotateCameraRight}
-        className="absolute top-1/2 -right-5 -translate-y-1/2 p-1 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute top-1/2 -right-3 -translate-y-1/2 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate View Right"
       >
-        <ChevronRight className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+        <ChevronRight className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
       </button>
 
       {/* Curved Rotation Arrows */}
       <button
         onClick={rotateCameraClockwise}
-        className="absolute -top-5 -right-5 p-1 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute -top-3 -right-3 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate Clockwise"
       >
-        <RotateCw className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+        <RotateCw className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
       </button>
 
       <button
         onClick={rotateCameraCounterClockwise}
-        className="absolute -top-5 -left-5 p-1 hover:scale-110 transition-transform cursor-pointer"
+        className="absolute -top-3 -left-3 hover:scale-110 transition-transform cursor-pointer"
         title="Rotate Counter-Clockwise"
       >
-        <RotateCcw className="h-4 w-4 text-white drop-shadow-lg" strokeWidth={2.5} />
+        <RotateCcw className="h-3 w-3 text-white drop-shadow-lg" strokeWidth={2} />
       </button>
     </div>
   );

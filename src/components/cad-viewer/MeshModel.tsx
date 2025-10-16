@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
+import { useThree } from '@react-three/fiber';
 
 interface MeshData {
   vertices: number[];
@@ -127,7 +128,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges }
   
   // Section cut plane
   const clippingPlane = useMemo(() => {
-    if (sectionPlane === 'none') return null;
+    if (sectionPlane === 'none') return undefined;
     
     let normal: THREE.Vector3;
     switch (sectionPlane) {
@@ -141,11 +142,19 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges }
         normal = new THREE.Vector3(1, 0, 0);
         break;
       default:
-        return null;
+        return undefined;
     }
     
     return [new THREE.Plane(normal, -sectionPosition)];
   }, [sectionPlane, sectionPosition]);
+  
+  // Update Three.js renderer clipping settings when section plane changes
+  const { gl } = useThree();
+  
+  useEffect(() => {
+    gl.localClippingEnabled = sectionPlane !== 'none';
+    gl.clippingPlanes = [];
+  }, [sectionPlane, gl]);
   
   return (
     <group castShadow receiveShadow>
@@ -157,7 +166,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges }
             <meshStandardMaterial
               color={FACE_COLORS[type as keyof typeof FACE_COLORS] || FACE_COLORS.external}
               side={THREE.DoubleSide}
-              clippingPlanes={clippingPlane || undefined}
+              clippingPlanes={clippingPlane}
               clipIntersection={false}
               metalness={0.15}
               roughness={0.6}
@@ -172,7 +181,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges }
             <meshBasicMaterial
               color="#0a0a0a"
               side={THREE.BackSide}
-              clippingPlanes={clippingPlane || undefined}
+              clippingPlanes={clippingPlane}
               clipIntersection={false}
             />
           </mesh>

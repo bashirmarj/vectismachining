@@ -420,10 +420,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
           onFitView={handleFitView}
         />
             
-            {/* Isometric Reset Button - Bottom Left */}
+            {/* Isometric Reset Button - Top Left */}
             <button
               onClick={setIsometricView}
-              className="absolute bottom-5 left-5 z-30 p-2 hover:bg-white/20 rounded-lg transition-all"
+              className="absolute top-5 left-5 z-30 p-2 hover:bg-white/20 rounded-lg transition-all"
               style={{
                 background: 'rgba(26, 26, 26, 0.95)',
                 backdropFilter: 'blur(8px)',
