@@ -118,7 +118,7 @@ export function OrientationCubePreview() {
       cubeRef.current = cube;
 
       // Add subtle edges
-      const edges = new THREE.EdgesGeometry(geometry, 10);
+      const edges = new THREE.EdgesGeometry(geometry, 30);
       const lineMaterial = new THREE.LineBasicMaterial({ 
         color: 0xcccccc, // Slightly darker gray for better visibility
         linewidth: 1,
@@ -129,7 +129,7 @@ export function OrientationCubePreview() {
       cube.add(line);
 
       // Add blue highlight edges (initially hidden)
-      const highlightEdges = new THREE.EdgesGeometry(geometry, 10);
+      const highlightEdges = new THREE.EdgesGeometry(geometry, 30);
       const highlightLineMaterial = new THREE.LineBasicMaterial({
         color: 0x3b82f6, // Blue highlight
         linewidth: 2,
