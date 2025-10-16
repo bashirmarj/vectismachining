@@ -26,6 +26,7 @@ from OCC.Core.gp import gp_Pnt, gp_Vec, gp_Dir
 from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
 from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.BRep import BRep_Tool
+from OCC.Core import topods
 import math
 
 app = Flask(__name__)
@@ -581,6 +582,73 @@ def get_average_face_normal(triangulation, transform, face_reversed):
     
     return normal
 
+def extract_feature_edges(shape):
+    """
+    Extract real CAD feature edges (B-Rep edges) for clean wireframe rendering.
+    Returns list of edge polylines as 3D coordinate arrays.
+    
+    Returns:
+        list of lists: [
+            [[x1,y1,z1], [x2,y2,z2], ...],  # Edge 1 polyline
+            [[x1,y1,z1], [x2,y2,z2], ...],  # Edge 2 polyline
+            ...
+        ]
+    """
+    feature_edges = []
+    
+    try:
+        from OCC.Core import topods
+        
+        # Iterate through all B-Rep edges in the CAD model
+        edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
+        
+        while edge_explorer.More():
+            edge = topods.Edge(edge_explorer.Current())
+            
+            # Get edge curve adapter
+            curve_adapter = BRepAdaptor_Curve(edge)
+            curve_type = curve_adapter.GetType()
+            
+            # Sample edge into polyline (adaptive sampling based on curve type)
+            u_min = curve_adapter.FirstParameter()
+            u_max = curve_adapter.LastParameter()
+            
+            # Determine sampling density based on curve type
+            if curve_type == GeomAbs_Circle:
+                # Circular edges: 16 samples per full circle
+                arc_length = u_max - u_min
+                num_samples = max(8, int(arc_length / (2 * math.pi) * 16))
+            elif curve_type == 0:  # GeomAbs_Line
+                # Straight lines: just endpoints
+                num_samples = 2
+            else:
+                # BSpline curves, complex curves: 12 samples
+                num_samples = 12
+            
+            # Sample curve
+            edge_points = []
+            for i in range(num_samples):
+                u = u_min + (u_max - u_min) * i / (num_samples - 1)
+                point = curve_adapter.Value(u)
+                edge_points.append([
+                    round(point.X(), 3),
+                    round(point.Y(), 3),
+                    round(point.Z(), 3)
+                ])
+            
+            # Only add if edge has valid length
+            if len(edge_points) >= 2:
+                feature_edges.append(edge_points)
+            
+            edge_explorer.Next()
+        
+        logger.info(f"Extracted {len(feature_edges)} feature edges from CAD geometry")
+        
+    except Exception as e:
+        logger.error(f"Error extracting feature edges: {e}")
+    
+    return feature_edges
+
 def tessellate_shape(shape, quality=0.5):
     """
     Tessellate STEP shape into triangulated mesh for 3D rendering with face classification
@@ -766,13 +834,18 @@ def tessellate_shape(shape, quality=0.5):
         triangle_count = len(indices) // 3
         
         logger.info(f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles, classified faces")
+        # Extract clean feature edges from B-Rep geometry
+        feature_edges = extract_feature_edges(shape)
+        
+        logger.info(f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles, {len(face_types)} face classifications, {len(feature_edges)} feature edges")
         
         return {
             'vertices': vertices,
             'indices': indices,
             'normals': normals,
             'face_types': face_types,  # Face classification for each vertex
-            'triangle_count': triangle_count
+            'triangle_count': triangle_count,
+            'feature_edges': feature_edges
         }
         
     except Exception as e:

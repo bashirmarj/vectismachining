@@ -8,6 +8,7 @@ interface MeshData {
   normals: number[];
   face_types?: string[];
   triangle_count: number;
+  feature_edges?: number[][][];
 }
 
 interface MeshModelProps {
@@ -113,17 +114,35 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return result;
   }, [meshData]);
   
-  // Create feature edges geometry (only silhouette, crease, boundary - no tessellation)
+  // Create feature edges from backend CAD geometry (Meviy-quality clean edges)
   const featureEdges = useMemo(() => {
     if (!showEdges) return null;
     
+    // Prefer backend feature edges if available (true CAD edges, no tessellation)
+    if (meshData.feature_edges && meshData.feature_edges.length > 0) {
+      const positions: number[] = [];
+      
+      // Convert backend edge polylines to Three.js line segments
+      for (const edge of meshData.feature_edges) {
+        for (let i = 0; i < edge.length - 1; i++) {
+          // Add line segment (two points)
+          positions.push(...edge[i]);
+          positions.push(...edge[i + 1]);
+        }
+      }
+      
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      
+      return geometry;
+    }
+    
+    // Fallback: Generate edges from mesh tessellation (old method)
     const combinedGeo = new THREE.BufferGeometry();
     combinedGeo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
     combinedGeo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     combinedGeo.setIndex(meshData.indices);
     
-    // 45-degree threshold: shows only strong feature edges (corners, chamfers, boundaries)
-    // Filters out smooth surface tessellation and gentle curves
     const creaseAngle = THREE.MathUtils.degToRad(45);
     return new THREE.EdgesGeometry(combinedGeo, creaseAngle);
   }, [meshData, showEdges]);

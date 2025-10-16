@@ -86,6 +86,7 @@ interface MeshData {
   indices: number[];
   normals: number[];
   triangle_count: number;
+  feature_edges?: number[][][];
 }
 
 interface MachiningOperation {
@@ -587,7 +588,8 @@ async function storeMeshData(
         vertices: meshData.vertices,
         indices: meshData.indices,
         normals: meshData.normals,
-        triangle_count: meshData.triangle_count
+        triangle_count: meshData.triangle_count,
+        feature_edges: meshData.feature_edges || []
       })
       .select('id')
       .single();

@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           created_at: string | null
           face_types: string[] | null
+          feature_edges: Json | null
           file_hash: string
           file_name: string
           id: string
@@ -31,6 +32,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           face_types?: string[] | null
+          feature_edges?: Json | null
           file_hash: string
           file_name: string
           id?: string
@@ -44,6 +46,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           face_types?: string[] | null
+          feature_edges?: Json | null
           file_hash?: string
           file_name?: string
           id?: string

@@ -26,6 +26,7 @@ interface MeshData {
   normals: number[];
   face_types?: string[];
   triangle_count: number;
+  feature_edges?: number[][][];
 }
 
 export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }: CADViewerProps) {
@@ -62,7 +63,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
       try {
         const { data, error } = await supabase
           .from('cad_meshes')
-          .select('vertices, indices, normals, face_types, triangle_count')
+          .select('vertices, indices, normals, face_types, triangle_count, feature_edges')
           .eq('id', meshId)
           .single();
         
