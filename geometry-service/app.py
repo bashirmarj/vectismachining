@@ -65,30 +65,57 @@ def extract_feature_edges(shape, sample_density=2.0):
         while exp.More():
             edge = Edge(exp.Current())
             
-            # Extract boundary edges (1 face) and feature edges (2 faces with different surface types)
+            # Determine if edge is external (boundary or sharp feature)
             is_external = False
             try:
                 face_list = edge_face_map.FindFromKey(edge)
                 num_faces = face_list.Size()
                 
+                # Include boundary edges and sharp feature edges
                 if num_faces == 1:
-                    # True boundary edge - always show
+                    # Boundary edge - definitely external
                     is_external = True
                 elif num_faces == 2:
-                    # Check if edge connects different surface types (feature edge)
+                    # Calculate angle between adjacent faces
                     face1 = topods.Face(face_list.First())
                     face2 = topods.Face(face_list.Last())
                     
-                    surf1 = BRepAdaptor_Surface(face1)
-                    surf2 = BRepAdaptor_Surface(face2)
-                    
-                    # Feature edge: different surface types (e.g., plane-to-cylinder rim)
-                    if surf1.GetType() != surf2.GetType():
+                    try:
+                        # Get normals at edge midpoint
+                        adaptor1 = BRepAdaptor_Surface(face1)
+                        adaptor2 = BRepAdaptor_Surface(face2)
+                        
+                        # Sample edge at midpoint
+                        curve_adaptor = BRepAdaptor_Curve(edge)
+                        u_mid = (curve_adaptor.FirstParameter() + curve_adaptor.LastParameter()) / 2.0
+                        pt = curve_adaptor.Value(u_mid)
+                        
+                        # Get UV parameters on each face
+                        from OCC.Core.ShapeAnalysis import ShapeAnalysis_Surface
+                        sas1 = ShapeAnalysis_Surface(BRep_Tool.Surface(face1))
+                        sas2 = ShapeAnalysis_Surface(BRep_Tool.Surface(face2))
+                        uv1 = sas1.ValueOfUV(pt, 0.01)
+                        uv2 = sas2.ValueOfUV(pt, 0.01)
+                        
+                        # Get normals
+                        from OCC.Core.gp import gp_Pnt, gp_Vec
+                        pnt = gp_Pnt()
+                        vec1 = gp_Vec()
+                        vec2 = gp_Vec()
+                        adaptor1.D1(uv1.X(), uv1.Y(), pnt, vec1, vec1)  
+                        adaptor2.D1(uv2.X(), uv2.Y(), pnt, vec2, vec2)
+                        
+                        # Calculate angle
+                        angle = vec1.Angle(vec2)
+                        angle_deg = math.degrees(angle)
+                        
+                        # Sharp edge threshold: > 15 degrees
+                        if angle_deg > 15:
+                            is_external = True
+                    except Exception:
+                        # If can't compute angle, assume it's a feature edge
                         is_external = True
-                    # Skip same-type edges (smooth tessellation on curves)
-                # 3+ face edges are internal - skip
             except Exception:
-                # If can't determine, skip to avoid artifacts
                 is_external = False
             
             if not is_external:
