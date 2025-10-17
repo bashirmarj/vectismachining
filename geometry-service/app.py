@@ -17,7 +17,7 @@ from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepBndLib import brepbndlib, brepbndlib_Add
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
-from OCC.Core.GCPnts import GCPnts_UniformAbscissa
+from OCC.Core.GCPnts import GCPnts_UniformAbscissa, GCPnts_AbscissaPoint
 from OCC.Core.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
 from OCC.Core.TopoDS import topods_Edge as Edge, topods
 from OCC.Core.GProp import GProp_GProps
@@ -60,12 +60,13 @@ def extract_feature_edges(shape, sample_density=2.0):
             adaptor = BRepAdaptor_Curve(edge)
 
             try:
-                # Calculate edge length for adaptive sampling
-                edge_length = adaptor.LastParameter() - adaptor.FirstParameter()
+                # Get PHYSICAL arc length in millimeters (not parameter space)
+                physical_length = GCPnts_AbscissaPoint.Length(adaptor)
                 
-                # Adaptive sample count based on length
-                # Minimum 10 samples for small features, more for large features
-                sample_count = max(10, int(edge_length * sample_density))
+                # Adaptive sample count based on PHYSICAL length
+                # sample_density is points per mm (e.g., 30 = 30 points/mm)
+                # Minimum 10 samples for small features
+                sample_count = max(10, int(physical_length * sample_density))
                 
                 sampler = GCPnts_UniformAbscissa(adaptor, sample_count)
                 if not sampler.IsDone():
