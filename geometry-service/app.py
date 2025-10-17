@@ -65,47 +65,20 @@ def extract_feature_edges(shape, sample_density=2.0):
         while exp.More():
             edge = Edge(exp.Current())
             
-            # Check if edge is external (silhouette edge only)
+            # ONLY extract boundary edges (1 face = external silhouette)
+            # Skip all internal edges (2+ faces) to avoid jagged artifacts on circles
             is_external = False
             try:
                 face_list = edge_face_map.FindFromKey(edge)
                 num_faces = face_list.Size()
                 
                 if num_faces == 1:
-                    # Boundary edge - always show
+                    # True boundary edge - external silhouette only
                     is_external = True
-                elif num_faces == 2:
-                    # Check angle between face normals
-                    face1 = topods.Face(face_list.First())
-                    face2 = topods.Face(face_list.Last())
-                    
-                    # Get normals at edge midpoint
-                    adaptor_curve = BRepAdaptor_Curve(edge)
-                    mid_param = (adaptor_curve.FirstParameter() + adaptor_curve.LastParameter()) / 2
-                    mid_point = adaptor_curve.Value(mid_param)
-                    
-                    surf1 = BRepAdaptor_Surface(face1)
-                    surf2 = BRepAdaptor_Surface(face2)
-                    
-                    # Get UV parameters (simplified - use edge midpoint projection)
-                    u1, v1 = 0.5, 0.5
-                    u2, v2 = 0.5, 0.5
-                    
-                    normal1 = gp_Vec()
-                    normal2 = gp_Vec()
-                    surf1.D0(u1, v1, gp_Vec())
-                    surf2.D0(u2, v2, gp_Vec())
-                    
-                    # Simple heuristic: if faces are different types, it's likely a sharp edge
-                    type1 = surf1.GetType()
-                    type2 = surf2.GetType()
-                    
-                    if type1 != type2:
-                        is_external = True
-                    # For same-type faces, only show if it's a boundary (already handled above)
+                # All 2+ face edges are internal features - skip them
             except Exception:
-                # If can't determine, assume external to be safe
-                is_external = True
+                # If can't determine, skip to avoid artifacts
+                is_external = False
             
             if not is_external:
                 filtered_count += 1
@@ -194,7 +167,7 @@ def get_average_face_normal(triangulation, transform, reversed_face=False):
 def tessellate_shape(shape, quality=0.5):
     """Generate vertices, normals, indices, and classify faces"""
     try:
-        deflection = 0.6 * (10 ** (-(quality * 3)))
+        deflection = 0.8 * (10 ** (-(quality * 3)))
         angular_deflection = 0.04
         mesh = BRepMesh_IncrementalMesh(shape, deflection, False, angular_deflection, True)
         mesh.Perform()

@@ -101,7 +101,8 @@ export const PartUploadForm = () => {
 
       const formData = new FormData();
       formData.append("file", fileWithQty.file);
-      formData.append("quality", "0.5");
+      formData.append("quality", "0.25"); // Lower quality = fewer triangles (50k-80k vs 250k)
+      formData.append("forceReanalyze", "true"); // Bypass cache to get fresh mesh
 
       console.log(`📤 Sending ${fileWithQty.file.name} to Flask backend...`);
 

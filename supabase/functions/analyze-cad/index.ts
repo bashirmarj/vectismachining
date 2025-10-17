@@ -653,6 +653,7 @@ async function storeMeshData(
     
     // Check if mesh already exists (unless force reanalyze is enabled)
     if (!forceReanalyze) {
+      console.log(`🔍 Checking cache for file hash: ${fileHash}`);
       const { data: existingMesh } = await supabase
         .from('cad_meshes')
         .select('id')
@@ -1067,6 +1068,7 @@ const handler = async (req: Request): Promise<Response> => {
       material = formData.get('material') as string || undefined;
       const toleranceStr = formData.get('tolerance') as string;
       tolerance = toleranceStr ? parseFloat(toleranceStr) : undefined;
+      force_reanalyze = formData.get('forceReanalyze') === 'true' || formData.get('force_reanalyze') === 'true';
       
       if (file) {
         file_data = await file.arrayBuffer();
