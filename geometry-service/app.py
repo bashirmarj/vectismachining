@@ -19,7 +19,7 @@ from OCC.Core.BRepBndLib import brepbndlib
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
 from OCC.Core.GCPnts import GCPnts_UniformAbscissa
 from OCC.Core.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
-from OCC.Core.TopoDS import topods_Edge
+from OCC.Core.topods import Edge  # ✅ modern OCC syntax
 
 import logging
 
@@ -41,24 +41,21 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def extract_feature_edges(shape, sample_count=10):
     """
     Extract all edges (internal + external) for 3D visualization outlines.
-    This captures visible and hidden boundaries so the 3D viewer
-    can render a more detailed silhouette.
+    sample_count controls how many points are sampled per edge.
     """
     edges = []
     try:
-        # Ensure the shape is meshed for consistent edge detection
+        # Mesh first for better consistency
         BRepMesh_IncrementalMesh(shape, 0.1, True)
 
-        # Explore every edge in the shape topology
         exp = TopExp_Explorer(shape, TopAbs_EDGE)
         edge_count = 0
 
         while exp.More():
-            edge = topods_Edge(exp.Current())
+            edge = Edge(exp.Current())  # ✅ modern syntax
             adaptor = BRepAdaptor_Curve(edge)
 
             try:
-                # Sample points along each edge
                 sampler = GCPnts_UniformAbscissa(adaptor, sample_count)
                 if not sampler.IsDone():
                     exp.Next()
@@ -77,12 +74,11 @@ def extract_feature_edges(shape, sample_count=10):
                     edges.append(pts)
                     edge_count += 1
             except Exception:
-                # Skip problematic edges gracefully
-                pass
+                pass  # skip problematic edges
 
             exp.Next()
 
-        logger.info(f"Extracted {edge_count} total edges (including internal ones)")
+        logger.info(f"Extracted {edge_count} total edges (sample_count={sample_count})")
     except Exception as e:
         logger.warning(f"Edge extraction failed: {e}")
 
@@ -221,9 +217,8 @@ def tessellate_shape(shape, quality=0.5):
             face_explorer.Next()
 
         triangle_count = len(indices) // 3
-        feature_edges = extract_feature_edges(shape)
         logger.info(
-            f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles, {len(feature_edges)} edges"
+            f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles"
         )
         return {
             "vertices": vertices,
@@ -231,7 +226,6 @@ def tessellate_shape(shape, quality=0.5):
             "normals": normals,
             "face_types": face_types,
             "triangle_count": triangle_count,
-            "feature_edges": feature_edges,
         }
 
     except Exception as e:
@@ -242,7 +236,6 @@ def tessellate_shape(shape, quality=0.5):
             "normals": [],
             "face_types": [],
             "triangle_count": 0,
-            "feature_edges": [],
         }
 
 # --------------------------------------------------
@@ -277,8 +270,13 @@ def analyze_cad():
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+        # ✅ Allow frontend to control edge sampling
         quality = float(request.form.get("quality", 0.5))
+        edge_density = int(request.form.get("edge_density", 10))
+
         mesh = tessellate_shape(shape, quality)
+        mesh["feature_edges"] = extract_feature_edges(shape, sample_count=edge_density)
+        mesh["triangle_count"] = len(mesh.get("indices", [])) // 3
 
         # Save mesh data to Supabase
         data_insert = {
@@ -306,13 +304,13 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "1.3.0",
+        "version": "1.4.0",
         "status": "running",
         "endpoints": {
             "health": "/health",
             "analyze": "/analyze-cad"
         },
-        "documentation": "POST multipart/form-data with 'file' field containing .step file"
+        "documentation": "POST multipart/form-data with 'file' field containing .step file, optional 'edge_density' param"
     })
 
 
