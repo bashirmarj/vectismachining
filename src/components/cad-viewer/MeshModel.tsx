@@ -230,7 +230,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       return { ...base, transparent: true, opacity: 0.4, wireframe: false };
     }
     
-    return { ...base, transparent: true, opacity: 0.95, wireframe: false };
+    return { ...base, transparent: false, opacity: 1, wireframe: false };
   }, [displayStyle, clippingPlane]);
   
   return (
