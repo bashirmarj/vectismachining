@@ -288,7 +288,7 @@ def analyze_cad():
         edge_density = int(request.form.get("edge_density", 10))
 
         mesh = tessellate_shape(shape, quality)
-        mesh["feature_edges"] = extract_feature_edges(shape, sample_count=edge_density)
+        mesh["feature_edges"] = extract_feature_edges(shape, sample_density=edge_density)
         mesh["triangle_count"] = len(mesh.get("indices", [])) // 3
 
         # Analyze shape geometry
