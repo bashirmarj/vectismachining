@@ -1,6 +1,7 @@
 import os
 import io
 import math
+import tempfile
 import numpy as np
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -229,14 +230,27 @@ def analyze_cad():
         if not file.filename.lower().endswith(".step"):
             return jsonify({"error": "Only .step files are supported"}), 400
 
-        step_bytes = io.BytesIO(file.read())
+        # Read the uploaded file data
+        step_bytes = file.read()
 
-        reader = STEPControl_Reader()
-        status = reader.ReadFile(file.filename)
-        if status != 1:
-            return jsonify({"error": "Failed to read STEP file"}), 400
-        reader.TransferRoots()
-        shape = reader.OneShape()
+        # Write to a temporary file on disk (OCC requires file path)
+        fd, tmp_path = tempfile.mkstemp(suffix='.step')
+        try:
+            # Write the uploaded data to the temp file
+            os.write(fd, step_bytes)
+            os.close(fd)
+            
+            # Now read the STEP file using OCC
+            reader = STEPControl_Reader()
+            status = reader.ReadFile(tmp_path)
+            if status != 1:
+                return jsonify({"error": "Failed to read STEP file"}), 400
+            reader.TransferRoots()
+            shape = reader.OneShape()
+        finally:
+            # Clean up the temporary file
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
         quality = float(request.form.get("quality", 0.5))
         mesh = tessellate_shape(shape, quality)
