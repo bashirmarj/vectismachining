@@ -275,9 +275,9 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
           <lineSegments geometry={featureEdges} renderOrder={2}>
             <lineBasicMaterial
               color="#000000"
-              transparent={true}
-              opacity={0.95}
-              depthTest={false}
+              transparent={false}
+              opacity={1}
+              depthTest={true}
               linewidth={1}
             />
           </lineSegments>
