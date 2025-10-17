@@ -497,8 +497,18 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                 <color attach="background" args={['#f8f9fa']} />
                 <fog attach="fog" args={['#f8f9fa', 300, 1000]} />
                 
-                {/* Flat lighting for uniform solid color */}
-                <ambientLight intensity={1.0} />
+                {/* Professional CAD lighting - subtle depth without color variation */}
+                <ambientLight intensity={0.5} />
+                <directionalLight 
+                  position={[10, 10, 5]} 
+                  intensity={0.6}
+                  color="#ffffff"
+                />
+                <directionalLight 
+                  position={[-5, -5, -3]} 
+                  intensity={0.2}
+                  color="#ffffff"
+                />
                 
                 {/* Subtle grid (light gray) */}
 ...

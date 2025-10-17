@@ -44,52 +44,39 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     console.log(`Feature edges: ${meshData.feature_edges.length} polylines, ~${totalSegments} segments`);
   }
 
-  // Create feature edges from backend CAD geometry (Meviy-quality clean edges)
+  // Create feature edges from backend CAD geometry (continuous polylines for smooth curves)
   const featureEdges = useMemo(() => {
     if (!showEdges) return null;
 
     // Prefer backend feature edges if available (true CAD edges, no tessellation)
     if (meshData.feature_edges && meshData.feature_edges.length > 0) {
-      const positions: number[] = [];
-
-      // Keep almost all polyline segments for smooth curves
+      const polylines: THREE.BufferGeometry[] = [];
       const minLength = 0.01;
       let filteredCount = 0;
       
       for (const edge of meshData.feature_edges) {
-        for (let i = 0; i < edge.length - 1; i++) {
-          const p1 = edge[i];
-          const p2 = edge[i + 1];
-          
-          // Calculate segment length
-          const dx = p2[0] - p1[0];
-          const dy = p2[1] - p1[1];
-          const dz = p2[2] - p1[2];
-          const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          
-          // Skip tiny edges (tessellation artifacts, numerical noise)
-          if (len < minLength) {
-            filteredCount++;
-            continue;
-          }
-          
-          // Add valid line segment (two points)
-          positions.push(p1[0], p1[1], p1[2]);
-          positions.push(p2[0], p2[1], p2[2]);
+        const positions: number[] = [];
+        
+        // Keep polyline as continuous curve (not individual segments)
+        for (const point of edge) {
+          positions.push(point[0], point[1], point[2]);
+        }
+
+        if (positions.length >= 6) { // At least 2 points (6 values)
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+          geometry.computeBoundingSphere();
+          polylines.push(geometry);
         }
       }
 
-      if (positions.length === 0) {
-        console.warn("No valid edges after filtering - all edges too short");
+      if (polylines.length === 0) {
+        console.warn("No valid polylines after filtering");
         return null;
       }
 
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      geometry.computeBoundingSphere(); // Important for culling and rendering
-
-      console.log(`✅ Rendering ${positions.length / 6} clean edges (filtered ${filteredCount} tiny segments)`);
-      return geometry;
+      console.log(`✅ Rendering ${polylines.length} continuous polylines`);
+      return polylines;
     }
 
     // Fallback: Generate edges from mesh tessellation (old method for files without feature_edges)
@@ -100,7 +87,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     combinedGeo.setIndex(meshData.indices);
 
     const creaseAngle = THREE.MathUtils.degToRad(45);
-    return new THREE.EdgesGeometry(combinedGeo, creaseAngle);
+    const edgesGeo = new THREE.EdgesGeometry(combinedGeo, creaseAngle);
+    return [edgesGeo]; // Wrap in array for consistent rendering
   }, [meshData, showEdges]);
 
   
@@ -142,7 +130,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       clippingPlanes: clippingPlane,
       clipIntersection: false,
       metalness: 0,
-      roughness: 1,
+      roughness: 0.8,
       envMapIntensity: 0,
     };
     
@@ -168,37 +156,30 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         </mesh>
       )}
       
-      {/* Clean feature edges (Meviy-style: visible solid + optional hidden dashed) */}
-      {showEdges && featureEdges && (
-        <group>
+      {/* Clean feature edges (continuous polylines for smooth curves) */}
+      {showEdges && featureEdges && featureEdges.map((polyline, index) => (
+        <group key={index}>
           {/* Layer 1: Primary visible edges (crisp black outlines) */}
-          <lineSegments geometry={featureEdges} renderOrder={2}>
-            <lineBasicMaterial
-              color="#000000"
-              transparent={false}
-              opacity={1}
-              depthTest={true}
-              linewidth={1}
-            />
-          </lineSegments>
+          <primitive object={new THREE.Line(polyline, new THREE.LineBasicMaterial({
+            color: "#000000",
+            linewidth: 1,
+            depthTest: true
+          }))} renderOrder={2} />
 
           {/* Layer 2: Optional hidden edges (faint dashed lines behind surfaces) */}
           {showHiddenEdges && (
-            <lineSegments geometry={featureEdges} renderOrder={1}>
-              <lineDashedMaterial
-                color="#333333"
-                transparent={true}
-                opacity={0.3}
-                depthTest={true}
-                depthFunc={THREE.GreaterDepth}
-                dashSize={1.5}
-                gapSize={1.5}
-                scale={1}
-              />
-            </lineSegments>
+            <primitive object={new THREE.Line(polyline, new THREE.LineDashedMaterial({
+              color: "#333333",
+              opacity: 0.3,
+              transparent: true,
+              depthTest: true,
+              depthFunc: THREE.GreaterDepth,
+              dashSize: 1.5,
+              gapSize: 1.5
+            }))} renderOrder={1} />
           )}
         </group>
-      )}
+      ))}
     </group>
   );
 }
