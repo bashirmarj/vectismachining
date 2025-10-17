@@ -21,7 +21,7 @@ interface MeshModelProps {
 }
 
 // Professional solid color for CAD rendering
-const SOLID_COLOR = '#7d8996'; // SOLIDWORKS-style professional gray
+const SOLID_COLOR = '#5b9bd5'; // Professional CAD blue
 
 export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid' }: MeshModelProps) {
   // Create single unified geometry for professional solid rendering
@@ -31,6 +31,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     geo.setIndex(meshData.indices);
     geo.computeVertexNormals(); // Smooth shading for professional appearance
+    geo.normalizeNormals(); // Ensure uniform lighting across all faces
     geo.computeBoundingSphere();
     
     return geo;
@@ -51,8 +52,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     if (meshData.feature_edges && meshData.feature_edges.length > 0) {
       const positions: number[] = [];
 
-      // Filter small or degenerate edges (< 0.2 mm) to reduce noise
-      const minLength = 0.2;
+      // Filter small or degenerate edges (< 0.05 mm) to reduce noise while keeping curve detail
+      const minLength = 0.05;
       let filteredCount = 0;
       
       for (const edge of meshData.feature_edges) {
@@ -70,6 +71,26 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
           if (len < minLength) {
             filteredCount++;
             continue;
+          }
+          
+          // Filter out nearly collinear edges (tessellation artifacts)
+          if (i > 0) {
+            const p0 = edge[i - 1];
+            const v1x = p1[0] - p0[0], v1y = p1[1] - p0[1], v1z = p1[2] - p0[2];
+            const v2x = dx, v2y = dy, v2z = dz;
+            
+            const len1 = Math.sqrt(v1x * v1x + v1y * v1y + v1z * v1z);
+            const len2 = len;
+            
+            if (len1 > 0 && len2 > 0) {
+              const dot = (v1x * v2x + v1y * v2y + v1z * v2z) / (len1 * len2);
+              
+              // Skip nearly collinear edges (< 5 degree angle change)
+              if (dot > 0.996) { // cos(5°) ≈ 0.996
+                filteredCount++;
+                continue;
+              }
+            }
           }
           
           // Add valid line segment (two points)
@@ -164,6 +185,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
             <meshStandardMaterial
               {...materialProps}
               color={SOLID_COLOR}
+              flatShading={false}
               polygonOffset={true}
               polygonOffsetFactor={1}
               polygonOffsetUnits={1}
