@@ -132,9 +132,12 @@ export const PartUploadForm = () => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
       setShowDevTools(prev => {
         const newValue = !prev;
-        toast({
-          title: newValue ? '🛠️ Dev tools visible' : '🛠️ Dev tools hidden',
-        });
+        // Defer toast to avoid React warning
+        setTimeout(() => {
+          toast({
+            title: newValue ? '🛠️ Dev tools visible' : '🛠️ Dev tools hidden',
+          });
+        }, 0);
         return newValue;
       });
       }

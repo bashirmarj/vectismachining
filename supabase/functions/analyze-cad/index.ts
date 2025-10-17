@@ -452,7 +452,7 @@ async function testFlaskConnection(): Promise<{ success: boolean; error?: string
       headers: {
         'Accept': 'application/json'
       },
-      signal: AbortSignal.timeout(10000) // 10 second timeout
+      signal: AbortSignal.timeout(65000) // 65 seconds for Render cold starts
     });
     
     const latency = Date.now() - startTime;
@@ -537,7 +537,7 @@ async function analyzeSTEPViaService(
       headers: {
         'Accept': 'application/json'
       },
-      signal: AbortSignal.timeout(45000) // 45 second timeout for complex models
+      signal: AbortSignal.timeout(65000) // 65 seconds for Render cold starts + processing
     });
     
     console.log(`📡 Flask response received: HTTP ${response.status} (${response.headers.get('content-type')})`);

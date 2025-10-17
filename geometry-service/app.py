@@ -269,6 +269,20 @@ def analyze_cad():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/")
+def root():
+    return jsonify({
+        "service": "CAD Geometry Analysis Service",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "analyze": "/analyze-cad"
+        },
+        "documentation": "POST multipart/form-data with 'file' field containing .step file"
+    })
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
