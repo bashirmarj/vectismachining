@@ -19,7 +19,7 @@ from OCC.Core.BRepBndLib import brepbndlib
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
 from OCC.Core.GCPnts import GCPnts_UniformAbscissa
 from OCC.Core.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
-from OCC.Core.topods import Edge  # ✅ modern OCC syntax
+from OCC.Core.TopoDS import topods_Edge as Edge  # ✅ modern OCC syntax
 
 import logging
 
