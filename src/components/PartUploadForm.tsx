@@ -130,10 +130,13 @@ export const PartUploadForm = () => {
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
-        setShowDevTools(prev => !prev);
+      setShowDevTools(prev => {
+        const newValue = !prev;
         toast({
-          title: showDevTools ? '🛠️ Dev tools hidden' : '🛠️ Dev tools visible',
+          title: newValue ? '🛠️ Dev tools visible' : '🛠️ Dev tools hidden',
         });
+        return newValue;
+      });
       }
     };
     
