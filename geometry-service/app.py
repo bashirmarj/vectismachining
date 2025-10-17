@@ -17,9 +17,8 @@ from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepBndLib import brepbndlib
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
-from OCC.Core.GCPnts import GCPnts_AbscissaPoint, GCPnts_UniformAbscissa
+from OCC.Core.GCPnts import GCPnts_UniformAbscissa
 from OCC.Core.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
-from OCC.Core.ShapeAnalysis import ShapeAnalysis_FreeBounds
 from OCC.Core.TopoDS import topods_Edge
 
 import logging
@@ -40,45 +39,53 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # --------------------------------------------------
 
 def extract_feature_edges(shape, sample_count=10):
-    """Extract visible/free edges for better visualization."""
+    """
+    Extract all edges (internal + external) for 3D visualization outlines.
+    This captures visible and hidden boundaries so the 3D viewer
+    can render a more detailed silhouette.
+    """
     edges = []
     try:
-        # Mesh shape first (ensures all subshapes are processed)
+        # Ensure the shape is meshed for consistent edge detection
         BRepMesh_IncrementalMesh(shape, 0.1, True)
 
-        # Use OCC's free boundary analyzer — detects both open & closed edges
-        analyzer = ShapeAnalysis_FreeBounds(shape)
-        wires = [analyzer.GetClosedWires(), analyzer.GetOpenWires()]
+        # Explore every edge in the shape topology
+        exp = TopExp_Explorer(shape, TopAbs_EDGE)
+        edge_count = 0
 
-        for w in wires:
-            exp = TopExp_Explorer(w, TopAbs_EDGE)
-            while exp.More():
-                edge = topods_Edge(exp.Current())
-                adaptor = BRepAdaptor_Curve(edge)
-                try:
-                    sampler = GCPnts_UniformAbscissa(adaptor, sample_count)
-                    if not sampler.IsDone():
-                        exp.Next()
-                        continue
+        while exp.More():
+            edge = topods_Edge(exp.Current())
+            adaptor = BRepAdaptor_Curve(edge)
 
-                    pts = []
-                    for i in range(1, sampler.NbPoints() + 1):
-                        p = adaptor.Value(sampler.Parameter(i))
-                        pts.append([
-                            round(p.X(), 4),
-                            round(p.Y(), 4),
-                            round(p.Z(), 4)
-                        ])
+            try:
+                # Sample points along each edge
+                sampler = GCPnts_UniformAbscissa(adaptor, sample_count)
+                if not sampler.IsDone():
+                    exp.Next()
+                    continue
 
-                    if len(pts) >= 2:
-                        edges.append(pts)
-                except Exception:
-                    pass
-                exp.Next()
+                pts = []
+                for i in range(1, sampler.NbPoints() + 1):
+                    p = adaptor.Value(sampler.Parameter(i))
+                    pts.append([
+                        round(p.X(), 4),
+                        round(p.Y(), 4),
+                        round(p.Z(), 4)
+                    ])
 
-        logger.info(f"Extracted {len(edges)} feature edges (using ShapeAnalysis_FreeBounds)")
+                if len(pts) >= 2:
+                    edges.append(pts)
+                    edge_count += 1
+            except Exception:
+                # Skip problematic edges gracefully
+                pass
+
+            exp.Next()
+
+        logger.info(f"Extracted {edge_count} total edges (including internal ones)")
     except Exception as e:
-        logger.warning(f"Feature edge extraction failed: {e}")
+        logger.warning(f"Edge extraction failed: {e}")
+
     return edges
 
 
@@ -253,6 +260,7 @@ def analyze_cad():
         if not (file.filename.lower().endswith(".step") or file.filename.lower().endswith(".stp")):
             return jsonify({"error": "Only .step or .stp files are supported"}), 400
 
+        # Read and temporarily save file
         step_bytes = file.read()
         fd, tmp_path = tempfile.mkstemp(suffix=".step")
         try:
@@ -272,7 +280,7 @@ def analyze_cad():
         quality = float(request.form.get("quality", 0.5))
         mesh = tessellate_shape(shape, quality)
 
-        # Save to Supabase
+        # Save mesh data to Supabase
         data_insert = {
             "file_name": file.filename,
             "vertices": mesh["vertices"],
@@ -298,7 +306,7 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "status": "running",
         "endpoints": {
             "health": "/health",
