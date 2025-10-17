@@ -17,6 +17,7 @@ interface CADViewerProps {
   fileUrl?: string;
   fileName: string;
   meshId?: string;
+  meshData?: MeshData;
   detectedFeatures?: any;
 }
 
@@ -29,10 +30,10 @@ interface MeshData {
   feature_edges?: number[][][];
 }
 
-export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }: CADViewerProps) {
+export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshData, detectedFeatures }: CADViewerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [meshData, setMeshData] = useState<MeshData | null>(null);
+  const [fetchedMeshData, setFetchedMeshData] = useState<MeshData | null>(null);
   
   // Professional viewer controls
   const [sectionPlane, setSectionPlane] = useState<'none' | 'xy' | 'xz' | 'yz'>('none');
@@ -56,12 +57,29 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
   
   // Fetch mesh data from database when meshId is provided (for admin view)
   useEffect(() => {
-    if (!meshId) return;
-    if (meshData) return; // Skip if already parsed client-side
+    // Priority 1: Use mesh data passed via props
+    if (propMeshData) {
+      console.log('✅ Mesh data received from backend:', {
+        vertices: propMeshData.vertices.length,
+        triangles: propMeshData.triangle_count,
+        hasFeatureEdges: !!propMeshData.feature_edges
+      });
+      setFetchedMeshData(propMeshData);
+      return;
+    }
+    
+    // Priority 2: Fetch from database if meshId is provided
+    if (!meshId) {
+      console.log('⚠️ No mesh data available (no propMeshData or meshId)');
+      return;
+    }
+    
+    if (fetchedMeshData) return; // Already fetched
     
     const fetchMesh = async () => {
       setIsLoading(true);
       try {
+        console.log(`📥 Fetching mesh from database: ${meshId}`);
         const { data, error } = await supabase
           .from('cad_meshes')
           .select('vertices, indices, normals, face_types, triangle_count, feature_edges')
@@ -70,10 +88,14 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
         
         if (error) throw error;
         if (data) {
-          setMeshData(data as MeshData);
+          console.log('✅ Mesh data fetched from database:', {
+            vertices: data.vertices.length,
+            triangles: data.triangle_count
+          });
+          setFetchedMeshData(data as MeshData);
         }
       } catch (err: any) {
-        console.error('Error fetching mesh:', err);
+        console.error('❌ Error fetching mesh:', err);
         setError(err.message);
       } finally {
         setIsLoading(false);
@@ -81,24 +103,27 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     };
     
     fetchMesh();
-  }, [meshId, meshData]);
+  }, [meshId, propMeshData, fetchedMeshData]);
+  
+  // Use mesh data from props or fetched data
+  const activeMeshData = propMeshData || fetchedMeshData;
   
   // Calculate bounding box for camera and annotations
   const boundingBox = useMemo(() => {
-    if (!meshData || !meshData.vertices || meshData.vertices.length === 0) {
+    if (!activeMeshData || !activeMeshData.vertices || activeMeshData.vertices.length === 0) {
       return { width: 100, height: 100, depth: 100, center: [0, 0, 0] as [number, number, number] };
     }
     
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
     
-    for (let i = 0; i < meshData.vertices.length; i += 3) {
-      minX = Math.min(minX, meshData.vertices[i]);
-      maxX = Math.max(maxX, meshData.vertices[i]);
-      minY = Math.min(minY, meshData.vertices[i + 1]);
-      maxY = Math.max(maxY, meshData.vertices[i + 1]);
-      minZ = Math.min(minZ, meshData.vertices[i + 2]);
-      maxZ = Math.max(maxZ, meshData.vertices[i + 2]);
+    for (let i = 0; i < activeMeshData.vertices.length; i += 3) {
+      minX = Math.min(minX, activeMeshData.vertices[i]);
+      maxX = Math.max(maxX, activeMeshData.vertices[i]);
+      minY = Math.min(minY, activeMeshData.vertices[i + 1]);
+      maxY = Math.max(maxY, activeMeshData.vertices[i + 1]);
+      minZ = Math.min(minZ, activeMeshData.vertices[i + 2]);
+      maxZ = Math.max(maxZ, activeMeshData.vertices[i + 2]);
     }
     
     const width = maxX - minX;
@@ -111,10 +136,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
     ];
     
     return { width, height, depth, center };
-  }, [meshData]);
+  }, [activeMeshData]);
   
   // Determine if we have valid 3D data to display
-  const hasValidModel = meshData && meshData.vertices && meshData.vertices.length > 0;
+  const hasValidModel = activeMeshData && activeMeshData.vertices && activeMeshData.vertices.length > 0;
   
   // Create object URL for File objects, cleanup on unmount
   const objectUrl = useMemo(() => {
@@ -510,7 +535,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, detectedFeatures }:
                 
                 {/* 3D Model */}
                 <MeshModel
-                  meshData={meshData!}
+                  meshData={activeMeshData!}
                   sectionPlane={sectionPlane}
                   sectionPosition={sectionPosition}
                   showEdges={showEdges}

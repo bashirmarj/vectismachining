@@ -111,6 +111,7 @@ interface AnalysisResult {
   detailed_features?: DetailedFeatures;
   feature_tree?: FeatureTree;
   mesh_id?: string;
+  mesh_data?: MeshData; // ✅ Add mesh_data to interface
   // Industrial routing enhancements
   recommended_routings?: string[];
   routing_reasoning?: string[];
@@ -610,6 +611,7 @@ async function analyzeSTEPViaService(
       recommended_processes,
       detailed_features,
       mesh_id,
+      mesh_data: data.mesh_data, // ✅ Pass through mesh data from Flask backend
       feature_tree,
       triangle_count: data.mesh_data?.triangle_count,
       // Industrial routing data from geometry service
@@ -1142,7 +1144,8 @@ const handler = async (req: Request): Promise<Response> => {
         ...analysis,
         quantity,
         detected_features: analysis.detected_features,
-        recommended_processes: analysis.recommended_processes
+        recommended_processes: analysis.recommended_processes,
+        mesh_data: analysis.mesh_data // ✅ Include mesh_data in response if available
       }),
       {
         status: 200,

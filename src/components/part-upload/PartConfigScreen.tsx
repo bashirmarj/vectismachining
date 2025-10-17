@@ -19,6 +19,14 @@ interface FileWithData {
   material?: string;
   process?: string;
   meshId?: string;
+  meshData?: {
+    vertices: number[];
+    indices: number[];
+    normals: number[];
+    triangle_count: number;
+    face_types?: string[];
+    feature_edges?: number[][][];
+  };
   analysis?: any;
   quote?: any;
 }
@@ -378,6 +386,7 @@ export const PartConfigScreen = ({
             file={selectedFile.file}
             fileName={selectedFile.file.name}
             meshId={selectedFile.meshId}
+            meshData={selectedFile.meshData}
             detectedFeatures={selectedFile.analysis?.detected_features}
           />
         </div>

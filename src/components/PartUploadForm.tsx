@@ -34,6 +34,14 @@ interface FileWithQuantity {
   material?: string;
   process?: string;
   meshId?: string;
+  meshData?: {
+    vertices: number[];
+    indices: number[];
+    normals: number[];
+    triangle_count: number;
+    face_types?: string[];
+    feature_edges?: number[][][];
+  };
   analysis?: {
     volume_cm3: number;
     surface_area_cm2: number;
@@ -245,6 +253,40 @@ export const PartUploadForm = () => {
     }
   };
 
+  const logMeshData = () => {
+    const selectedFile = files[selectedFileIndex];
+    
+    if (!selectedFile) {
+      console.log('⚠️ No file selected');
+      return;
+    }
+    
+    console.log('=== MESH DATA DEBUG ===');
+    console.log('File name:', selectedFile.file.name);
+    console.log('Mesh ID:', selectedFile.meshId || 'none');
+    
+    if (selectedFile.meshData) {
+      console.log('✅ Mesh data available:');
+      console.log('  - Vertices:', selectedFile.meshData.vertices.length, 'floats');
+      console.log('  - First 5 vertices:', selectedFile.meshData.vertices.slice(0, 15));
+      console.log('  - Indices:', selectedFile.meshData.indices.length, 'ints');
+      console.log('  - Normals:', selectedFile.meshData.normals.length, 'floats');
+      console.log('  - Triangle count:', selectedFile.meshData.triangle_count);
+      console.log('  - Has face types:', !!selectedFile.meshData.face_types);
+      console.log('  - Has feature edges:', !!selectedFile.meshData.feature_edges);
+      if (selectedFile.meshData.feature_edges) {
+        console.log('  - Feature edges count:', selectedFile.meshData.feature_edges.length);
+      }
+    } else {
+      console.log('❌ No mesh data in file state');
+    }
+    
+    toast({
+      title: "Mesh Data Logged",
+      description: "Check browser console for details",
+    });
+  };
+
   const analyzeFile = async (fileWithQty: FileWithQuantity, index: number) => {
     try {
       setFiles(prev => prev.map((f, i) => 
@@ -291,6 +333,7 @@ export const PartUploadForm = () => {
         i === index ? { 
           ...f,
           meshId: analysisData.mesh_id,
+          meshData: analysisData.mesh_data, // ✅ Store mesh data from backend
           analysis: {
             volume_cm3: analysisData.volume_cm3,
             surface_area_cm2: analysisData.surface_area_cm2,
@@ -493,6 +536,7 @@ export const PartUploadForm = () => {
         showDevTools={showDevTools}
         onTestConnection={testFlaskConnection}
         isTestingConnection={isTestingConnection}
+        onLogMeshData={logMeshData}
       />
     );
   }

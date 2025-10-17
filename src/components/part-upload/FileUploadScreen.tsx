@@ -9,6 +9,10 @@ interface FileUploadScreenProps {
   onRemoveFile: (index: number) => void;
   onContinue: () => void;
   isAnalyzing: boolean;
+  showDevTools?: boolean;
+  onTestConnection?: () => void;
+  isTestingConnection?: boolean;
+  onLogMeshData?: () => void;
 }
 
 export const FileUploadScreen = ({
@@ -19,12 +23,9 @@ export const FileUploadScreen = ({
   isAnalyzing,
   showDevTools,
   onTestConnection,
-  isTestingConnection
-}: FileUploadScreenProps & {
-  showDevTools?: boolean;
-  onTestConnection?: () => void;
-  isTestingConnection?: boolean;
-}) => {
+  isTestingConnection,
+  onLogMeshData
+}: FileUploadScreenProps) => {
   return (
     <div className="max-w-4xl mx-auto">
       <Card>
@@ -41,23 +42,31 @@ export const FileUploadScreen = ({
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-mono text-muted-foreground">🛠️ Developer Tools</span>
               </div>
-              <Button
-                onClick={onTestConnection}
-                disabled={isTestingConnection}
-                className="w-full"
-                variant="outline"
-              >
-                {isTestingConnection ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Testing Connection...
-                  </>
-                ) : (
-                  <>
-                    🔍 Test Flask Backend Connection
-                  </>
+              <div className="space-x-2">
+                <Button
+                  onClick={onTestConnection}
+                  disabled={isTestingConnection}
+                  variant="outline"
+                >
+                  {isTestingConnection ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Testing...
+                    </>
+                  ) : (
+                    'Test Flask Connection'
+                  )}
+                </Button>
+                {onLogMeshData && (
+                  <Button
+                    onClick={onLogMeshData}
+                    disabled={files.length === 0}
+                    variant="outline"
+                  >
+                    Log Mesh Data
+                  </Button>
                 )}
-              </Button>
+              </div>
             </div>
           )}
 
