@@ -12,7 +12,7 @@ from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.BRep import BRep_Tool
 from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
 from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
-from OCC.Core.TopExp import TopExp_Explorer, TopExp
+from OCC.Core.TopExp import TopExp_Explorer, topexp
 from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepBndLib import brepbndlib, brepbndlib_Add
@@ -55,7 +55,7 @@ def extract_feature_edges(shape, sample_density=2.0):
 
         # Build edge-to-faces map to determine which edges are external
         edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
-        TopExp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
+        topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
 
         exp = TopExp_Explorer(shape, TopAbs_EDGE)
         edge_count = 0
