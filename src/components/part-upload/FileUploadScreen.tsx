@@ -16,8 +16,15 @@ export const FileUploadScreen = ({
   onFileSelect,
   onRemoveFile,
   onContinue,
-  isAnalyzing
-}: FileUploadScreenProps) => {
+  isAnalyzing,
+  showDevTools,
+  onTestConnection,
+  isTestingConnection
+}: FileUploadScreenProps & {
+  showDevTools?: boolean;
+  onTestConnection?: () => void;
+  isTestingConnection?: boolean;
+}) => {
   return (
     <div className="max-w-4xl mx-auto">
       <Card>
@@ -28,6 +35,32 @@ export const FileUploadScreen = ({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Developer Tools Section */}
+          {showDevTools && onTestConnection && (
+            <div className="mb-4 p-4 bg-muted/30 border-2 border-dashed border-muted-foreground/20 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-mono text-muted-foreground">🛠️ Developer Tools</span>
+              </div>
+              <Button
+                onClick={onTestConnection}
+                disabled={isTestingConnection}
+                className="w-full"
+                variant="outline"
+              >
+                {isTestingConnection ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Testing Connection...
+                  </>
+                ) : (
+                  <>
+                    🔍 Test Flask Backend Connection
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
           {/* File Upload Area */}
           <div className="border-2 border-dashed border-border rounded-lg p-12 text-center hover:border-primary/50 transition-colors">
             <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -113,6 +146,11 @@ export const FileUploadScreen = ({
               </AlertDescription>
             </Alert>
           )}
+
+          {/* Dev Tools Hint */}
+          <div className="text-center text-xs text-muted-foreground mt-4">
+            Press <kbd className="px-2 py-1 bg-muted rounded font-mono">Ctrl+Shift+D</kbd> for developer tools
+          </div>
         </CardContent>
       </Card>
     </div>

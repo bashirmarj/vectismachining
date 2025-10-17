@@ -430,6 +430,75 @@ function detectRequiredProcesses(features: DetectedFeatures, complexity: number)
   return processes.length > 0 ? processes : ['VMC Machining'];
 }
 
+// Test Flask backend connectivity
+async function testFlaskConnection(): Promise<{ success: boolean; error?: string; latency?: number }> {
+  const GEOMETRY_SERVICE_URL = Deno.env.get('GEOMETRY_SERVICE_URL');
+  
+  if (!GEOMETRY_SERVICE_URL) {
+    console.error('❌ GEOMETRY_SERVICE_URL not configured');
+    return { 
+      success: false, 
+      error: 'GEOMETRY_SERVICE_URL environment variable not set' 
+    };
+  }
+  
+  const startTime = Date.now();
+  
+  try {
+    console.log(`🔍 Testing Flask connection: ${GEOMETRY_SERVICE_URL}/health`);
+    
+    const response = await fetch(`${GEOMETRY_SERVICE_URL}/health`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      },
+      signal: AbortSignal.timeout(10000) // 10 second timeout
+    });
+    
+    const latency = Date.now() - startTime;
+    
+    if (!response.ok) {
+      console.error(`❌ Flask connection failed: HTTP ${response.status}`);
+      return { 
+        success: false, 
+        error: `HTTP ${response.status}: ${response.statusText}`,
+        latency 
+      };
+    }
+    
+    const data = await response.json();
+    
+    if (data.status !== 'ok') {
+      console.error(`❌ Flask health check failed: unexpected response`, data);
+      return { 
+        success: false, 
+        error: `Unexpected health check response: ${JSON.stringify(data)}`,
+        latency 
+      };
+    }
+    
+    console.log(`✅ Flask connection verified successfully (${latency}ms)`);
+    return { success: true, latency };
+    
+  } catch (error: any) {
+    const latency = Date.now() - startTime;
+    console.error(`❌ Flask connection failed:`, error.message);
+    
+    let errorMessage = error.message;
+    if (error.name === 'AbortError') {
+      errorMessage = 'Connection timeout (>10s)';
+    } else if (error.message.includes('fetch')) {
+      errorMessage = 'Network error - unable to reach Flask backend';
+    }
+    
+    return { 
+      success: false, 
+      error: errorMessage,
+      latency 
+    };
+  }
+}
+
 // STEP/IGES Analysis via External Python Microservice
 async function analyzeSTEPViaService(
   fileData: ArrayBuffer, 
@@ -449,7 +518,13 @@ async function analyzeSTEPViaService(
   
   try {
     console.log(`📞 Calling geometry service at ${GEOMETRY_SERVICE_URL}/analyze-cad for ${fileName}`);
-    console.log(`   Material: ${material || 'Cold Rolled Steel'}, Tolerance: ${tolerance || 0.02}mm`);
+    console.log(`📊 Connection details:`, {
+      url: `${GEOMETRY_SERVICE_URL}/analyze-cad`,
+      fileName: fileName,
+      fileSize: `${(fileData.byteLength / 1024).toFixed(2)} KB`,
+      material: material || 'Cold Rolled Steel',
+      tolerance: tolerance || 0.02
+    });
     
     const formData = new FormData();
     formData.append('file', new Blob([fileData]), fileName);
@@ -464,6 +539,8 @@ async function analyzeSTEPViaService(
       },
       signal: AbortSignal.timeout(45000) // 45 second timeout for complex models
     });
+    
+    console.log(`📡 Flask response received: HTTP ${response.status} (${response.headers.get('content-type')})`);
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -946,6 +1023,24 @@ const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Check if this is a test-flask request
+  const url = new URL(req.url);
+  if (url.pathname.endsWith('/test-flask') || req.headers.get('x-test-flask') === 'true') {
+    console.log('🧪 Flask connection test requested');
+    const testResult = await testFlaskConnection();
+    
+    return new Response(
+      JSON.stringify(testResult),
+      {
+        status: testResult.success ? 200 : 503,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      }
+    );
   }
 
   try {

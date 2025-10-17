@@ -92,6 +92,8 @@ export const PartUploadForm = () => {
   const [uploading, setUploading] = useState(false);
   const [rateLimitRemaining, setRateLimitRemaining] = useState<number | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [showDevTools, setShowDevTools] = useState(false);
   const { toast } = useToast();
 
   // Load available materials and processes
@@ -123,6 +125,21 @@ export const PartUploadForm = () => {
     fetchMaterials();
     fetchProcesses();
   }, []);
+
+  // Enable dev tools with Ctrl+Shift+D or Cmd+Shift+D
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+        setShowDevTools(prev => !prev);
+        toast({
+          title: showDevTools ? '🛠️ Dev tools hidden' : '🛠️ Dev tools visible',
+        });
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [showDevTools, toast]);
 
   // Load rate limit state
   useEffect(() => {
@@ -171,6 +188,55 @@ export const PartUploadForm = () => {
       binary += String.fromCharCode(bytes[i]);
     }
     return btoa(binary);
+  };
+
+  const testFlaskConnection = async () => {
+    setIsTestingConnection(true);
+    
+    try {
+      console.log('🧪 Testing Flask backend connection...');
+      
+      const { data, error } = await supabase.functions.invoke('analyze-cad', {
+        headers: {
+          'x-test-flask': 'true'
+        }
+      });
+      
+      if (error) {
+        console.error('❌ Connection test failed:', error);
+        toast({
+          title: "Flask Connection Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (data.success) {
+        console.log(`✅ Flask backend connected successfully (${data.latency}ms)`);
+        toast({
+          title: `✅ Flask Backend Connected (${data.latency}ms)`,
+          description: 'Geometry service is operational',
+        });
+      } else {
+        console.error('❌ Flask health check failed:', data.error);
+        toast({
+          title: "Flask Health Check Failed",
+          description: data.error,
+          variant: "destructive",
+        });
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Test request failed:', error);
+      toast({
+        title: "Connection Test Failed",
+        description: error.message || 'Unable to reach Edge Function',
+        variant: "destructive",
+      });
+    } finally {
+      setIsTestingConnection(false);
+    }
   };
 
   const analyzeFile = async (fileWithQty: FileWithQuantity, index: number) => {
@@ -418,6 +484,9 @@ export const PartUploadForm = () => {
         onRemoveFile={handleRemoveFile}
         onContinue={handleContinue}
         isAnalyzing={isAnalyzing}
+        showDevTools={showDevTools}
+        onTestConnection={testFlaskConnection}
+        isTestingConnection={isTestingConnection}
       />
     );
   }
