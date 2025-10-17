@@ -52,8 +52,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     if (meshData.feature_edges && meshData.feature_edges.length > 0) {
       const positions: number[] = [];
 
-      // Filter small or degenerate edges (< 0.05 mm) to reduce noise while keeping curve detail
-      const minLength = 0.05;
+      // Filter small or degenerate edges to keep only real CAD features
+      const minLength = 0.3;
       let filteredCount = 0;
       
       for (const edge of meshData.feature_edges) {
@@ -71,26 +71,6 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
           if (len < minLength) {
             filteredCount++;
             continue;
-          }
-          
-          // Filter out nearly collinear edges (tessellation artifacts)
-          if (i > 0) {
-            const p0 = edge[i - 1];
-            const v1x = p1[0] - p0[0], v1y = p1[1] - p0[1], v1z = p1[2] - p0[2];
-            const v2x = dx, v2y = dy, v2z = dz;
-            
-            const len1 = Math.sqrt(v1x * v1x + v1y * v1y + v1z * v1z);
-            const len2 = len;
-            
-            if (len1 > 0 && len2 > 0) {
-              const dot = (v1x * v2x + v1y * v2y + v1z * v2z) / (len1 * len2);
-              
-              // Skip nearly collinear edges (< 5 degree angle change)
-              if (dot > 0.996) { // cos(5°) ≈ 0.996
-                filteredCount++;
-                continue;
-              }
-            }
           }
           
           // Add valid line segment (two points)
@@ -161,9 +141,9 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       side: THREE.DoubleSide,
       clippingPlanes: clippingPlane,
       clipIntersection: false,
-      metalness: 0.15,
-      roughness: 0.6,
-      envMapIntensity: 0.4,
+      metalness: 0,
+      roughness: 1,
+      envMapIntensity: 0,
     };
     
     if (displayStyle === 'wireframe') {
@@ -179,32 +159,13 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     <group castShadow receiveShadow>
       {/* Render solid mesh in professional color */}
       {displayStyle !== 'wireframe' && (
-        <>
-          {/* Main solid mesh */}
-          <mesh geometry={geometry} castShadow receiveShadow>
-            <meshStandardMaterial
-              {...materialProps}
-              color={SOLID_COLOR}
-              flatShading={false}
-              polygonOffset={true}
-              polygonOffsetFactor={1}
-              polygonOffsetUnits={1}
-            />
-          </mesh>
-          
-          {/* Silhouette outline for crisp contours */}
-          <mesh geometry={geometry} scale={1.002} castShadow>
-            <meshBasicMaterial
-              color="#0a0a0a"
-              side={THREE.BackSide}
-              clippingPlanes={clippingPlane}
-              clipIntersection={false}
-              polygonOffset={true}
-              polygonOffsetFactor={1}
-              polygonOffsetUnits={1}
-            />
-          </mesh>
-        </>
+        <mesh geometry={geometry}>
+          <meshStandardMaterial
+            {...materialProps}
+            color={SOLID_COLOR}
+            flatShading={false}
+          />
+        </mesh>
       )}
       
       {/* Clean feature edges (Meviy-style: visible solid + optional hidden dashed) */}
