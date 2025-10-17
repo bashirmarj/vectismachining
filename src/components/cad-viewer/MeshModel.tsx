@@ -52,8 +52,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     if (meshData.feature_edges && meshData.feature_edges.length > 0) {
       const positions: number[] = [];
 
-      // Filter small or degenerate edges to keep only real CAD features
-      const minLength = 0.3;
+      // Keep almost all polyline segments for smooth curves
+      const minLength = 0.01;
       let filteredCount = 0;
       
       for (const edge of meshData.feature_edges) {
@@ -156,7 +156,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   }, [displayStyle, clippingPlane]);
   
   return (
-    <group castShadow receiveShadow>
+    <group>
       {/* Render solid mesh in professional color */}
       {displayStyle !== 'wireframe' && (
         <mesh geometry={geometry}>

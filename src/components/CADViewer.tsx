@@ -487,8 +487,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                 preserveDrawingBuffer: true,
                 powerPreference: "high-performance",
                 localClippingEnabled: true,
-                toneMapping: THREE.ACESFilmicToneMapping,
-                toneMappingExposure: 1.2,
+                toneMapping: THREE.NoToneMapping,
                 sortObjects: true,
               }}
               dpr={[1, 2]}
@@ -498,28 +497,12 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                 <color attach="background" args={['#f8f9fa']} />
                 <fog attach="fog" args={['#f8f9fa', 300, 1000]} />
                 
-                {/* Multi-point lighting for industrial look */}
-                <ambientLight intensity={0.4} />
-                <directionalLight
-                  position={[10, 10, 5]}
-                  intensity={0.8}
-                  castShadow
-                  shadow-mapSize-width={2048}
-                  shadow-mapSize-height={2048}
-                />
-                <directionalLight position={[-10, 5, -5]} intensity={0.3} />
-                <hemisphereLight args={['#ffffff', '#3a3a3a', 0.3]} />
+                {/* Flat lighting for uniform solid color */}
+                <ambientLight intensity={1.0} />
                 
                 {/* Subtle grid (light gray) */}
-                <gridHelper
-                  args={[500, 50, '#e0e0e0', '#f0f0f0']}
-                  position={[0, -boundingBox.height / 2 - 10, 0]}
-                  material-opacity={0.5}
-                  material-transparent
-                />
+...
                 
-                {/* Environment for reflections */}
-                <Environment preset="city" />
                 
                 {/* Auto-framed camera */}
                 <PerspectiveCamera
