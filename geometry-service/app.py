@@ -324,8 +324,12 @@ def analyze_cad():
         is_cylindrical = (cylindrical_faces / total_faces) > 0.5 if total_faces > 0 else False
         has_flat_surfaces = planar_faces > 0
 
-        # Calculate complexity
-        complexity_score = min(10, int((total_faces / 10) + (mesh["triangle_count"] / 1000)))
+        # Calculate complexity based on actual geometric features (independent of tessellation quality)
+        complexity_score = min(10, int(
+            (total_faces / 10) + 
+            (cylindrical_faces * 0.2) + 
+            (planar_faces * 0.1)
+        ))
 
         # Get bounding box
         bbox = Bnd_Box()

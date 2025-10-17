@@ -531,6 +531,7 @@ async function analyzeSTEPViaService(
     formData.append('file', new Blob([fileData]), fileName);
     formData.append('material', material || 'Cold Rolled Steel');
     formData.append('tolerance', (tolerance || 0.02).toString());
+    formData.append('quality', '0.2'); // Optimized for preview: reduces triangles 5x while maintaining visual quality
     formData.append('edge_density', '30'); // Adaptive sampling: 30x density for smooth large circles
     
     const response = await fetch(`${GEOMETRY_SERVICE_URL}/analyze-cad`, {
