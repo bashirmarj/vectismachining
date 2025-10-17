@@ -65,17 +65,28 @@ def extract_feature_edges(shape, sample_density=2.0):
         while exp.More():
             edge = Edge(exp.Current())
             
-            # ONLY extract boundary edges (1 face = external silhouette)
-            # Skip all internal edges (2+ faces) to avoid jagged artifacts on circles
+            # Extract boundary edges (1 face) and feature edges (2 faces with different surface types)
             is_external = False
             try:
                 face_list = edge_face_map.FindFromKey(edge)
                 num_faces = face_list.Size()
                 
                 if num_faces == 1:
-                    # True boundary edge - external silhouette only
+                    # True boundary edge - always show
                     is_external = True
-                # All 2+ face edges are internal features - skip them
+                elif num_faces == 2:
+                    # Check if edge connects different surface types (feature edge)
+                    face1 = topods.Face(face_list.First())
+                    face2 = topods.Face(face_list.Last())
+                    
+                    surf1 = BRepAdaptor_Surface(face1)
+                    surf2 = BRepAdaptor_Surface(face2)
+                    
+                    # Feature edge: different surface types (e.g., plane-to-cylinder rim)
+                    if surf1.GetType() != surf2.GetType():
+                        is_external = True
+                    # Skip same-type edges (smooth tessellation on curves)
+                # 3+ face edges are internal - skip
             except Exception:
                 # If can't determine, skip to avoid artifacts
                 is_external = False
