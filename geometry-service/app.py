@@ -227,8 +227,8 @@ def analyze_cad():
             return jsonify({"error": "No file uploaded"}), 400
 
         file = request.files["file"]
-        if not file.filename.lower().endswith(".step"):
-            return jsonify({"error": "Only .step files are supported"}), 400
+        if not (file.filename.lower().endswith(".step") or file.filename.lower().endswith(".stp")):
+            return jsonify({"error": "Only .step or .stp files are supported"}), 400
 
         # Read the uploaded file data
         step_bytes = file.read()
