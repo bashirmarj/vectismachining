@@ -16,7 +16,8 @@ from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepBndLib import brepbndlib
-from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
+from OCC.Core.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
+from OCC.Core.GCPnts import GCPnts_AbscissaPoint, GCPnts_UniformAbscissa
 from OCC.Core.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
 
 import logging
@@ -36,23 +37,40 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # === Geometry Utilities ===
 # --------------------------------------------------
 
-def extract_feature_edges(shape):
-    """Safely extract feature edges with fallback if OCC fails"""
+def extract_feature_edges(shape, sample_count=10):
+    """Extracts visible edges for better visualization (supports curves)."""
     edges = []
     try:
         explorer = TopExp_Explorer(shape, 1)  # 1 = EDGE
         while explorer.More():
             edge = explorer.Current()
             curve_handle, first, last = BRep_Tool.Curve(edge)
-            if curve_handle is not None:
-                p1 = curve_handle.Value(first)
-                p2 = curve_handle.Value(last)
-                edges.append([
-                    [round(p1.X(), 4), round(p1.Y(), 4), round(p1.Z(), 4)],
-                    [round(p2.X(), 4), round(p2.Y(), 4), round(p2.Z(), 4)]
-                ])
+            if curve_handle is None:
+                explorer.Next()
+                continue
+
+            try:
+                adaptor = BRepAdaptor_Curve(edge)
+                length = GCPnts_AbscissaPoint.Length(adaptor)
+                num_samples = max(2, int(length * sample_count / 100.0))
+                sampler = GCPnts_UniformAbscissa(adaptor, num_samples)
+                if not sampler.IsDone():
+                    explorer.Next()
+                    continue
+
+                pts = []
+                for i in range(1, sampler.NbPoints() + 1):
+                    param = sampler.Parameter(i)
+                    p = adaptor.Value(param)
+                    pts.append([round(p.X(), 4), round(p.Y(), 4), round(p.Z(), 4)])
+
+                if len(pts) >= 2:
+                    edges.append(pts)
+            except Exception:
+                pass
             explorer.Next()
-        logger.info(f"Extracted {len(edges)} feature edges safely")
+
+        logger.info(f"Extracted {len(edges)} feature edges (sampled for visualization)")
     except Exception as e:
         logger.warning(f"Feature edge extraction failed: {e}")
         edges = []
@@ -230,17 +248,13 @@ def analyze_cad():
         if not (file.filename.lower().endswith(".step") or file.filename.lower().endswith(".stp")):
             return jsonify({"error": "Only .step or .stp files are supported"}), 400
 
-        # Read the uploaded file data
         step_bytes = file.read()
 
-        # Write to a temporary file on disk (OCC requires file path)
-        fd, tmp_path = tempfile.mkstemp(suffix='.step')
+        fd, tmp_path = tempfile.mkstemp(suffix=".step")
         try:
-            # Write the uploaded data to the temp file
             os.write(fd, step_bytes)
             os.close(fd)
-            
-            # Now read the STEP file using OCC
+
             reader = STEPControl_Reader()
             status = reader.ReadFile(tmp_path)
             if status != 1:
@@ -248,7 +262,6 @@ def analyze_cad():
             reader.TransferRoots()
             shape = reader.OneShape()
         finally:
-            # Clean up the temporary file
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
@@ -259,7 +272,6 @@ def analyze_cad():
         mesh["feature_edges"] = feature_edges
         mesh["triangle_count"] = len(mesh.get("indices", [])) // 3
 
-        # Save to Supabase
         data_insert = {
             "file_name": file.filename,
             "vertices": mesh["vertices"],
@@ -270,13 +282,11 @@ def analyze_cad():
         }
         supabase.table("cad_meshes").insert(data_insert).execute()
 
-        return jsonify(
-            {
-                "status": "success",
-                "message": f"Mesh generated for {file.filename}",
-                "mesh_data": mesh,
-            }
-        )
+        return jsonify({
+            "status": "success",
+            "message": f"Mesh generated for {file.filename}",
+            "mesh_data": mesh,
+        })
 
     except Exception as e:
         logger.error(f"Error processing CAD: {e}")
@@ -287,7 +297,7 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "status": "running",
         "endpoints": {
             "health": "/health",
