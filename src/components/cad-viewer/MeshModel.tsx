@@ -20,99 +20,20 @@ interface MeshModelProps {
   displayStyle?: 'solid' | 'wireframe' | 'translucent';
 }
 
-// Meviy-style color scheme
-const FACE_COLORS = {
-  external: '#5b9bd5',      // Blue - external surfaces
-  internal: '#e66f6f',      // Red/coral - internal features (holes)
-  cylindrical: '#f4d03f',   // Yellow - cylindrical features
-  planar: '#a8c8e8',        // Light blue - planar surfaces
-};
+// Professional solid color for CAD rendering
+const SOLID_COLOR = '#7d8996'; // SOLIDWORKS-style professional gray
 
 export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid' }: MeshModelProps) {
-  // Create separate geometries for each face type (Meviy-style color classification)
-  const geometries = useMemo(() => {
-    if (!meshData.face_types || meshData.face_types.length === 0) {
-      // Fallback: single geometry with default color if no classification
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
-      geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
-      geo.setIndex(meshData.indices);
-      geo.computeBoundingSphere();
-      
-      return { external: geo };
-    }
+  // Create single unified geometry for professional solid rendering
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
+    geo.setIndex(meshData.indices);
+    geo.computeVertexNormals(); // Smooth shading for professional appearance
+    geo.computeBoundingSphere();
     
-    // Group triangles by face type
-    const typeGroups: Record<string, { vertices: number[], normals: number[], indices: number[] }> = {
-      external: { vertices: [], normals: [], indices: [] },
-      internal: { vertices: [], normals: [], indices: [] },
-      cylindrical: { vertices: [], normals: [], indices: [] },
-      planar: { vertices: [], normals: [], indices: [] },
-    };
-    
-    const vertexMap: Record<string, Record<number, number>> = {
-      external: {},
-      internal: {},
-      cylindrical: {},
-      planar: {},
-    };
-    
-    // Process each triangle
-    for (let i = 0; i < meshData.indices.length; i += 3) {
-      const idx1 = meshData.indices[i];
-      const idx2 = meshData.indices[i + 1];
-      const idx3 = meshData.indices[i + 2];
-      
-      // Get face type for this triangle (divide by 3 to get triangle index)
-      const triangleIdx = i / 3;
-      const faceType = meshData.face_types[triangleIdx] || 'external';
-      const group = typeGroups[faceType];
-      const vMap = vertexMap[faceType];
-      
-      // Add vertices for this triangle
-      [idx1, idx2, idx3].forEach((originalIdx) => {
-        if (!(originalIdx in vMap)) {
-          const newIdx = group.vertices.length / 3;
-          vMap[originalIdx] = newIdx;
-          
-          group.vertices.push(
-            meshData.vertices[originalIdx * 3],
-            meshData.vertices[originalIdx * 3 + 1],
-            meshData.vertices[originalIdx * 3 + 2]
-          );
-          group.normals.push(
-            meshData.normals[originalIdx * 3],
-            meshData.normals[originalIdx * 3 + 1],
-            meshData.normals[originalIdx * 3 + 2]
-          );
-        }
-      });
-      
-      // Add triangle indices
-      group.indices.push(vMap[idx1], vMap[idx2], vMap[idx3]);
-    }
-    
-    // Create BufferGeometry for each type
-    const result: Record<string, THREE.BufferGeometry> = {};
-    
-    Object.entries(typeGroups).forEach(([type, data]) => {
-      if (data.indices.length > 0) {
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.Float32BufferAttribute(data.vertices, 3));
-        geo.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3));
-        geo.setIndex(data.indices);
-        
-        // Smooth normals for curved surfaces (cylindrical, external) for better appearance
-        if (type === 'cylindrical' || type === 'external') {
-          geo.computeVertexNormals();
-        }
-        
-        geo.computeBoundingSphere();
-        result[type] = geo;
-      }
-    });
-    
-    return result;
+    return geo;
   }, [meshData]);
   
   // Debug: Verify backend feature edges are received
@@ -235,36 +156,32 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   
   return (
     <group castShadow receiveShadow>
-      {/* Render colored meshes only in solid/translucent modes */}
+      {/* Render solid mesh in professional color */}
       {displayStyle !== 'wireframe' && (
         <>
-          {Object.entries(geometries).map(([type, geo]) => (
-            <group key={type}>
-              {/* Main colored mesh */}
-              <mesh geometry={geo} castShadow receiveShadow>
-                <meshStandardMaterial
-                  {...materialProps}
-                  color={FACE_COLORS[type as keyof typeof FACE_COLORS] || FACE_COLORS.external}
-                  polygonOffset={true}
-                  polygonOffsetFactor={1}
-                  polygonOffsetUnits={1}
-                />
-              </mesh>
-              
-              {/* Silhouette outline for crisp contours */}
-              <mesh geometry={geo} scale={1.002} castShadow>
-                <meshBasicMaterial
-                  color="#0a0a0a"
-                  side={THREE.BackSide}
-                  clippingPlanes={clippingPlane}
-                  clipIntersection={false}
-                  polygonOffset={true}
-                  polygonOffsetFactor={1}
-                  polygonOffsetUnits={1}
-                />
-              </mesh>
-            </group>
-          ))}
+          {/* Main solid mesh */}
+          <mesh geometry={geometry} castShadow receiveShadow>
+            <meshStandardMaterial
+              {...materialProps}
+              color={SOLID_COLOR}
+              polygonOffset={true}
+              polygonOffsetFactor={1}
+              polygonOffsetUnits={1}
+            />
+          </mesh>
+          
+          {/* Silhouette outline for crisp contours */}
+          <mesh geometry={geometry} scale={1.002} castShadow>
+            <meshBasicMaterial
+              color="#0a0a0a"
+              side={THREE.BackSide}
+              clippingPlanes={clippingPlane}
+              clipIntersection={false}
+              polygonOffset={true}
+              polygonOffsetFactor={1}
+              polygonOffsetUnits={1}
+            />
+          </mesh>
         </>
       )}
       
