@@ -15,11 +15,13 @@ from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.Bnd import Bnd_Box
-from OCC.Core.BRepBndLib import brepbndlib
+from OCC.Core.BRepBndLib import brepbndlib, brepbndlib_Add
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
 from OCC.Core.GCPnts import GCPnts_UniformAbscissa
 from OCC.Core.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
-from OCC.Core.TopoDS import topods_Edge as Edge  # ✅ modern OCC syntax
+from OCC.Core.TopoDS import topods_Edge as Edge, topods
+from OCC.Core.GProp import GProp_GProps
+from OCC.Core.BRepGProp import brepgprop_VolumeProperties, brepgprop_SurfaceProperties
 
 import logging
 
@@ -278,26 +280,86 @@ def analyze_cad():
         mesh["feature_edges"] = extract_feature_edges(shape, sample_count=edge_density)
         mesh["triangle_count"] = len(mesh.get("indices", [])) // 3
 
-        # Save mesh data to Supabase
-        data_insert = {
-            "file_name": file.filename,
-            "vertices": mesh["vertices"],
-            "indices": mesh["indices"],
-            "normals": mesh["normals"],
-            "triangle_count": mesh["triangle_count"],
-            "feature_edges": mesh["feature_edges"],
-        }
-        supabase.table("cad_meshes").insert(data_insert).execute()
+        # Analyze shape geometry
+        props = GProp_GProps()
+        brepgprop_VolumeProperties(shape, props)
+        volume_cm3 = props.Mass() / 1000  # mm³ to cm³
+
+        # Surface area
+        surface_props = GProp_GProps()
+        brepgprop_SurfaceProperties(shape, surface_props)
+        surface_area_cm2 = surface_props.Mass() / 100  # mm² to cm²
+
+        # Detect cylindrical features
+        is_cylindrical = False
+        total_faces = 0
+        planar_faces = 0
+        cylindrical_faces = 0
+
+        explorer = TopExp_Explorer(shape, TopAbs_FACE)
+        while explorer.More():
+            total_faces += 1
+            face = topods.Face(explorer.Current())
+            surface = BRep_Tool.Surface(face)
+            
+            surface_type = surface.DynamicType().Name()
+            if 'Cylindrical' in surface_type:
+                cylindrical_faces += 1
+            elif 'Plane' in surface_type:
+                planar_faces += 1
+            
+            explorer.Next()
+
+        is_cylindrical = (cylindrical_faces / total_faces) > 0.5 if total_faces > 0 else False
+        has_flat_surfaces = planar_faces > 0
+
+        # Calculate complexity
+        complexity_score = min(10, int((total_faces / 10) + (mesh["triangle_count"] / 1000)))
+
+        # Get bounding box
+        bbox = Bnd_Box()
+        brepbndlib_Add(shape, bbox)
+        xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
+
+        part_width_cm = (xmax - xmin) / 10
+        part_height_cm = (ymax - ymin) / 10
+        part_depth_cm = (zmax - zmin) / 10
 
         return jsonify({
             "status": "success",
-            "message": f"Mesh generated for {file.filename}",
+            "volume_cm3": volume_cm3,
+            "surface_area_cm2": surface_area_cm2,
+            "complexity_score": complexity_score,
+            "confidence": 0.9,
+            "method": "opencascade",
+            "part_width_cm": part_width_cm,
+            "part_height_cm": part_height_cm,
+            "part_depth_cm": part_depth_cm,
+            "is_cylindrical": is_cylindrical,
+            "total_faces": total_faces,
+            "planar_faces": planar_faces,
+            "cylindrical_faces": cylindrical_faces,
+            "has_flat_surfaces": has_flat_surfaces,
             "mesh_data": mesh,
+            "detected_features": {
+                "holes": [],
+                "grooves": [],
+                "flat_surfaces": [],
+                "primary_dimensions": {
+                    "length_mm": part_depth_cm * 10,
+                    "primary_axis": "Z"
+                }
+            }
         })
 
     except Exception as e:
         logger.error(f"Error processing CAD: {e}")
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            "error": str(e),
+            "traceback": traceback.format_exc() if os.getenv("DEBUG") else None
+        }), 500
 
 
 @app.route("/")
