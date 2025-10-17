@@ -40,10 +40,11 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # === Geometry Utilities ===
 # --------------------------------------------------
 
-def extract_feature_edges(shape, sample_count=10):
+def extract_feature_edges(shape, sample_density=2.0):
     """
     Extract all edges (internal + external) for 3D visualization outlines.
-    sample_count controls how many points are sampled per edge.
+    sample_density: points per mm of arc length (default 2.0 = 1 point every 0.5mm)
+    Adaptive sampling ensures large circles are as smooth as small fillets.
     """
     edges = []
     try:
@@ -52,12 +53,20 @@ def extract_feature_edges(shape, sample_count=10):
 
         exp = TopExp_Explorer(shape, TopAbs_EDGE)
         edge_count = 0
+        total_samples = 0
 
         while exp.More():
-            edge = Edge(exp.Current())  # ✅ modern syntax
+            edge = Edge(exp.Current())
             adaptor = BRepAdaptor_Curve(edge)
 
             try:
+                # Calculate edge length for adaptive sampling
+                edge_length = adaptor.LastParameter() - adaptor.FirstParameter()
+                
+                # Adaptive sample count based on length
+                # Minimum 10 samples for small features, more for large features
+                sample_count = max(10, int(edge_length * sample_density))
+                
                 sampler = GCPnts_UniformAbscissa(adaptor, sample_count)
                 if not sampler.IsDone():
                     exp.Next()
@@ -75,12 +84,14 @@ def extract_feature_edges(shape, sample_count=10):
                 if len(pts) >= 2:
                     edges.append(pts)
                     edge_count += 1
+                    total_samples += len(pts)
             except Exception:
                 pass  # skip problematic edges
 
             exp.Next()
 
-        logger.info(f"Extracted {edge_count} total edges (sample_count={sample_count})")
+        avg_samples = total_samples / edge_count if edge_count > 0 else 0
+        logger.info(f"Extracted {edge_count} edges with adaptive sampling (avg {avg_samples:.1f} samples/edge, density={sample_density})")
     except Exception as e:
         logger.warning(f"Edge extraction failed: {e}")
 
