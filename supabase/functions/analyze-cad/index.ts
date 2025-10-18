@@ -1176,6 +1176,35 @@ const handler = async (req: Request): Promise<Response> => {
       analysis = enhancedHeuristic(file_name, file_size);
     }
     
+    // Upload mesh to storage instead of returning it directly
+    let mesh_url = undefined;
+    if (analysis.mesh_data) {
+      const meshFileName = `${Date.now()}_${file_name.replace(/\.[^/.]+$/, '')}.json`;
+      
+      try {
+        const supabaseAdmin = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+        
+        const { error: uploadError } = await supabaseAdmin.storage
+          .from('cad-mesh-data')
+          .upload(meshFileName, JSON.stringify(analysis.mesh_data), {
+            contentType: 'application/json',
+            upsert: true
+          });
+
+        if (!uploadError) {
+          mesh_url = `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/cad-mesh-data/${meshFileName}`;
+          console.log(`✅ Mesh uploaded to storage: ${meshFileName}`);
+        } else {
+          console.error('⚠️ Failed to upload mesh to storage:', uploadError);
+        }
+      } catch (storageError) {
+        console.error('⚠️ Storage error:', storageError);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -1183,7 +1212,8 @@ const handler = async (req: Request): Promise<Response> => {
         quantity,
         detected_features: analysis.detected_features,
         recommended_processes: analysis.recommended_processes,
-        mesh_data: analysis.mesh_data // ✅ Include mesh_data in response if available
+        mesh_data: mesh_url ? undefined : analysis.mesh_data, // Don't send mesh if URL available
+        mesh_url: mesh_url // Send URL instead
       }),
       {
         status: 200,
