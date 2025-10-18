@@ -2,7 +2,7 @@ import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { DynamicSilhouetteEdges } from './DynamicSilhouetteEdges';
+import { WireframeShader } from './WireframeShader';
 
 interface MeshData {
   vertices: number[];
@@ -158,20 +158,13 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         </mesh>
       )}
       
-      {/* Dynamic silhouette edges for solid mode */}
-      {showEdges && displayStyle !== 'wireframe' && (
-        <DynamicSilhouetteEdges 
+      {/* GPU-based wireframe mode (barycentric shader) */}
+      {displayStyle === 'wireframe' && (
+        <WireframeShader 
           geometry={geometry} 
           color="#000000" 
-          thickness={1.5} 
+          thickness={1.2} 
         />
-      )}
-      
-      {/* Wireframe mode - show all triangle edges */}
-      {displayStyle === 'wireframe' && (
-        <mesh geometry={geometry}>
-          <meshBasicMaterial wireframe color="#000000" />
-        </mesh>
       )}
     </group>
   );
