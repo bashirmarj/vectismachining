@@ -182,67 +182,82 @@ def recognize_manufacturing_features(shape):
 
 def extract_feature_edges(shape, max_edges=120, max_time_seconds=20):
     """
-    Extract ONLY external silhouette edges for clean 3D visualization.
-    Filters out internal edges (grooves, hole boundaries, smooth transitions).
-    Fixed parameters optimized for quotation platform.
-    max_edges: Stop after extracting N edges (prevents timeout)
-    max_time_seconds: Abort if processing takes too long
+    Extract ONLY true silhouette edges and sharp manufacturing features.
+    Filters out smooth transitions, hole boundaries, and internal edges.
     """
-    sample_density = 1.0  # Fixed optimal density for quotation platform
     import time
     start_time = time.time()
     edges = []
+    sample_density = 1.0
+    
     try:
-        # Mesh first for better consistency
         BRepMesh_IncrementalMesh(shape, 0.1, True)
-
-        # Build edge-to-faces map to determine which edges are external
+        
         edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
         topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
-
+        
         exp = TopExp_Explorer(shape, TopAbs_EDGE)
         edge_count = 0
-        total_samples = 0
         filtered_count = 0
-
+        
         while exp.More():
-            # Timeout check
             if time.time() - start_time > max_time_seconds:
-                logger.warning(f"Edge extraction timeout after {max_time_seconds}s, returning {edge_count} edges")
+                logger.warning(f"Edge extraction timeout after {max_time_seconds}s")
                 break
-            
-            # Max edge limit
             if edge_count >= max_edges:
-                logger.info(f"Reached max edge limit ({max_edges}), stopping extraction")
+                logger.info(f"Reached max edge limit ({max_edges})")
                 break
             
             edge = topods.Edge(exp.Current())
             
-            # Smart edge detection: only sharp features (Phase B)
-            is_external = False
+            # NEW FILTERING LOGIC: Only include specific edge types
+            is_feature_edge = False
+            
             try:
                 face_list = edge_face_map.FindFromKey(edge)
                 num_faces = face_list.Size()
                 
-                # Boundary edges (only 1 face) are always external
+                # RULE 1: Skip single-face edges (usually hole boundaries)
                 if num_faces == 1:
-                    is_external = True
-                # Check dihedral angle for 2-face edges
+                    curve = BRepAdaptor_Curve(edge)
+                    curve_type = curve.GetType()
+                    # Only include if it's a straight line (part outline)
+                    if curve_type == GeomAbs_Line:
+                        is_feature_edge = True
+                    else:
+                        filtered_count += 1
+                        exp.Next()
+                        continue
+                
+                # RULE 2: For 2-face edges, check dihedral angle
                 elif num_faces == 2:
                     face1 = topods.Face(face_list.First())
                     face2 = topods.Face(face_list.Last())
                     
+                    # Get surface types
+                    adaptor1 = BRepAdaptor_Surface(face1)
+                    adaptor2 = BRepAdaptor_Surface(face2)
+                    surf_type1 = adaptor1.GetType()
+                    surf_type2 = adaptor2.GetType()
+                    
+                    # RULE 2a: Skip cylinder-to-cylinder same-radius transitions
+                    if surf_type1 == GeomAbs_Cylinder and surf_type2 == GeomAbs_Cylinder:
+                        try:
+                            cyl1 = adaptor1.Cylinder()
+                            cyl2 = adaptor2.Cylinder()
+                            if abs(cyl1.Radius() - cyl2.Radius()) < 0.01:
+                                filtered_count += 1
+                                exp.Next()
+                                continue
+                        except:
+                            pass
+                    
+                    # RULE 2b: Calculate dihedral angle
                     try:
-                        # Sample edge at midpoint to get normals
                         curve = BRepAdaptor_Curve(edge)
                         u_mid = (curve.FirstParameter() + curve.LastParameter()) / 2.0
                         point_on_edge = curve.Value(u_mid)
                         
-                        # Get surface adaptors
-                        adaptor1 = BRepAdaptor_Surface(face1)
-                        adaptor2 = BRepAdaptor_Surface(face2)
-                        
-                        # Get UV parameters by projection
                         from OCC.Core.GeomAPI import GeomAPI_ProjectPointOnSurf
                         projector1 = GeomAPI_ProjectPointOnSurf(point_on_edge, BRep_Tool.Surface(face1))
                         projector2 = GeomAPI_ProjectPointOnSurf(point_on_edge, BRep_Tool.Surface(face2))
@@ -251,151 +266,76 @@ def extract_feature_edges(shape, max_edges=120, max_time_seconds=20):
                             u1, v1 = projector1.Parameters(1)
                             u2, v2 = projector2.Parameters(1)
                             
-                            # Get normals via derivatives
                             pnt1, d1u1, d1v1 = gp_Pnt(), gp_Vec(), gp_Vec()
                             pnt2, d1u2, d1v2 = gp_Pnt(), gp_Vec(), gp_Vec()
                             adaptor1.D1(u1, v1, pnt1, d1u1, d1v1)
                             adaptor2.D1(u2, v2, pnt2, d1u2, d1v2)
                             
-                            # Cross product to get normals
                             normal1 = d1u1.Crossed(d1v1)
                             normal2 = d1u2.Crossed(d1v2)
                             
-                            # Handle face orientation (check for REVERSED and INTERNAL)
                             from OCC.Core.TopAbs import TopAbs_REVERSED, TopAbs_INTERNAL
                             if face1.Orientation() in [TopAbs_REVERSED, TopAbs_INTERNAL]:
                                 normal1.Reverse()
                             if face2.Orientation() in [TopAbs_REVERSED, TopAbs_INTERNAL]:
                                 normal2.Reverse()
                             
-                            # Normalize
                             normal1.Normalize()
                             normal2.Normalize()
                             
-                            # Calculate angle between normals
-                            dot_product = normal1.Dot(normal2)
-                            # Clamp to [-1, 1] for acos
-                            dot_product = max(-1.0, min(1.0, dot_product))
-                            angle_rad = math.acos(dot_product)
-                            angle_deg = math.degrees(angle_rad)
+                            dot_product = max(-1.0, min(1.0, normal1.Dot(normal2)))
+                            angle_deg = math.degrees(math.acos(dot_product))
                             
-                            # Mark as external if sharp edge (> 10 degree dihedral angle)
-                            # Reduced threshold to only capture truly sharp features
-                            if angle_deg > 10:
-                                is_external = True
+                            # RULE 2c: Only include genuinely sharp edges (>30 degrees)
+                            if angle_deg > 30:
+                                is_feature_edge = True
+                            else:
+                                filtered_count += 1
+                                exp.Next()
+                                continue
                         else:
-                            # Projection failed, fallback to surface type check
-                            if adaptor1.GetType() != adaptor2.GetType():
-                                is_external = True
-                    except Exception:
-                        # Fallback: check surface type difference
-                        adaptor1 = BRepAdaptor_Surface(face1)
-                        adaptor2 = BRepAdaptor_Surface(face2)
-                        if adaptor1.GetType() != adaptor2.GetType():
-                            is_external = True
+                            # Projection failed - use surface type heuristic
+                            if surf_type1 != surf_type2:
+                                is_feature_edge = True
+                    except Exception as e:
+                        logger.debug(f"Angle calculation failed: {e}")
+                        # Default to NOT including (safer)
+                        filtered_count += 1
+                        exp.Next()
+                        continue
+                        
             except Exception as e:
-                # If we can't determine, assume it's external (better to include than exclude)
-                is_external = True
-                logger.debug(f"Edge classification error (assuming external): {e}")
-            
-            if not is_external:
+                logger.debug(f"Edge classification error: {e}")
                 filtered_count += 1
                 exp.Next()
                 continue
             
-            # Extract edge points with CURVATURE-BASED adaptive sampling
-            adaptor = BRepAdaptor_Curve(edge)
-            try:
-                # Get PHYSICAL arc length in millimeters
-                physical_length = GCPnts_AbscissaPoint.Length(adaptor)
-                
-                # Analyze edge curvature to determine sampling strategy
-                curve_type = adaptor.GetType()
-                
-                # Detect curvature intensity
-                is_straight = (curve_type == GeomAbs_Line)
-                is_circle = (curve_type == GeomAbs_Circle)
-                is_complex = (curve_type in [GeomAbs_BSplineCurve, GeomAbs_BezierCurve])
-                
-                # Adaptive density based on geometry type
-                if is_straight:
-                    # Straight lines: minimal samples (0.1 points/mm)
-                    adaptive_density = 0.1
-                elif is_circle:
-                    # Circles/arcs: moderate samples (0.5 points/mm)
-                    # For small holes (< 20mm diameter), increase to 1.0 points/mm
-                    radius = adaptor.Circle().Radius()
-                    adaptive_density = 1.0 if radius < 10 else 0.5
-                    logger.info(f"📊 Edge extraction: {edge_count} kept, {filtered_count} filtered")
-                elif is_complex:
-                    # B-splines/Beziers: measure actual curvature
-                    # Sample at 10 points and calculate average curvature
-                    u_start = adaptor.FirstParameter()
-                    u_end = adaptor.LastParameter()
-                    curvature_samples = []
+            # Extract edge samples if it's a feature edge
+            if is_feature_edge:
+                try:
+                    curve = BRepAdaptor_Curve(edge)
+                    num_samples = max(5, int(curve.Length() * sample_density * 5))
+                    num_samples = min(num_samples, 100)
                     
-                    for i in range(10):
-                        u = u_start + (u_end - u_start) * (i / 9.0)
-                        try:
-                            # Get curvature at parameter u
-                            pnt = gp_Pnt()
-                            vec1 = gp_Vec()
-                            vec2 = gp_Vec()
-                            adaptor.D2(u, pnt, vec1, vec2)
-                            
-                            # Curvature = |dT/ds| where T is unit tangent
-                            tangent_mag = vec1.Magnitude()
-                            if tangent_mag > 1e-9:
-                                curvature = vec2.Magnitude() / (tangent_mag ** 2)
-                                curvature_samples.append(curvature)
-                        except:
-                            pass
+                    u_start = curve.FirstParameter()
+                    u_end = curve.LastParameter()
                     
-                    if curvature_samples:
-                        avg_curvature = sum(curvature_samples) / len(curvature_samples)
-                        # High curvature (tight features) = more samples
-                        # Curvature > 0.1 (radius < 10mm) gets dense sampling
-                        if avg_curvature > 0.1:
-                            adaptive_density = 2.0  # Very tight features
-                        elif avg_curvature > 0.05:
-                            adaptive_density = 1.0  # Moderate curves
-                        else:
-                            adaptive_density = 0.5  # Gentle curves
-                    else:
-                        adaptive_density = 0.5  # Default fallback
-                else:
-                    # Other curve types (ellipse, parabola, etc.): moderate sampling
-                    adaptive_density = 0.5
+                    samples = []
+                    for i in range(num_samples):
+                        u = u_start + (u_end - u_start) * i / (num_samples - 1)
+                        pt = curve.Value(u)
+                        samples.append([pt.X(), pt.Y(), pt.Z()])
+                    
+                    if len(samples) > 1:
+                        edges.append(samples)
+                        edge_count += 1
+                except Exception as e:
+                    logger.debug(f"Edge sampling failed: {e}")
                 
-                # Calculate sample count with adaptive density
-                # Minimum 5 samples for any edge, maximum 500 for very long/complex edges
-                sample_count = max(5, min(500, int(physical_length * adaptive_density)))
-                
-                sampler = GCPnts_UniformAbscissa(adaptor, sample_count)
-                if not sampler.IsDone():
-                    exp.Next()
-                    continue
-
-                pts = []
-                for i in range(1, sampler.NbPoints() + 1):
-                    p = adaptor.Value(sampler.Parameter(i))
-                    pts.append([
-                        round(p.X(), 4),
-                        round(p.Y(), 4),
-                        round(p.Z(), 4)
-                    ])
-
-                if len(pts) >= 2:
-                    edges.append(pts)
-                    edge_count += 1
-                    total_samples += len(pts)
-            except Exception:
-                pass  # skip problematic edges
-
+            
             exp.Next()
-
-        avg_samples = total_samples / edge_count if edge_count > 0 else 0
-        logger.info(f"Extracted {edge_count} edges (filtered {filtered_count} internal), avg {avg_samples:.1f} samples/edge, density={sample_density}")
+        
+        logger.info(f"Extracted {edge_count} feature edges (filtered {filtered_count} smooth/internal edges)")
     except Exception as e:
         logger.warning(f"Edge extraction failed: {e}")
 
@@ -479,12 +419,6 @@ def tessellate_shape(shape):
                 # Continue to next face instead of crashing
             
             face_explorer.Next()
-        
-        # Final global mesh to ensure consistency and tessellate internal faces
-        mesh = BRepMesh_IncrementalMesh(shape, base_deflection, False, 0.5, True)
-        mesh.Perform()
-        if not mesh.IsDone():
-            raise Exception("Mesh tessellation failed")
 
         bbox = Bnd_Box()
         brepbndlib.Add(shape, bbox)
