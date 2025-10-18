@@ -534,20 +534,54 @@ async function analyzeSTEPViaService(
     formData.append('quality', '0.25'); // Balanced quality: ~80k-100k triangles, 0.107mm deflection, visually smooth
     formData.append('edge_density', '30'); // Adaptive sampling: 30x density for smooth large circles
     
-    const response = await fetch(`${GEOMETRY_SERVICE_URL}/analyze-cad`, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Accept': 'application/json'
-      },
-      signal: AbortSignal.timeout(65000) // 65 seconds for Render cold starts + processing
-    });
+    // Retry logic for Render.com cold starts (free tier spins down after 15min inactivity)
+    let attempts = 0;
+    const maxAttempts = 3;
+    let lastError: any = null;
+    let response: Response | null = null;
+
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
+        console.log(`🔄 Attempt ${attempts}/${maxAttempts} calling Flask backend...`);
+        
+        response = await fetch(`${GEOMETRY_SERVICE_URL}/analyze-cad`, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Accept': 'application/json'
+          },
+          signal: AbortSignal.timeout(75000) // 75 seconds per attempt for cold starts
+        });
+        
+        console.log(`📡 Flask response received: HTTP ${response.status} (${response.headers.get('content-type')})`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ Geometry service returned ${response.status}: ${errorText}`);
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        
+        // Success - break out of retry loop
+        break;
+        
+      } catch (error: any) {
+        lastError = error;
+        console.error(`❌ Attempt ${attempts} failed:`, error.message);
+        
+        if (attempts < maxAttempts) {
+          const backoffMs = Math.pow(2, attempts) * 5000; // 10s, 20s backoff
+          console.log(`⏳ Retrying in ${backoffMs/1000}s...`);
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+        } else {
+          console.error(`❌ All ${maxAttempts} attempts failed. Last error:`, lastError.message);
+          return null;
+        }
+      }
+    }
     
-    console.log(`📡 Flask response received: HTTP ${response.status} (${response.headers.get('content-type')})`);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Geometry service returned ${response.status}: ${errorText}`);
+    if (!response || !response.ok) {
+      console.error(`❌ Failed after ${maxAttempts} attempts`);
       return null;
     }
     

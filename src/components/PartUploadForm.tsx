@@ -4,8 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { FileUploadScreen } from "./part-upload/FileUploadScreen";
 import { PartConfigScreen } from "./part-upload/PartConfigScreen";
 
-// 🌐 Flask backend (Render) URL
-const FLASK_BACKEND_URL = "https://cad-geometry-service-with-routing.onrender.com";
+// Using Supabase Edge Function proxy for Flask backend (handles cold starts & retries)
 
 interface FileWithQuantity {
   file: File;
@@ -70,20 +69,21 @@ export const PartUploadForm = () => {
     fetchProcesses();
   }, []);
 
-  // 🔧 Test Flask connection
+  // 🔧 Test backend connection via edge function
   const testFlaskConnection = async () => {
     setIsTestingConnection(true);
     try {
-      const res = await fetch(`${FLASK_BACKEND_URL}/health`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data, error } = await supabase.functions.invoke('analyze-cad', {
+        body: { test: true }
+      });
+      if (error) throw error;
       toast({
-        title: "✅ Flask Connection Successful",
-        description: `Backend status: ${data.status}`,
+        title: "✅ Backend Connection Successful",
+        description: "Geometry service is ready",
       });
     } catch (error: any) {
       toast({
-        title: "❌ Flask Connection Failed",
+        title: "❌ Backend Connection Failed",
         description: error.message || "Unable to reach backend",
         variant: "destructive",
       });
@@ -92,7 +92,7 @@ export const PartUploadForm = () => {
     }
   };
 
-  // 🧠 Analyze file using Flask backend
+  // 🧠 Analyze file using Supabase Edge Function (handles cold starts)
   const analyzeFile = async (fileWithQty: FileWithQuantity, index: number) => {
     try {
       setFiles((prev) =>
@@ -101,22 +101,20 @@ export const PartUploadForm = () => {
 
       const formData = new FormData();
       formData.append("file", fileWithQty.file);
-      formData.append("quality", "0.25"); // Lower quality = fewer triangles (50k-80k vs 250k)
-      formData.append("forceReanalyze", "true"); // Bypass cache to get fresh mesh
+      formData.append("quality", "0.25");
+      formData.append("forceReanalyze", "true");
 
-      console.log(`📤 Sending ${fileWithQty.file.name} to Flask backend...`);
+      console.log(`📤 Sending ${fileWithQty.file.name} to edge function (may take 30-60s on first use)...`);
 
-      const response = await fetch(`${FLASK_BACKEND_URL}/analyze-cad`, {
-        method: "POST",
-        body: formData,
+      const { data: result, error } = await supabase.functions.invoke('analyze-cad', {
+        body: formData
       });
 
-      if (!response.ok) {
-        throw new Error(`Backend returned ${response.status}`);
+      if (error) {
+        throw new Error(error.message || "Edge function error");
       }
 
-      const result = await response.json();
-      console.log("✅ Flask response:", result);
+      console.log("✅ Edge function response:", result);
 
       const meshData = result.mesh_data || result.meshData || {};
       setFiles((prev) =>
@@ -140,7 +138,7 @@ export const PartUploadForm = () => {
       );
       toast({
         title: "Analysis Failed",
-        description: error.message || "Error contacting backend",
+        description: error.message || "Backend may be waking up - please try again",
         variant: "destructive",
       });
     }
