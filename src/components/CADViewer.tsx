@@ -1,6 +1,5 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
-import { EffectComposer } from '@react-three/postprocessing';
 import { Suspense, useMemo, useEffect, useState, useRef } from 'react';
 import { CardContent } from '@/components/ui/card';
 import { Loader2, Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -11,7 +10,6 @@ import { MeshModel } from './cad-viewer/MeshModel';
 import { DimensionAnnotations } from './cad-viewer/DimensionAnnotations';
 import { MeasurementTool } from './cad-viewer/MeasurementTool';
 import { OrientationCubePreview, OrientationCubeHandle } from './cad-viewer/OrientationCubePreview';
-import { EdgeDetectionPass } from './cad-viewer/EdgeDetectionPass';
 
 interface CADViewerProps {
   file?: File;
@@ -517,21 +515,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   meshData={activeMeshData!}
                   sectionPlane={sectionPlane}
                   sectionPosition={sectionPosition}
-                  showEdges={false}
+                  showEdges={showEdges}
                   showHiddenEdges={showHiddenEdges}
                   displayStyle={displayStyle}
                 />
-                
-                {/* GPU Post-Processing for Edges */}
-                {showEdges && displayStyle !== 'wireframe' && (
-                  <EffectComposer>
-                    <EdgeDetectionPass 
-                      edgeStrength={1.0}
-                      depthThreshold={0.0015}
-                      normalThreshold={0.4}
-                    />
-                  </EffectComposer>
-                )}
                 
                 {/* Soft contact shadow */}
                 <mesh

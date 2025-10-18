@@ -1,8 +1,6 @@
 import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { WireframeShader } from './WireframeShader';
 
 interface MeshData {
   vertices: number[];
@@ -39,59 +37,20 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return geo;
   }, [meshData]);
   
-  // Debug: Verify backend feature edges are received
-  console.log("Received feature_edges:", meshData.feature_edges?.length || 0);
-  if (meshData.feature_edges && meshData.feature_edges.length > 0) {
-    const totalSegments = meshData.feature_edges.reduce((sum, edge) => sum + edge.length - 1, 0);
-    console.log(`Feature edges: ${meshData.feature_edges.length} polylines, ~${totalSegments} segments`);
-  }
-
-  // Create feature edges from backend CAD geometry (continuous polylines for smooth curves)
+  // Create feature edges using EdgesGeometry with adaptive crease angle
   const featureEdges = useMemo(() => {
-    if (!showEdges) return null;
+    if (!showEdges && displayStyle !== 'wireframe') return null;
 
-    // Prefer backend feature edges if available (true CAD edges, no tessellation)
-    if (meshData.feature_edges && meshData.feature_edges.length > 0) {
-      const polylines: THREE.BufferGeometry[] = [];
-      const minLength = 0.01;
-      let filteredCount = 0;
-      
-      for (const edge of meshData.feature_edges) {
-        const positions: number[] = [];
-        
-        // Keep polyline as continuous curve (not individual segments)
-        for (const point of edge) {
-          positions.push(point[0], point[1], point[2]);
-        }
+    // Use adaptive crease angle based on display style
+    // 30° for solid mode (fewer edges, cleaner look)
+    // 15° for wireframe mode (more edges, technical drawing style)
+    const creaseAngle = displayStyle === 'wireframe' 
+      ? THREE.MathUtils.degToRad(15) 
+      : THREE.MathUtils.degToRad(30);
 
-        if (positions.length >= 6) { // At least 2 points (6 values)
-          const geometry = new THREE.BufferGeometry();
-          geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-          geometry.computeBoundingSphere();
-          polylines.push(geometry);
-        }
-      }
-
-      if (polylines.length === 0) {
-        console.warn("No valid polylines after filtering");
-        return null;
-      }
-
-      console.log(`✅ Rendering ${polylines.length} continuous polylines`);
-      return polylines;
-    }
-
-    // Fallback: Generate edges from mesh tessellation (old method for files without feature_edges)
-    console.warn("⚠️ Using fallback tessellation edges - backend feature_edges not available");
-    const combinedGeo = new THREE.BufferGeometry();
-    combinedGeo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
-    combinedGeo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
-    combinedGeo.setIndex(meshData.indices);
-
-    const creaseAngle = THREE.MathUtils.degToRad(45);
-    const edgesGeo = new THREE.EdgesGeometry(combinedGeo, creaseAngle);
-    return [edgesGeo]; // Wrap in array for consistent rendering
-  }, [meshData, showEdges]);
+    const edgesGeo = new THREE.EdgesGeometry(geometry, creaseAngle);
+    return edgesGeo;
+  }, [geometry, showEdges, displayStyle]);
 
   
   // Section cut plane
@@ -147,7 +106,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   
   return (
     <group>
-      {/* Render solid mesh in professional color */}
+      {/* Render solid mesh */}
       {displayStyle !== 'wireframe' && (
         <mesh geometry={geometry}>
           <meshStandardMaterial
@@ -158,13 +117,16 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         </mesh>
       )}
       
-      {/* GPU-based wireframe mode (barycentric shader) */}
-      {displayStyle === 'wireframe' && (
-        <WireframeShader 
-          geometry={geometry} 
-          color="#000000" 
-          thickness={1.2} 
-        />
+      {/* Render feature edges */}
+      {featureEdges && (
+        <lineSegments geometry={featureEdges}>
+          <lineBasicMaterial 
+            color="#000000" 
+            linewidth={1}
+            clippingPlanes={clippingPlane}
+            clipIntersection={false}
+          />
+        </lineSegments>
       )}
     </group>
   );
