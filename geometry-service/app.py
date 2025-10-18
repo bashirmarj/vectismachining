@@ -180,7 +180,7 @@ def recognize_manufacturing_features(shape):
     return features
 
 
-def extract_feature_edges(shape, max_edges=60, max_time_seconds=20):
+def extract_feature_edges(shape, max_edges=120, max_time_seconds=20):
     """
     Extract ONLY external silhouette edges for clean 3D visualization.
     Filters out internal edges (grooves, hole boundaries, smooth transitions).
@@ -470,15 +470,15 @@ def tessellate_shape(shape):
                 face_deflection = base_deflection
                 angular_deflection = 0.5
             
-            # Apply face-specific tessellation
-            face_mesh = BRepMesh_IncrementalMesh(face, face_deflection, False, angular_deflection, True)
-            face_mesh.Perform()
+            # Apply face-specific tessellation with error handling
+            try:
+                face_mesh = BRepMesh_IncrementalMesh(face, face_deflection, False, angular_deflection, True)
+                face_mesh.Perform()
+            except Exception as e:
+                logger.warning(f"Face tessellation failed, using default: {e}")
+                # Continue to next face instead of crashing
             
             face_explorer.Next()
-        
-        # Clean any cached triangulation and force re-tessellation (fixes gaps)
-        from OCC.Core.BRep import BRep_Tool
-        BRep_Tool.Clean(shape)
         
         # Final global mesh to ensure consistency and tessellate internal faces
         mesh = BRepMesh_IncrementalMesh(shape, base_deflection, False, 0.5, True)
