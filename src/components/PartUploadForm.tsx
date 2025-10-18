@@ -112,7 +112,7 @@ export const PartUploadForm = () => {
           file_name: fileWithQty.file.name,
           file_data: base64File,
           file_size: fileWithQty.file.size,
-          quality: "0.8",
+          material: fileWithQty.material,
           force_reanalyze: true
         }
       });
