@@ -48,7 +48,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def calculate_bbox_diagonal(shape):
     """Calculate bounding box diagonal for adaptive tessellation"""
     bbox = Bnd_Box()
-    brepbndlib_Add(shape, bbox)
+    brepbndlib.Add(shape, bbox)
     xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
     dx = xmax - xmin
     dy = ymax - ymin
