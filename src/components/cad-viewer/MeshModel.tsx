@@ -81,8 +81,7 @@ export function MeshModel({
       flatShading: false,
       metalness: 0,
       roughness: 0.3,
-      envMapIntensity: 0,
-      precision: 'highp'
+      envMapIntensity: 0
     };
 
     if (displayStyle === 'wireframe') return { ...base, wireframe: true };

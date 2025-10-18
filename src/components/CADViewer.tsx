@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
 import { MeshModel } from './cad-viewer/MeshModel';
-import { ViewerControls } from './cad-viewer/ViewerControls';
 import { DimensionAnnotations } from './cad-viewer/DimensionAnnotations';
 import { MeasurementTool } from './cad-viewer/MeasurementTool';
 import { OrientationCubePreview, OrientationCubeHandle } from './cad-viewer/OrientationCubePreview';
@@ -434,21 +433,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
           </div>
         ) : hasValidModel ? (
           <div className="relative h-full" style={{ background: '#f8f9fa' }}>
-        <ViewerControls
-          sectionPlane={sectionPlane}
-          onSectionPlaneChange={setSectionPlane}
-          sectionPosition={sectionPosition}
-          onSectionPositionChange={setSectionPosition}
-          showEdges={showEdges}
-          onToggleEdges={() => setShowEdges(!showEdges)}
-          showHiddenEdges={showHiddenEdges}
-          onToggleHiddenEdges={() => setShowHiddenEdges(!showHiddenEdges)}
-          showDimensions={showDimensions}
-          onToggleDimensions={() => setShowDimensions(!showDimensions)}
-          measurementMode={measurementMode}
-          onMeasurementModeChange={setMeasurementMode}
-          onFitView={handleFitView}
-        />
             
             {/* Isometric Reset Button - Top Left */}
             <button
