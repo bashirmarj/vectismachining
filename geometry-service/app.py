@@ -282,7 +282,7 @@ def get_average_face_normal(triangulation, transform, reversed_face=False):
 def tessellate_shape(shape, quality=0.5):
     """Generate vertices, normals, indices, and classify faces"""
     try:
-        deflection = 0.8 * (10 ** (-(quality * 3)))
+        deflection = 0.1 + (quality * 1.0)  # Linear: quality 0.8 → deflection 0.9mm → ~15k triangles
         angular_deflection = 0.04
         mesh = BRepMesh_IncrementalMesh(shape, deflection, False, angular_deflection, True)
         mesh.Perform()
@@ -429,10 +429,10 @@ def analyze_cad():
 
         # ✅ Allow frontend to control edge sampling
         quality = float(request.form.get("quality", 0.5))
-        edge_density = int(request.form.get("edge_density", 10))
+        sample_density = float(request.form.get("sample_density", 0.5))
 
         mesh = tessellate_shape(shape, quality)
-        mesh["feature_edges"] = extract_feature_edges(shape, sample_density=edge_density)
+        mesh["feature_edges"] = extract_feature_edges(shape, sample_density=sample_density)
         mesh["triangle_count"] = len(mesh.get("indices", [])) // 3
 
         # Analyze shape geometry
@@ -483,6 +483,8 @@ def analyze_cad():
         part_width_cm = (xmax - xmin) / 10
         part_height_cm = (ymax - ymin) / 10
         part_depth_cm = (zmax - zmin) / 10
+
+        logger.info(f"✅ Analysis complete: {mesh['triangle_count']} triangles, {len(mesh.get('feature_edges', []))} edges")
 
         return jsonify({
             "status": "success",
