@@ -531,8 +531,8 @@ async function analyzeSTEPViaService(
     formData.append('file', new Blob([fileData]), fileName);
     formData.append('material', material || 'Cold Rolled Steel');
     formData.append('tolerance', (tolerance || 0.02).toString());
-    formData.append('quality', '0.25'); // Balanced quality: ~80k-100k triangles, 0.107mm deflection, visually smooth
-    formData.append('edge_density', '30'); // Adaptive sampling: 30x density for smooth large circles
+    formData.append('quality', '0.8'); // Lower quality: ~15k-25k triangles for faster processing
+    formData.append('sample_density', '0.5'); // Adaptive edge extraction with curvature-based sampling
     
     // Retry logic for Render.com cold starts (free tier spins down after 15min inactivity)
     let attempts = 0;
@@ -551,7 +551,7 @@ async function analyzeSTEPViaService(
           headers: {
             'Accept': 'application/json'
           },
-          signal: AbortSignal.timeout(75000) // 75 seconds per attempt for cold starts
+          signal: AbortSignal.timeout(120000) // 120 seconds per attempt for cold starts + processing
         });
         
         console.log(`📡 Flask response received: HTTP ${response.status} (${response.headers.get('content-type')})`);
