@@ -123,16 +123,72 @@ def extract_feature_edges(shape, sample_density=2.0):
                 exp.Next()
                 continue
             
-            # Extract edge points with adaptive sampling
+            # Extract edge points with CURVATURE-BASED adaptive sampling
             adaptor = BRepAdaptor_Curve(edge)
             try:
-                # Get PHYSICAL arc length in millimeters (not parameter space)
+                # Get PHYSICAL arc length in millimeters
                 physical_length = GCPnts_AbscissaPoint.Length(adaptor)
                 
-                # Adaptive sample count based on PHYSICAL length
-                # sample_density is points per mm (e.g., 30 = 30 points/mm)
-                # Minimum 10 samples for small features
-                sample_count = max(10, int(physical_length * sample_density))
+                # Analyze edge curvature to determine sampling strategy
+                curve_type = adaptor.GetType()
+                
+                # Detect curvature intensity
+                is_straight = (curve_type == GeomAbs_Line)
+                is_circle = (curve_type == GeomAbs_Circle)
+                is_complex = (curve_type in [GeomAbs_BSplineCurve, GeomAbs_BezierCurve])
+                
+                # Adaptive density based on geometry type
+                if is_straight:
+                    # Straight lines: minimal samples (0.1 points/mm)
+                    adaptive_density = 0.1
+                elif is_circle:
+                    # Circles/arcs: moderate samples (0.5 points/mm)
+                    # For small holes (< 20mm diameter), increase to 1.0 points/mm
+                    radius = adaptor.Circle().Radius()
+                    adaptive_density = 1.0 if radius < 10 else 0.5
+                elif is_complex:
+                    # B-splines/Beziers: measure actual curvature
+                    # Sample at 10 points and calculate average curvature
+                    u_start = adaptor.FirstParameter()
+                    u_end = adaptor.LastParameter()
+                    curvature_samples = []
+                    
+                    for i in range(10):
+                        u = u_start + (u_end - u_start) * (i / 9.0)
+                        try:
+                            # Get curvature at parameter u
+                            pnt = gp_Pnt()
+                            vec1 = gp_Vec()
+                            vec2 = gp_Vec()
+                            adaptor.D2(u, pnt, vec1, vec2)
+                            
+                            # Curvature = |dT/ds| where T is unit tangent
+                            tangent_mag = vec1.Magnitude()
+                            if tangent_mag > 1e-9:
+                                curvature = vec2.Magnitude() / (tangent_mag ** 2)
+                                curvature_samples.append(curvature)
+                        except:
+                            pass
+                    
+                    if curvature_samples:
+                        avg_curvature = sum(curvature_samples) / len(curvature_samples)
+                        # High curvature (tight features) = more samples
+                        # Curvature > 0.1 (radius < 10mm) gets dense sampling
+                        if avg_curvature > 0.1:
+                            adaptive_density = 2.0  # Very tight features
+                        elif avg_curvature > 0.05:
+                            adaptive_density = 1.0  # Moderate curves
+                        else:
+                            adaptive_density = 0.5  # Gentle curves
+                    else:
+                        adaptive_density = 0.5  # Default fallback
+                else:
+                    # Other curve types (ellipse, parabola, etc.): moderate sampling
+                    adaptive_density = 0.5
+                
+                # Calculate sample count with adaptive density
+                # Minimum 5 samples for any edge, maximum 500 for very long/complex edges
+                sample_count = max(5, min(500, int(physical_length * adaptive_density)))
                 
                 sampler = GCPnts_UniformAbscissa(adaptor, sample_count)
                 if not sampler.IsDone():
