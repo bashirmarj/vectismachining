@@ -15,15 +15,18 @@ from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
 from OCC.Core.TopExp import TopExp_Explorer, topexp
 from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.Bnd import Bnd_Box
-from OCC.Core.BRepBndLib import brepbndlib, brepbndlib_Add
+from OCC.Core.BRepBndLib import brepbndlib
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
 from OCC.Core.GCPnts import GCPnts_UniformAbscissa, GCPnts_AbscissaPoint
-from OCC.Core.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
-from OCC.Core.TopoDS import topods_Edge as Edge, topods
+from OCC.Core.GeomAbs import (GeomAbs_Cylinder, GeomAbs_Plane, GeomAbs_Cone, 
+                               GeomAbs_Sphere, GeomAbs_Torus, GeomAbs_BSplineSurface, 
+                               GeomAbs_BezierSurface, GeomAbs_Line, GeomAbs_Circle,
+                               GeomAbs_BSplineCurve, GeomAbs_BezierCurve)
+from OCC.Core.TopoDS import topods
 from OCC.Core.GProp import GProp_GProps
-from OCC.Core.BRepGProp import brepgprop_VolumeProperties, brepgprop_SurfaceProperties
+from OCC.Core.BRepGProp import brepgprop
 from OCC.Core.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
-from OCC.Core.gp import gp_Vec
+from OCC.Core.gp import gp_Vec, gp_Pnt
 
 import logging
 
@@ -58,12 +61,12 @@ def calculate_exact_volume_and_area(shape):
     """Calculate exact volume and surface area from BREP geometry (not mesh)"""
     # Exact volume calculation
     volume_props = GProp_GProps()
-    brepgprop_VolumeProperties(shape, volume_props)
+    brepgprop.VolumeProperties(shape, volume_props)
     exact_volume = volume_props.Mass()  # cubic mm
     
     # Exact surface area calculation
     area_props = GProp_GProps()
-    brepgprop_SurfaceProperties(shape, area_props)
+    brepgprop.SurfaceProperties(shape, area_props)
     exact_surface_area = area_props.Mass()  # square mm
     
     logger.info(f"📐 Exact BREP calculations: volume={exact_volume:.2f}mm³, area={exact_surface_area:.2f}mm²")
@@ -107,7 +110,7 @@ def recognize_manufacturing_features(shape):
         
         # Calculate face area from BREP (not mesh)
         face_props = GProp_GProps()
-        brepgprop_SurfaceProperties(face, face_props)
+        brepgprop.SurfaceProperties(face, face_props)
         face_area = face_props.Mass()
         
         # Cylindrical faces → holes or bosses
@@ -213,9 +216,9 @@ def extract_feature_edges(shape, max_edges=60, max_time_seconds=20):
                 logger.info(f"Reached max edge limit ({max_edges}), stopping extraction")
                 break
             
-            edge = Edge(exp.Current())
+            edge = topods.Edge(exp.Current())
             
-            # Simplified edge extraction: boundary edges + different surface types
+            # Smart edge detection: only sharp features (Phase B)
             is_external = False
             try:
                 face_list = edge_face_map.FindFromKey(edge)
@@ -224,16 +227,71 @@ def extract_feature_edges(shape, max_edges=60, max_time_seconds=20):
                 # Boundary edges (only 1 face) are always external
                 if num_faces == 1:
                     is_external = True
-                # Edges between different surface types
+                # Check dihedral angle for 2-face edges
                 elif num_faces == 2:
                     face1 = topods.Face(face_list.First())
                     face2 = topods.Face(face_list.Last())
-                    adaptor1 = BRepAdaptor_Surface(face1)
-                    adaptor2 = BRepAdaptor_Surface(face2)
                     
-                    # Different surface types → external edge
-                    if adaptor1.GetType() != adaptor2.GetType():
-                        is_external = True
+                    try:
+                        # Sample edge at midpoint to get normals
+                        curve = BRepAdaptor_Curve(edge)
+                        u_mid = (curve.FirstParameter() + curve.LastParameter()) / 2.0
+                        point_on_edge = curve.Value(u_mid)
+                        
+                        # Get surface adaptors
+                        adaptor1 = BRepAdaptor_Surface(face1)
+                        adaptor2 = BRepAdaptor_Surface(face2)
+                        
+                        # Get UV parameters by projection
+                        from OCC.Core.GeomAPI import GeomAPI_ProjectPointOnSurf
+                        projector1 = GeomAPI_ProjectPointOnSurf(point_on_edge, BRep_Tool.Surface(face1))
+                        projector2 = GeomAPI_ProjectPointOnSurf(point_on_edge, BRep_Tool.Surface(face2))
+                        
+                        if projector1.NbPoints() > 0 and projector2.NbPoints() > 0:
+                            u1, v1 = projector1.Parameters(1)
+                            u2, v2 = projector2.Parameters(1)
+                            
+                            # Get normals via derivatives
+                            pnt1, d1u1, d1v1 = gp_Pnt(), gp_Vec(), gp_Vec()
+                            pnt2, d1u2, d1v2 = gp_Pnt(), gp_Vec(), gp_Vec()
+                            adaptor1.D1(u1, v1, pnt1, d1u1, d1v1)
+                            adaptor2.D1(u2, v2, pnt2, d1u2, d1v2)
+                            
+                            # Cross product to get normals
+                            normal1 = d1u1.Crossed(d1v1)
+                            normal2 = d1u2.Crossed(d1v2)
+                            
+                            # Handle face orientation
+                            if face1.Orientation() == 1:  # Reversed
+                                normal1.Reverse()
+                            if face2.Orientation() == 1:
+                                normal2.Reverse()
+                            
+                            # Normalize
+                            normal1.Normalize()
+                            normal2.Normalize()
+                            
+                            # Calculate angle between normals
+                            dot_product = normal1.Dot(normal2)
+                            # Clamp to [-1, 1] for acos
+                            dot_product = max(-1.0, min(1.0, dot_product))
+                            angle_rad = math.acos(dot_product)
+                            angle_deg = math.degrees(angle_rad)
+                            
+                            # Mark as external if sharp edge (> 20 degree dihedral angle)
+                            # 160 degrees = surfaces almost parallel
+                            if angle_deg > 20:
+                                is_external = True
+                        else:
+                            # Projection failed, fallback to surface type check
+                            if adaptor1.GetType() != adaptor2.GetType():
+                                is_external = True
+                    except Exception:
+                        # Fallback: check surface type difference
+                        adaptor1 = BRepAdaptor_Surface(face1)
+                        adaptor2 = BRepAdaptor_Surface(face2)
+                        if adaptor1.GetType() != adaptor2.GetType():
+                            is_external = True
             except Exception as e:
                 # If we can't determine, assume it's external (better to include than exclude)
                 is_external = True
@@ -382,23 +440,43 @@ def get_average_face_normal(triangulation, transform, reversed_face=False):
 
 def tessellate_shape(shape):
     """
-    Generate display mesh with fixed quality optimized for quotation platform.
+    Generate display mesh with adaptive quality for smooth curved surfaces (Phase A).
+    Curved surfaces get 3x finer tessellation, flat surfaces stay coarse.
     This is ONLY for visual verification, NOT for manufacturing calculations.
     """
     try:
         # Calculate adaptive deflection based on part size
         bbox_diagonal, bbox_coords = calculate_bbox_diagonal(shape)
+        base_deflection = bbox_diagonal * 0.008  # Base: 0.8% of diagonal for flat surfaces
         
-        # Fixed preset optimized for quotations:
-        # - Accurate enough for visual verification
-        # - Fast processing (<30s for most parts)
-        # - Consistent triangle count (15-25k)
-        deflection = bbox_diagonal * 0.008  # 0.8% of diagonal
-        angular_deflection = 0.5
+        logger.info(f"🔧 Adaptive tessellation: diagonal={bbox_diagonal:.2f}mm, base_deflection={base_deflection:.4f}mm")
         
-        logger.info(f"🔧 Display tessellation: diagonal={bbox_diagonal:.2f}mm, deflection={deflection:.4f}mm")
+        # Phase A: Apply surface-specific tessellation quality
+        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+        while face_explorer.More():
+            face = topods.Face(face_explorer.Current())
+            surface = BRepAdaptor_Surface(face)
+            surf_type = surface.GetType()
+            
+            # Detect curved surfaces that need fine tessellation
+            if surf_type in [GeomAbs_Cylinder, GeomAbs_Cone, GeomAbs_Sphere, 
+                           GeomAbs_Torus, GeomAbs_BSplineSurface, GeomAbs_BezierSurface]:
+                # 3x finer for smooth curves (fillets, cylinders, etc.)
+                face_deflection = base_deflection / 3.0
+                angular_deflection = 0.3  # Finer angular steps for smoothness
+            else:
+                # Coarse for flat surfaces (planes don't need refinement)
+                face_deflection = base_deflection
+                angular_deflection = 0.5
+            
+            # Apply face-specific tessellation
+            face_mesh = BRepMesh_IncrementalMesh(face, face_deflection, False, angular_deflection, True)
+            face_mesh.Perform()
+            
+            face_explorer.Next()
         
-        mesh = BRepMesh_IncrementalMesh(shape, deflection, False, angular_deflection, True)
+        # Final global mesh to ensure consistency
+        mesh = BRepMesh_IncrementalMesh(shape, base_deflection, False, 0.5, True)
         mesh.Perform()
         if not mesh.IsDone():
             raise Exception("Mesh tessellation failed")
@@ -575,7 +653,7 @@ def analyze_cad():
 
         # Get bounding box
         bbox = Bnd_Box()
-        brepbndlib_Add(shape, bbox)
+        brepbndlib.Add(shape, bbox)
         xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
 
         part_width_cm = (xmax - xmin) / 10
