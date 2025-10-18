@@ -202,14 +202,18 @@ def extract_feature_edges(shape, max_edges=500, max_time_seconds=20):
                 # Get the 3D curve from the edge (BRep_Tool.Curve returns a tuple/list)
                 curve_result = BRep_Tool.Curve(edge)
                 
-                if not curve_result or curve_result[0] is None:
+                # Handle degenerate edges (no 3D curve or incomplete result)
+                if not curve_result or len(curve_result) < 3:
                     edge_explorer.Next()
                     continue
                 
-                curve_handle = curve_result[0]
+                if curve_result[0] is None:
+                    edge_explorer.Next()
+                    continue
+                
+                curve = curve_result[0]  # Already a Geom_Curve, no GetObject() needed
                 first_param = curve_result[1]
                 last_param = curve_result[2]
-                curve = curve_handle.GetObject()
                 
                 # Create curve adapter for querying curve properties
                 curve_adaptor = BRepAdaptor_Curve(edge)
