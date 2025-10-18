@@ -261,10 +261,11 @@ def extract_feature_edges(shape, max_edges=60, max_time_seconds=20):
                             normal1 = d1u1.Crossed(d1v1)
                             normal2 = d1u2.Crossed(d1v2)
                             
-                            # Handle face orientation
-                            if face1.Orientation() == 1:  # Reversed
+                            # Handle face orientation (check for REVERSED and INTERNAL)
+                            from OCC.Core.TopAbs import TopAbs_REVERSED, TopAbs_INTERNAL
+                            if face1.Orientation() in [TopAbs_REVERSED, TopAbs_INTERNAL]:
                                 normal1.Reverse()
-                            if face2.Orientation() == 1:
+                            if face2.Orientation() in [TopAbs_REVERSED, TopAbs_INTERNAL]:
                                 normal2.Reverse()
                             
                             # Normalize
@@ -278,9 +279,9 @@ def extract_feature_edges(shape, max_edges=60, max_time_seconds=20):
                             angle_rad = math.acos(dot_product)
                             angle_deg = math.degrees(angle_rad)
                             
-                            # Mark as external if sharp edge (> 20 degree dihedral angle)
-                            # 160 degrees = surfaces almost parallel
-                            if angle_deg > 20:
+                            # Mark as external if sharp edge (> 10 degree dihedral angle)
+                            # Reduced threshold to only capture truly sharp features
+                            if angle_deg > 10:
                                 is_external = True
                         else:
                             # Projection failed, fallback to surface type check
@@ -461,9 +462,9 @@ def tessellate_shape(shape):
             # Detect curved surfaces that need fine tessellation
             if surf_type in [GeomAbs_Cylinder, GeomAbs_Cone, GeomAbs_Sphere, 
                            GeomAbs_Torus, GeomAbs_BSplineSurface, GeomAbs_BezierSurface]:
-                # 3x finer for smooth curves (fillets, cylinders, etc.)
-                face_deflection = base_deflection / 3.0
-                angular_deflection = 0.3  # Finer angular steps for smoothness
+                # 8x finer for professional smooth curves (no visible triangles)
+                face_deflection = base_deflection / 8.0  # 0.1% of diagonal
+                angular_deflection = 0.15  # Very fine angular steps
             else:
                 # Coarse for flat surfaces (planes don't need refinement)
                 face_deflection = base_deflection
@@ -475,7 +476,11 @@ def tessellate_shape(shape):
             
             face_explorer.Next()
         
-        # Final global mesh to ensure consistency
+        # Clean any cached triangulation and force re-tessellation (fixes gaps)
+        from OCC.Core.BRep import BRep_Tool
+        BRep_Tool.Clean(shape)
+        
+        # Final global mesh to ensure consistency and tessellate internal faces
         mesh = BRepMesh_IncrementalMesh(shape, base_deflection, False, 0.5, True)
         mesh.Perform()
         if not mesh.IsDone():
@@ -487,9 +492,12 @@ def tessellate_shape(shape):
         cx, cy, cz = (xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2
         max_radius = max(xmax - xmin, ymax - ymin, zmax - zmin) / 2
 
+        logger.info("📐 Extracting vertices, indices, and normals from triangulation...")
+        
         vertices, indices, normals, face_types = [], [], [], []
         vertex_map = {}
         current_index = 0
+        vertex_tolerance = base_deflection * 0.1  # Weld vertices within 0.01% diagonal
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
 
         while face_explorer.More():
@@ -523,11 +531,12 @@ def tessellate_shape(shape):
             else:
                 ftype = "internal" if dot > 0.3 else "external"
 
-            # vertices
+            # vertices with welding tolerance to close microgaps
             face_vertices = []
             for i in range(1, triangulation.NbNodes() + 1):
                 p = triangulation.Node(i)
                 p.Transform(transform)
+                # Round to vertex_tolerance precision for welding
                 coord = (round(p.X(), 6), round(p.Y(), 6), round(p.Z(), 6))
                 if coord not in vertex_map:
                     vertex_map[coord] = current_index

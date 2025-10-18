@@ -1,6 +1,7 @@
 import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 interface MeshData {
   vertices: number[];
@@ -156,30 +157,47 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         </mesh>
       )}
       
-      {/* Clean feature edges (continuous polylines for smooth curves) */}
-      {showEdges && featureEdges && featureEdges.map((polyline, index) => (
-        <group key={index}>
-          {/* Layer 1: Primary visible edges (crisp black outlines) */}
-          <primitive object={new THREE.Line(polyline, new THREE.LineBasicMaterial({
-            color: "#000000",
-            linewidth: 1,
-            depthTest: true
-          }))} renderOrder={2} />
+      {/* Clean feature edges (batched for performance) */}
+      {showEdges && featureEdges && (() => {
+        // Merge all polylines into single geometry for single draw call
+        const mergedGeometry = mergeGeometries(featureEdges);
+        
+        return (
+          <>
+            {/* Primary visible edges (crisp black outlines) */}
+            <primitive 
+              object={new THREE.LineSegments(
+                mergedGeometry,
+                new THREE.LineBasicMaterial({
+                  color: "#000000",
+                  linewidth: 1.5,
+                  depthTest: true
+                })
+              )} 
+              renderOrder={2} 
+            />
 
-          {/* Layer 2: Optional hidden edges (faint dashed lines behind surfaces) */}
-          {showHiddenEdges && (
-            <primitive object={new THREE.Line(polyline, new THREE.LineDashedMaterial({
-              color: "#333333",
-              opacity: 0.3,
-              transparent: true,
-              depthTest: true,
-              depthFunc: THREE.GreaterDepth,
-              dashSize: 1.5,
-              gapSize: 1.5
-            }))} renderOrder={1} />
-          )}
-        </group>
-      ))}
+            {/* Optional hidden edges */}
+            {showHiddenEdges && (
+              <primitive 
+                object={new THREE.LineSegments(
+                  mergedGeometry,
+                  new THREE.LineDashedMaterial({
+                    color: "#333333",
+                    opacity: 0.3,
+                    transparent: true,
+                    depthTest: true,
+                    depthFunc: THREE.GreaterDepth,
+                    dashSize: 1.5,
+                    gapSize: 1.5
+                  })
+                )} 
+                renderOrder={1} 
+              />
+            )}
+          </>
+        );
+      })()}
     </group>
   );
 }
