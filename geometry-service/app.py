@@ -199,13 +199,16 @@ def extract_feature_edges(shape, max_edges=500, max_time_seconds=20):
             edge = topods.Edge(edge_explorer.Current())
             
             try:
-                # Get the 3D curve from the edge
-                curve_handle, first_param, last_param = BRep_Tool.Curve(edge)
+                # Get the 3D curve from the edge (BRep_Tool.Curve returns a tuple/list)
+                curve_result = BRep_Tool.Curve(edge)
                 
-                if curve_handle is None:
+                if not curve_result or curve_result[0] is None:
                     edge_explorer.Next()
                     continue
                 
+                curve_handle = curve_result[0]
+                first_param = curve_result[1]
+                last_param = curve_result[2]
                 curve = curve_handle.GetObject()
                 
                 # Create curve adapter for querying curve properties
@@ -239,8 +242,8 @@ def extract_feature_edges(shape, max_edges=500, max_time_seconds=20):
                     edge_count += 1
                     
             except Exception as e:
-                # Skip problematic edges silently
-                logger.debug(f"Skipping edge due to error: {e}")
+                # Log edge extraction failures for debugging
+                logger.warning(f"⚠️ Failed to extract edge: {type(e).__name__}: {e}")
                 pass
             
             edge_explorer.Next()
