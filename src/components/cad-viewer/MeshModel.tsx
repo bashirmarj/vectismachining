@@ -37,20 +37,34 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return geo;
   }, [meshData]);
   
-  // Create feature edges using EdgesGeometry with adaptive crease angle
+  // Create feature edges from BREP data (true CAD edges, not mesh tessellation)
   const featureEdges = useMemo(() => {
     if (!showEdges && displayStyle !== 'wireframe') return null;
-
-    // Use adaptive crease angle based on display style
-    // 30° for solid mode (fewer edges, cleaner look)
-    // 15° for wireframe mode (more edges, technical drawing style)
-    const creaseAngle = displayStyle === 'wireframe' 
-      ? THREE.MathUtils.degToRad(15) 
-      : THREE.MathUtils.degToRad(30);
-
-    const edgesGeo = new THREE.EdgesGeometry(geometry, creaseAngle);
-    return edgesGeo;
-  }, [geometry, showEdges, displayStyle]);
+    
+    // Check if backend provided BREP feature edges
+    if (!meshData.feature_edges || meshData.feature_edges.length === 0) {
+      console.warn('No BREP feature edges available from backend');
+      return null;
+    }
+    
+    // Convert BREP edge polylines to Three.js line segments
+    const positions: number[] = [];
+    
+    meshData.feature_edges.forEach((edge: number[][]) => {
+      // Each edge is an array of [x, y, z] points representing a polyline
+      for (let i = 0; i < edge.length - 1; i++) {
+        // Add line segment from point i to point i+1
+        positions.push(...edge[i], ...edge[i + 1]);
+      }
+    });
+    
+    if (positions.length === 0) return null;
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    
+    return geometry;
+  }, [meshData.feature_edges, showEdges, displayStyle]);
 
   
   // Section cut plane
@@ -106,7 +120,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   
   return (
     <group>
-      {/* Render solid mesh */}
+      {/* Render solid mesh (hide in wireframe mode) */}
       {displayStyle !== 'wireframe' && (
         <mesh geometry={geometry}>
           <meshStandardMaterial
@@ -117,7 +131,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         </mesh>
       )}
       
-      {/* Render feature edges */}
+      {/* Render BREP feature edges (true CAD edges from backend) */}
       {featureEdges && (
         <lineSegments geometry={featureEdges}>
           <lineBasicMaterial 

@@ -180,13 +180,78 @@ def recognize_manufacturing_features(shape):
     return features
 
 
-def extract_feature_edges(shape, max_edges=120, max_time_seconds=20):
+def extract_feature_edges(shape, max_edges=500, max_time_seconds=20):
     """
-    Simplified edge extraction - returns empty list.
-    Frontend now handles dynamic silhouette rendering in real-time.
+    Extract TRUE feature edges from BREP geometry (not mesh tessellation).
+    Returns edges as polylines sampled from the actual CAD curves.
+    This eliminates tessellation artifacts - cylinders show clean circles, not triangulated edges.
     """
-    logger.info("Edge extraction skipped - using frontend dynamic silhouette rendering")
-    return []
+    logger.info("🔍 Extracting BREP feature edges from CAD geometry...")
+    
+    feature_edges = []
+    edge_count = 0
+    
+    try:
+        # Explore all edges in the BREP topology
+        edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
+        
+        while edge_explorer.More() and edge_count < max_edges:
+            edge = topods.Edge(edge_explorer.Current())
+            
+            try:
+                # Get the 3D curve from the edge
+                curve_handle, first_param, last_param = BRep_Tool.Curve(edge)
+                
+                if curve_handle is None:
+                    edge_explorer.Next()
+                    continue
+                
+                curve = curve_handle.GetObject()
+                
+                # Create curve adapter for querying curve properties
+                curve_adaptor = BRepAdaptor_Curve(edge)
+                curve_type = curve_adaptor.GetType()
+                
+                # Adaptive sampling based on curve type
+                if curve_type == GeomAbs_Line:
+                    # Lines only need 2 points
+                    num_samples = 2
+                elif curve_type == GeomAbs_Circle:
+                    # Circles need more points for smooth appearance
+                    num_samples = 32
+                elif curve_type in [GeomAbs_BSplineCurve, GeomAbs_BezierCurve]:
+                    # Complex curves need adaptive sampling
+                    num_samples = 24
+                else:
+                    # Default for other curve types
+                    num_samples = 20
+                
+                # Sample points along the curve
+                points = []
+                for i in range(num_samples + 1):
+                    param = first_param + (last_param - first_param) * i / num_samples
+                    point = curve.Value(param)
+                    points.append([point.X(), point.Y(), point.Z()])
+                
+                # Only add edges with valid geometry
+                if len(points) >= 2:
+                    feature_edges.append(points)
+                    edge_count += 1
+                    
+            except Exception as e:
+                # Skip problematic edges silently
+                logger.debug(f"Skipping edge due to error: {e}")
+                pass
+            
+            edge_explorer.Next()
+        
+        logger.info(f"✅ Extracted {len(feature_edges)} BREP feature edges (no tessellation artifacts)")
+        
+    except Exception as e:
+        logger.error(f"Error extracting feature edges: {e}")
+        return []
+    
+    return feature_edges
 
 
 def calculate_face_center(triangulation, transform):
@@ -418,9 +483,9 @@ def analyze_cad():
         logger.info("🎨 Generating display mesh for 3D viewer...")
         mesh_data = tessellate_shape(shape)  # No quality parameter
         
-        # === STEP 3: EDGE EXTRACTION (for visual verification) ===
-        logger.info("📏 Extracting feature edges for display...")
-        feature_edges = extract_feature_edges(shape, max_edges=60)
+        # === STEP 3: BREP EDGE EXTRACTION (true CAD edges, not mesh) ===
+        logger.info("📏 Extracting BREP feature edges for professional display...")
+        feature_edges = extract_feature_edges(shape, max_edges=500)
         mesh_data["feature_edges"] = feature_edges
         mesh_data["triangle_count"] = len(mesh_data.get("indices", [])) // 3
 
