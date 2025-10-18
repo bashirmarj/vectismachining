@@ -2,6 +2,7 @@ import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { DynamicSilhouetteEdges } from './DynamicSilhouetteEdges';
 
 interface MeshData {
   vertices: number[];
@@ -157,47 +158,21 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         </mesh>
       )}
       
-      {/* Clean feature edges (batched for performance) */}
-      {showEdges && featureEdges && (() => {
-        // Merge all polylines into single geometry for single draw call
-        const mergedGeometry = mergeGeometries(featureEdges);
-        
-        return (
-          <>
-            {/* Primary visible edges (crisp black outlines) */}
-            <primitive 
-              object={new THREE.LineSegments(
-                mergedGeometry,
-                new THREE.LineBasicMaterial({
-                  color: "#000000",
-                  linewidth: 1.5,
-                  depthTest: true
-                })
-              )} 
-              renderOrder={2} 
-            />
-
-            {/* Optional hidden edges */}
-            {showHiddenEdges && (
-              <primitive 
-                object={new THREE.LineSegments(
-                  mergedGeometry,
-                  new THREE.LineDashedMaterial({
-                    color: "#333333",
-                    opacity: 0.3,
-                    transparent: true,
-                    depthTest: true,
-                    depthFunc: THREE.GreaterDepth,
-                    dashSize: 1.5,
-                    gapSize: 1.5
-                  })
-                )} 
-                renderOrder={1} 
-              />
-            )}
-          </>
-        );
-      })()}
+      {/* Dynamic silhouette edges for solid mode */}
+      {showEdges && displayStyle !== 'wireframe' && (
+        <DynamicSilhouetteEdges 
+          geometry={geometry} 
+          color="#000000" 
+          thickness={1.5} 
+        />
+      )}
+      
+      {/* Wireframe mode - show all triangle edges */}
+      {displayStyle === 'wireframe' && (
+        <mesh geometry={geometry}>
+          <meshBasicMaterial wireframe color="#000000" />
+        </mesh>
+      )}
     </group>
   );
 }
