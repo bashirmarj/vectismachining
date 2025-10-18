@@ -112,7 +112,7 @@ export const PartUploadForm = () => {
           file_name: fileWithQty.file.name,
           file_data: base64File,
           file_size: fileWithQty.file.size,
-          quality: "0.8",
+          quality: "2.0",
           force_reanalyze: true
         }
       });
@@ -123,20 +123,7 @@ export const PartUploadForm = () => {
 
       console.log("✅ Edge function response:", result);
 
-      // Fetch mesh from storage if URL is provided
-      let meshData: any = {};
-      if (result.mesh_url) {
-        console.log('📥 Fetching mesh from storage...');
-        try {
-          const meshResponse = await fetch(result.mesh_url);
-          meshData = await meshResponse.json();
-          console.log('✅ Mesh loaded from storage');
-        } catch (meshError) {
-          console.error('❌ Failed to fetch mesh:', meshError);
-        }
-      } else {
-        meshData = result.mesh_data || result.meshData || {};
-      }
+      const meshData = result.mesh_data || result.meshData || {};
 
       setFiles((prev) =>
         prev.map((f, i) =>
