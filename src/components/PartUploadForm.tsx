@@ -99,15 +99,22 @@ export const PartUploadForm = () => {
         prev.map((f, i) => (i === index ? { ...f, isAnalyzing: true } : f))
       );
 
-      const formData = new FormData();
-      formData.append("file", fileWithQty.file);
-      formData.append("quality", "0.25");
-      formData.append("forceReanalyze", "true");
+      // Convert file to base64
+      const fileBuffer = await fileWithQty.file.arrayBuffer();
+      const base64File = btoa(
+        new Uint8Array(fileBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
 
       console.log(`📤 Sending ${fileWithQty.file.name} to edge function (may take 30-60s on first use)...`);
 
       const { data: result, error } = await supabase.functions.invoke('analyze-cad', {
-        body: formData
+        body: {
+          file_name: fileWithQty.file.name,
+          file_data: base64File,
+          file_size: fileWithQty.file.size,
+          quality: "0.25",
+          force_reanalyze: true
+        }
       });
 
       if (error) {
