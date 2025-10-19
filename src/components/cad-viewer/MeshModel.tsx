@@ -38,21 +38,41 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   // Create single unified geometry for professional solid rendering
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
-    geo.setIndex(meshData.indices);
     
-    // Only use backend normals when NOT using topology colors
     if (!topologyColors) {
+      // Standard indexed geometry with smooth normals
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
+      geo.setIndex(meshData.indices);
       geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
       geo.computeVertexNormals();
       geo.normalizeNormals();
     } else {
-      // For topology colors: don't set normals
-      // Three.js will automatically compute flat normals per-face
-      // This prevents color interpolation between vertices
-      if (geo.hasAttribute('normal')) {
-        geo.deleteAttribute('normal');
+      // Non-indexed geometry for face colors - duplicate vertices per triangle
+      const triangleCount = meshData.indices.length / 3;
+      const positions = new Float32Array(triangleCount * 9); // 3 vertices * 3 coords
+      
+      for (let i = 0; i < triangleCount; i++) {
+        const idx0 = meshData.indices[i * 3];
+        const idx1 = meshData.indices[i * 3 + 1];
+        const idx2 = meshData.indices[i * 3 + 2];
+        
+        // Copy vertex positions for this triangle
+        positions[i * 9 + 0] = meshData.vertices[idx0 * 3];
+        positions[i * 9 + 1] = meshData.vertices[idx0 * 3 + 1];
+        positions[i * 9 + 2] = meshData.vertices[idx0 * 3 + 2];
+        
+        positions[i * 9 + 3] = meshData.vertices[idx1 * 3];
+        positions[i * 9 + 4] = meshData.vertices[idx1 * 3 + 1];
+        positions[i * 9 + 5] = meshData.vertices[idx1 * 3 + 2];
+        
+        positions[i * 9 + 6] = meshData.vertices[idx2 * 3];
+        positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
+        positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
       }
+      
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      // No setIndex() - non-indexed geometry
+      // No normals - Three.js will compute flat normals automatically
     }
     
     geo.computeBoundingSphere();
@@ -60,51 +80,50 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return geo;
   }, [meshData, topologyColors]);
   
-  // Apply vertex colors using backend BREP face types
+  // Apply face colors using backend BREP face types
   useEffect(() => {
     if (!geometry) return;
     
     if (topologyColors) {
       if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
-        console.log('🎨 Applying vertex colors from backend');
+        console.log('🎨 Applying face colors (solid per triangle)');
         
-        const vertexCount = meshData.vertices.length / 3;
-        
-        // Now they WILL match!
-        if (meshData.vertex_colors.length !== vertexCount) {
-          console.error(`❌ Vertex colors length mismatch: ${meshData.vertex_colors.length} vs ${vertexCount}`);
-          return;
-        }
-        
-        const colors = new Float32Array(vertexCount * 3);
+        const triangleCount = meshData.indices.length / 3;
+        const colors = new Float32Array(triangleCount * 9); // 3 vertices * 3 RGB per triangle
         const typeCount: { [key: string]: number } = {};
         
-        for (let i = 0; i < vertexCount; i++) {
-          const faceType = meshData.vertex_colors[i] || 'default';
+        for (let i = 0; i < triangleCount; i++) {
+          // Get the first vertex of this triangle to determine face type
+          const idx0 = meshData.indices[i * 3];
+          const faceType = meshData.vertex_colors[idx0] || 'default';
           typeCount[faceType] = (typeCount[faceType] || 0) + 1;
           
           const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
           const color = new THREE.Color(colorHex);
-          colors[i * 3] = color.r;
-          colors[i * 3 + 1] = color.g;
-          colors[i * 3 + 2] = color.b;
+          
+          // Apply the SAME color to all 3 vertices of this triangle
+          for (let v = 0; v < 3; v++) {
+            colors[i * 9 + v * 3 + 0] = color.r;
+            colors[i * 9 + v * 3 + 1] = color.g;
+            colors[i * 9 + v * 3 + 2] = color.b;
+          }
         }
         
-        console.log('Backend vertex color distribution:', typeCount);
+        console.log('Face color distribution:', typeCount);
         
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geometry.attributes.color.needsUpdate = true;
         
-        console.log('✅ Vertex colors applied from backend BREP analysis');
+        console.log('✅ Face colors applied (solid per triangle)');
       } else {
         // ⚠️ FALLBACK: No vertex_colors from backend - apply uniform silver color
         console.warn('⚠️ No vertex_colors from backend, falling back to uniform silver color');
         
-        const vertexCount = meshData.vertices.length / 3;
-        const colors = new Float32Array(vertexCount * 3);
+        const triangleCount = meshData.indices.length / 3;
+        const colors = new Float32Array(triangleCount * 9);
         const silverColor = new THREE.Color('#CCCCCC');
         
-        for (let i = 0; i < vertexCount; i++) {
+        for (let i = 0; i < triangleCount * 3; i++) {
           colors[i * 3] = silverColor.r;
           colors[i * 3 + 1] = silverColor.g;
           colors[i * 3 + 2] = silverColor.b;
@@ -118,7 +137,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     } else {
       // Remove color attribute when topology colors are disabled
       if (geometry.attributes.color) {
-        console.log('🧹 Removing vertex colors from geometry');
+        console.log('🧹 Removing face colors from geometry');
         geometry.deleteAttribute('color');
       }
     }
