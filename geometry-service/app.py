@@ -307,9 +307,12 @@ def tessellate_shape(shape):
     try:
         # Calculate adaptive deflection based on part size
         bbox_diagonal, bbox_coords = calculate_bbox_diagonal(shape)
-        base_deflection = bbox_diagonal * 0.008  # Base: 0.8% of diagonal for flat surfaces
         
-        logger.info(f"🔧 Adaptive tessellation: diagonal={bbox_diagonal:.2f}mm, base_deflection={base_deflection:.4f}mm")
+        # Use refined tessellation (0.2mm max) for high-quality curved surface rendering
+        # This eliminates visible triangulation artifacts on holes and cylinders
+        base_deflection = min(bbox_diagonal * 0.008, 0.2)  # Cap at 0.2mm for professional quality
+        
+        logger.info(f"🔧 Refined tessellation: diagonal={bbox_diagonal:.2f}mm, base_deflection={base_deflection:.4f}mm")
         
         # Phase A: Apply surface-specific tessellation quality
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
