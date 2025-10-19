@@ -56,69 +56,89 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   useEffect(() => {
     if (!geometry) return;
     
-    if (topologyColors && meshData.face_types && meshData.face_types.length > 0) {
-      console.log('🎨 Applying backend BREP face types as vertex colors');
-      
-      const vertexCount = meshData.vertices.length / 3;
-      const indices = meshData.indices;
-      
-      // Backend sends one face_type per vertex
-      if (meshData.face_types.length !== vertexCount) {
-        console.error(`❌ Face types length mismatch: ${meshData.face_types.length} vs ${vertexCount} vertices`);
-        return;
-      }
-      
-      // Priority system for vertices at boundaries between different face types
-      const vertexFaceTypes = new Map<number, string>();
-      const faceTypePriority: { [key: string]: number } = {
-        'internal': 4,
-        'planar': 3,
-        'cylindrical': 2,
-        'external': 1,
-        'default': 0
-      };
-      
-      // For each triangle, assign face types to vertices with priority
-      for (let i = 0; i < indices.length; i += 3) {
-        const idx1 = indices[i];
-        const idx2 = indices[i + 1];
-        const idx3 = indices[i + 2];
+    if (topologyColors) {
+      if (meshData.face_types && meshData.face_types.length > 0) {
+        console.log('🎨 Applying backend BREP face types as vertex colors');
         
-        // Get face types from backend for these 3 vertices
-        const ft1 = meshData.face_types[idx1] || 'default';
-        const ft2 = meshData.face_types[idx2] || 'default';
-        const ft3 = meshData.face_types[idx3] || 'default';
+        const vertexCount = meshData.vertices.length / 3;
+        const indices = meshData.indices;
         
-        // Apply priority system
-        [[idx1, ft1], [idx2, ft2], [idx3, ft3]].forEach(([vertexIdx, faceType]) => {
-          const currentType = vertexFaceTypes.get(vertexIdx as number);
-          if (!currentType || faceTypePriority[faceType as string] > faceTypePriority[currentType]) {
-            vertexFaceTypes.set(vertexIdx as number, faceType as string);
-          }
-        });
-      }
-      
-      // Apply colors
-      const colors = new Float32Array(vertexCount * 3);
-      const typeCount: { [key: string]: number } = {};
-      
-      for (let i = 0; i < vertexCount; i++) {
-        const faceType = vertexFaceTypes.get(i) || 'default';
-        typeCount[faceType] = (typeCount[faceType] || 0) + 1;
+        // Backend sends one face_type per vertex
+        if (meshData.face_types.length !== vertexCount) {
+          console.error(`❌ Face types length mismatch: ${meshData.face_types.length} vs ${vertexCount} vertices`);
+          return;
+        }
         
-        const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
-        const color = new THREE.Color(colorHex);
-        colors[i * 3] = color.r;
-        colors[i * 3 + 1] = color.g;
-        colors[i * 3 + 2] = color.b;
+        // Priority system for vertices at boundaries between different face types
+        const vertexFaceTypes = new Map<number, string>();
+        const faceTypePriority: { [key: string]: number } = {
+          'internal': 4,
+          'planar': 3,
+          'cylindrical': 2,
+          'external': 1,
+          'default': 0
+        };
+        
+        // For each triangle, assign face types to vertices with priority
+        for (let i = 0; i < indices.length; i += 3) {
+          const idx1 = indices[i];
+          const idx2 = indices[i + 1];
+          const idx3 = indices[i + 2];
+          
+          // Get face types from backend for these 3 vertices
+          const ft1 = meshData.face_types[idx1] || 'default';
+          const ft2 = meshData.face_types[idx2] || 'default';
+          const ft3 = meshData.face_types[idx3] || 'default';
+          
+          // Apply priority system
+          [[idx1, ft1], [idx2, ft2], [idx3, ft3]].forEach(([vertexIdx, faceType]) => {
+            const currentType = vertexFaceTypes.get(vertexIdx as number);
+            if (!currentType || faceTypePriority[faceType as string] > faceTypePriority[currentType]) {
+              vertexFaceTypes.set(vertexIdx as number, faceType as string);
+            }
+          });
+        }
+        
+        // Apply colors
+        const colors = new Float32Array(vertexCount * 3);
+        const typeCount: { [key: string]: number } = {};
+        
+        for (let i = 0; i < vertexCount; i++) {
+          const faceType = vertexFaceTypes.get(i) || 'default';
+          typeCount[faceType] = (typeCount[faceType] || 0) + 1;
+          
+          const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
+          const color = new THREE.Color(colorHex);
+          colors[i * 3] = color.r;
+          colors[i * 3 + 1] = color.g;
+          colors[i * 3 + 2] = color.b;
+        }
+        
+        console.log('Backend face type distribution:', typeCount);
+        
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.attributes.color.needsUpdate = true;
+        
+        console.log('✅ Vertex colors applied from backend BREP analysis');
+      } else {
+        // ⚠️ FALLBACK: No face_types from backend - apply uniform silver color
+        console.warn('⚠️ No face_types from backend, falling back to uniform silver color');
+        
+        const vertexCount = meshData.vertices.length / 3;
+        const colors = new Float32Array(vertexCount * 3);
+        const silverColor = new THREE.Color('#CCCCCC');
+        
+        for (let i = 0; i < vertexCount; i++) {
+          colors[i * 3] = silverColor.r;
+          colors[i * 3 + 1] = silverColor.g;
+          colors[i * 3 + 2] = silverColor.b;
+        }
+        
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.attributes.color.needsUpdate = true;
+        
+        console.log('✅ Applied fallback silver color for all vertices');
       }
-      
-      console.log('Backend face type distribution:', typeCount);
-      
-      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      geometry.attributes.color.needsUpdate = true;
-      
-      console.log('✅ Vertex colors applied from backend BREP analysis');
     } else {
       // Remove color attribute when topology colors are disabled
       if (geometry.attributes.color) {
