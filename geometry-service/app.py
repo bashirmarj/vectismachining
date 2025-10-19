@@ -94,79 +94,99 @@ def get_face_midpoint(face):
 
 def classify_faces_topology(shape):
     """
-    Classify faces as inner/outer/through using BREP topology.
-    Uses normal direction with proper offset testing for accurate classification.
-    Returns: dict mapping face index to classification type
+    Classify faces using the most reliable method: 
+    Check if moving INWARD from the surface keeps you inside the solid.
+    This is the approach used by professional CAD tools.
     """
     from OCC.Core.BRepClass3d import BRepClass3d_SolidClassifier
     
     face_types = {}
     face_objects = []
     
-    # Get bounding box for reference
+    # Get bounding box
     bbox = Bnd_Box()
     brepbndlib.Add(shape, bbox)
     xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
-    bbox_center = gp_Pnt((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
     bbox_size = max(xmax - xmin, ymax - ymin, zmax - zmin)
     
-    # STEP 1: Classify each face by testing points offset along the normal
     face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
     face_idx = 0
-    
-    classifier = BRepClass3d_SolidClassifier(shape)
     
     while face_explorer.More():
         face = topods.Face(face_explorer.Current())
         face_objects.append(face)
         
         try:
-            surface = BRepAdaptor_Surface(face)
-            
-            # Get face properties for center point
+            # Get face center
             face_props = GProp_GProps()
             brepgprop.SurfaceProperties(face, face_props)
             face_center = face_props.CentreOfMass()
             
-            # Get UV bounds
+            # Get surface normal at center
+            surface = BRepAdaptor_Surface(face)
             umin, umax, vmin, vmax = breptools_UVBounds(face)
             u_mid = (umin + umax) / 2
             v_mid = (vmin + vmax) / 2
             
-            # Get normal at face center
             point_on_surf = gp_Pnt()
             normal_vec = gp_Vec()
             BRepGProp_Face(face).Normal(u_mid, v_mid, point_on_surf, normal_vec)
             
-            # Normalize normal vector
             normal_length = normal_vec.Magnitude()
-            if normal_length > 1e-9:
-                normal_vec.Divide(normal_length)
-            else:
-                # Fallback if normal calculation fails
+            if normal_length < 1e-9:
                 face_types[face_idx] = "outer"
                 face_idx += 1
                 face_explorer.Next()
                 continue
             
-            # Test point OUTSIDE the surface (along normal direction)
-            offset_distance = bbox_size * 0.01  # 1% of bbox size
+            normal_vec.Divide(normal_length)
             
-            test_point_out = gp_Pnt(
-                face_center.X() + normal_vec.X() * offset_distance,
-                face_center.Y() + normal_vec.Y() * offset_distance,
-                face_center.Z() + normal_vec.Z() * offset_distance
+            # Key insight: Test TWO points - one on each side of the surface
+            offset = bbox_size * 0.005  # 0.5% offset
+            
+            # Point in the direction of the normal
+            point_normal_dir = gp_Pnt(
+                face_center.X() + normal_vec.X() * offset,
+                face_center.Y() + normal_vec.Y() * offset,
+                face_center.Z() + normal_vec.Z() * offset
             )
             
-            # Classify the offset point
-            classifier.Perform(test_point_out, 1e-6)
-            state = classifier.State()
+            # Point opposite to the normal
+            point_opposite_dir = gp_Pnt(
+                face_center.X() - normal_vec.X() * offset,
+                face_center.Y() - normal_vec.Y() * offset,
+                face_center.Z() - normal_vec.Z() * offset
+            )
             
-            # If point OUTSIDE surface is INSIDE solid → face normal points inward → INNER face
-            # If point OUTSIDE surface is OUTSIDE solid → face normal points outward → OUTER face
-            if state == TopAbs_IN:
+            # Test both points
+            classifier = BRepClass3d_SolidClassifier(shape)
+            
+            classifier.Perform(point_normal_dir, 1e-6)
+            state_normal = classifier.State()
+            
+            classifier.Perform(point_opposite_dir, 1e-6)
+            state_opposite = classifier.State()
+            
+            # Classification logic:
+            # If normal direction is OUT and opposite is IN → surface faces outward → OUTER
+            # If normal direction is IN and opposite is OUT → surface faces inward → INNER
+            # If both IN → shouldn't happen (surface in middle of solid)
+            # If both OUT → thin wall or edge case → default OUTER
+            
+            in_normal = (state_normal == TopAbs_IN)
+            in_opposite = (state_opposite == TopAbs_IN)
+            
+            if in_normal and not in_opposite:
+                # Normal points inward into solid
+                face_types[face_idx] = "inner"
+            elif not in_normal and in_opposite:
+                # Normal points outward from solid
+                face_types[face_idx] = "outer"
+            elif in_normal and in_opposite:
+                # Both sides are inside (shouldn't happen) - classify as inner
                 face_types[face_idx] = "inner"
             else:
+                # Both sides are outside - classify as outer
                 face_types[face_idx] = "outer"
                     
         except Exception as e:
@@ -697,7 +717,7 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "1.7.0",
+        "version": "1.8.0",
         "status": "running",
         "endpoints": {
             "health": "/health",
