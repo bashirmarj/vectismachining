@@ -134,9 +134,8 @@ def classify_faces_topology(shape):
         face_explorer.Next()
     
     # STEP 2: Build edge-to-faces adjacency map
-    from OCC.Core.TopExp import TopExp
     edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
-    TopExp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
+    topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
     
     # STEP 3: Detect "through" faces (connect inner and outer)
     for face_idx, face in enumerate(face_objects):
