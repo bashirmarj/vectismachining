@@ -112,6 +112,17 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return geometry;
   }, [meshData.feature_edges, showEdges, displayStyle]);
 
+  // Create dynamic silhouette edges using EdgesGeometry (for outer circular perimeters)
+  const silhouetteEdges = useMemo(() => {
+    if (!showEdges && displayStyle !== 'wireframe') return null;
+    
+    // Use EdgesGeometry to detect edges where adjacent triangles meet at significant angles
+    // Angle threshold of 15° captures outer cylinder perimeters and sharp features
+    const edgesGeometry = new THREE.EdgesGeometry(geometry, 15);
+    
+    return edgesGeometry;
+  }, [geometry, showEdges, displayStyle]);
+
   
   // Section cut plane
   const clippingPlane = useMemo(() => {
@@ -181,6 +192,18 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       {/* Render BREP feature edges (true CAD edges from backend) */}
       {featureEdges && (
         <lineSegments geometry={featureEdges}>
+          <lineBasicMaterial 
+            color="#000000" 
+            linewidth={1}
+            clippingPlanes={clippingPlane}
+            clipIntersection={false}
+          />
+        </lineSegments>
+      )}
+      
+      {/* Render dynamic silhouette edges (outer circular perimeters and sharp features) */}
+      {silhouetteEdges && (
+        <lineSegments geometry={silhouetteEdges}>
           <lineBasicMaterial 
             color="#000000" 
             linewidth={1}
