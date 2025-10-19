@@ -27,8 +27,7 @@ from OCC.Core.TopoDS import topods
 from OCC.Core.GProp import GProp_GProps
 from OCC.Core.BRepGProp import brepgprop, BRepGProp_Face
 from OCC.Core.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListIteratorOfListOfShape
-from OCC.Core.gp import gp_Vec, gp_Pnt, gp_Lin, gp_Dir
-from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
+from OCC.Core.gp import gp_Vec, gp_Pnt
 
 import logging
 
@@ -126,32 +125,20 @@ def classify_faces_topology(shape):
             brepgprop.SurfaceProperties(face, face_props)
             face_center = face_props.CentreOfMass()
             
-            # Direction to point at infinity (away from bbox center)
-            to_infinity = [
-                face_center.X() - bbox_center[0],
-                face_center.Y() - bbox_center[1],
-                face_center.Z() - bbox_center[2]
-            ]
+            # FIXED: Cast ray in CONSISTENT direction (always +Z toward sky)
+            # This is more reliable than "away from center"
+            to_infinity = [0, 0, 1]  # Always upward
             
-            length = math.sqrt(to_infinity[0]**2 + to_infinity[1]**2 + to_infinity[2]**2)
-            if length < 1e-6:
-                # Face center at bbox center - use arbitrary direction
-                to_infinity = [1, 0, 0]
-                length = 1
-            
-            # Normalize
-            to_infinity = [to_infinity[0]/length, to_infinity[1]/length, to_infinity[2]/length]
-            
-            # Start slightly offset from face to avoid self-intersection
+            # Start slightly offset from face 
             start_offset = bbox_size * 0.001
             start_point = gp_Pnt(
-                face_center.X() + to_infinity[0] * start_offset,
-                face_center.Y() + to_infinity[1] * start_offset,
-                face_center.Z() + to_infinity[2] * start_offset
+                face_center.X(),
+                face_center.Y(),
+                face_center.Z() + start_offset  # Offset in +Z
             )
             
-            # Ray toward infinity
-            ray_dir = gp_Dir(to_infinity[0], to_infinity[1], to_infinity[2])
+            # Ray toward +Z infinity
+            ray_dir = gp_Dir(0, 0, 1)
             ray = gp_Lin(start_point, ray_dir)
             
             # Cast ray and count intersections
@@ -159,12 +146,12 @@ def classify_faces_topology(shape):
             intersection_count = intersector.NbPnt()
             
             # JORDAN CURVE THEOREM:
-            # Even intersections (including 0) = OUTER
-            # Odd intersections = INNER
-            if intersection_count % 2 == 0:
-                face_types[face_idx] = "outer"
-            else:
+            # Odd intersections = INNER (must cross boundary to escape)
+            # Even intersections (including 0) = OUTER (already outside or crosses twice)
+            if intersection_count % 2 == 1:
                 face_types[face_idx] = "inner"
+            else:
+                face_types[face_idx] = "outer"
             
             # Debug first few faces
             if face_idx < 5:
@@ -400,7 +387,11 @@ def calculate_face_center(triangulation, transform):
 
 
 def tessellate_shape(shape):
-    """Generate display mesh with adaptive quality"""
+    """
+    === SECTION 1: MESH GENERATION ONLY ===
+    Generate display mesh with adaptive quality.
+    NO color classification here - purely geometric mesh creation.
+    """
     try:
         bbox_diagonal, bbox_coords = calculate_bbox_diagonal(shape)
         base_deflection = min(bbox_diagonal * 0.008, 0.2)
@@ -434,17 +425,10 @@ def tessellate_shape(shape):
         xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
         cx, cy, cz = (xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2
 
-        logger.info("📊 Extracting vertices...")
+        logger.info("📊 Extracting mesh geometry (no classification)...")
         
-        face_types_topo = classify_faces_topology(shape)
-        
-        FACE_COLOR_MAP = {
-            "inner": "internal",
-            "outer": "external",
-            "through": "through",
-        }
-        
-        vertices, indices, normals, vertex_colors = [], [], [], []
+        vertices, indices, normals = [], [], []
+        face_data = []  # Store face metadata for later classification
         current_index = 0
         
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
@@ -468,23 +452,20 @@ def tessellate_shape(shape):
             bbox_center = [cx, cy, cz]
             to_surface = [center[0] - bbox_center[0], center[1] - bbox_center[1], center[2] - bbox_center[2]]
             
-            base_face_type = face_types_topo.get(face_idx, "outer")
-            
-            if surf_type == GeomAbs_Plane:
-                ftype = "planar"
-            else:
-                ftype = FACE_COLOR_MAP.get(base_face_type, "external")
-
+            # Store face metadata for classification
+            face_start_vertex = current_index
             face_vertices = []
+            
             for i in range(1, triangulation.NbNodes() + 1):
                 p = triangulation.Node(i)
                 p.Transform(transform)
                 
                 vertices.extend([p.X(), p.Y(), p.Z()])
-                vertex_colors.append(ftype)
                 face_vertices.append(current_index)
                 current_index += 1
 
+            face_start_index = len(indices)
+            
             for i in range(1, triangulation.NbTriangles() + 1):
                 tri = triangulation.Triangle(i)
                 n1, n2, n3 = tri.Get()
@@ -508,19 +489,32 @@ def tessellate_shape(shape):
                     n = [-x for x in n]
                 for _ in range(3):
                     normals.extend(n)
+            
+            # Store face info for classification
+            face_data.append({
+                'face_idx': face_idx,
+                'surf_type': surf_type,
+                'center': center,
+                'start_vertex': face_start_vertex,
+                'vertex_count': len(face_vertices),
+                'start_index': face_start_index,
+                'triangle_count': (len(indices) - face_start_index) // 3,
+                'face_object': face
+            })
 
             face_explorer.Next()
             face_idx += 1
 
         vertex_count = len(vertices) // 3
         triangle_count = len(indices) // 3
-        logger.info(f"✅ Tessellation complete: {vertex_count} vertices, {triangle_count} triangles")
+        logger.info(f"✅ Mesh generation complete: {vertex_count} vertices, {triangle_count} triangles")
         
         return {
             "vertices": vertices,
             "indices": indices,
             "normals": normals,
-            "vertex_colors": vertex_colors,
+            "face_data": face_data,
+            "bbox": (xmin, ymin, zmin, xmax, ymax, zmax),
             "triangle_count": triangle_count,
         }
 
@@ -530,9 +524,159 @@ def tessellate_shape(shape):
             "vertices": [],
             "indices": [],
             "normals": [],
-            "vertex_colors": [],
+            "face_data": [],
+            "bbox": (0, 0, 0, 0, 0, 0),
             "triangle_count": 0,
         }
+
+
+def classify_mesh_faces(mesh_data, shape):
+    """
+    === SECTION 2: COLOR CLASSIFICATION ONLY ===
+    Analyze the already-generated mesh to classify face types.
+    Uses mesh normals and geometry - NO BREP queries!
+    
+    Returns: vertex_colors array mapping each vertex to a color type
+    """
+    logger.info("🎨 Starting MESH-BASED color classification...")
+    
+    vertices = mesh_data["vertices"]
+    normals = mesh_data["normals"]
+    face_data = mesh_data["face_data"]
+    xmin, ymin, zmin, xmax, ymax, zmax = mesh_data["bbox"]
+    
+    bbox_center = [(xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2]
+    bbox_size = max(xmax - xmin, ymax - ymin, zmax - zmin)
+    
+    # Initialize all vertices as "external" (default)
+    vertex_count = len(vertices) // 3
+    vertex_colors = ["external"] * vertex_count
+    
+    # Classify each face using mesh data
+    for face_info in face_data:
+        face_idx = face_info['face_idx']
+        surf_type = face_info['surf_type']
+        center = face_info['center']
+        start_vertex = face_info['start_vertex']
+        vertex_count_face = face_info['vertex_count']
+        start_index = face_info['start_index']
+        triangle_count = face_info['triangle_count']
+        
+        # Get average normal for this face from mesh
+        avg_normal = [0, 0, 0]
+        for tri_idx in range(triangle_count):
+            normal_idx = (start_index + tri_idx * 3) * 3
+            avg_normal[0] += normals[normal_idx]
+            avg_normal[1] += normals[normal_idx + 1]
+            avg_normal[2] += normals[normal_idx + 2]
+        
+        # Normalize
+        n_len = math.sqrt(avg_normal[0]**2 + avg_normal[1]**2 + avg_normal[2]**2)
+        if n_len > 1e-9:
+            avg_normal = [avg_normal[0]/n_len, avg_normal[1]/n_len, avg_normal[2]/n_len]
+        
+        # Vector from bbox center to face center
+        to_face = [
+            center[0] - bbox_center[0],
+            center[1] - bbox_center[1],
+            center[2] - bbox_center[2]
+        ]
+        t_len = math.sqrt(to_face[0]**2 + to_face[1]**2 + to_face[2]**2)
+        if t_len > 1e-9:
+            to_face = [to_face[0]/t_len, to_face[1]/t_len, to_face[2]/t_len]
+        
+        # Dot product: normal · to_face
+        # Positive = normal points away from center → OUTER
+        # Negative = normal points toward center → INNER
+        dot_product = avg_normal[0]*to_face[0] + avg_normal[1]*to_face[1] + avg_normal[2]*to_face[2]
+        
+        # Classify this face
+        if surf_type == GeomAbs_Plane:
+            face_type = "planar"
+        elif dot_product > 0.1:
+            face_type = "external"
+        else:
+            face_type = "internal"
+        
+        # Apply color to all vertices of this face
+        for v_idx in range(start_vertex, start_vertex + vertex_count_face):
+            vertex_colors[v_idx] = face_type
+    
+    # Through-hole detection (using face_data)
+    # Build edge adjacency from face_data
+    edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
+    topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
+    
+    for face_info in face_data:
+        face = face_info['face_object']
+        face_idx = face_info['face_idx']
+        surf_type = face_info['surf_type']
+        start_vertex = face_info['start_vertex']
+        vertex_count_face = face_info['vertex_count']
+        
+        # Check if this is an inner cylindrical face
+        if surf_type != GeomAbs_Cylinder:
+            continue
+        
+        # Check if currently classified as internal
+        if vertex_colors[start_vertex] != "internal":
+            continue
+        
+        # Check cylinder size
+        try:
+            surface = BRepAdaptor_Surface(face)
+            cyl = surface.Cylinder()
+            radius = cyl.Radius()
+            
+            if radius > bbox_size * 0.15:
+                continue
+        except:
+            continue
+        
+        # Check if connects to external faces
+        edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
+        has_outer_neighbor = False
+        
+        while edge_exp.More():
+            edge = edge_exp.Current()
+            
+            for map_idx in range(1, edge_face_map.Size() + 1):
+                map_edge = edge_face_map.FindKey(map_idx)
+                if edge.IsSame(map_edge):
+                    face_list = edge_face_map.FindFromIndex(map_idx)
+                    face_iter = TopTools_ListIteratorOfListOfShape(face_list)
+                    
+                    while face_iter.More():
+                        adj_face = topods.Face(face_iter.Value())
+                        
+                        # Find this adjacent face in our face_data
+                        for other_info in face_data:
+                            if adj_face.IsSame(other_info['face_object']):
+                                other_start = other_info['start_vertex']
+                                if vertex_colors[other_start] == "external":
+                                    has_outer_neighbor = True
+                                    break
+                        
+                        if has_outer_neighbor:
+                            break
+                        face_iter.Next()
+                    break
+            
+            if has_outer_neighbor:
+                break
+            edge_exp.Next()
+        
+        # Mark as through-hole
+        if has_outer_neighbor:
+            for v_idx in range(start_vertex, start_vertex + vertex_count_face):
+                vertex_colors[v_idx] = "through"
+    
+    type_counts = {}
+    for vtype in vertex_colors:
+        type_counts[vtype] = type_counts.get(vtype, 0) + 1
+    logger.info(f"✅ Mesh classification complete! Distribution: {type_counts}")
+    
+    return vertex_colors
 
 
 @app.route("/analyze-cad", methods=["POST"])
@@ -568,6 +712,10 @@ def analyze_cad():
         
         logger.info("🎨 Generating display mesh...")
         mesh_data = tessellate_shape(shape)
+        
+        logger.info("🎨 Classifying face colors...")
+        vertex_colors = classify_mesh_faces(mesh_data, shape)
+        mesh_data["vertex_colors"] = vertex_colors
         
         logger.info("🔍 Extracting BREP edges...")
         feature_edges = extract_feature_edges(shape, max_edges=500)
@@ -611,7 +759,7 @@ def analyze_cad():
                 'vertex_colors': mesh_data['vertex_colors'],
                 'feature_edges': feature_edges,
                 'triangle_count': mesh_data['triangle_count'],
-                'face_classification_method': 'jordan_curve_theorem'
+                'face_classification_method': 'mesh_based_normals'
             },
             'volume_cm3': exact_props['volume'] / 1000,
             'surface_area_cm2': exact_props['surface_area'] / 100,
@@ -628,7 +776,7 @@ def analyze_cad():
             'quotation_ready': True,
             'status': 'success',
             'confidence': 0.98,
-            'method': 'brep_jordan_curve_theorem'
+            'method': 'mesh_based_classification'
         })
 
     except Exception as e:
@@ -645,7 +793,7 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "4.0.0-jordan-curve",
+        "version": "5.0.0-mesh-based",
         "status": "running",
         "endpoints": {
             "health": "/health",
