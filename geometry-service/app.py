@@ -68,7 +68,7 @@ def calculate_exact_volume_and_area(shape):
     brepgprop.SurfaceProperties(shape, area_props)
     exact_surface_area = area_props.Mass()
     
-    logger.info(f"📐 Exact BREP calculations: volume={exact_volume:.2f}mm³, area={exact_surface_area:.2f}mm²")
+    logger.info(f"🔍 Exact BREP calculations: volume={exact_volume:.2f}mm³, area={exact_surface_area:.2f}mm²")
     
     return {
         'volume': exact_volume,
@@ -79,155 +79,6 @@ def calculate_exact_volume_and_area(shape):
             volume_props.CentreOfMass().Z()
         ]
     }
-
-
-def classify_faces_topology(shape):
-    """
-    JORDAN CURVE THEOREM - Mathematically guaranteed approach!
-    
-    Cast ray from each face to infinity. Count intersections:
-    - EVEN intersections (0, 2, 4...) → OUTER
-    - ODD intersections (1, 3, 5...) → INNER
-    
-    This is the 3D extension of ray-casting for point-in-polygon.
-    Cannot fail if implemented correctly!
-    """
-    from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
-    from OCC.Core.gp import gp_Lin, gp_Dir
-    
-    face_types = {}
-    face_objects = []
-    
-    # Get bounding box
-    bbox = Bnd_Box()
-    brepbndlib.Add(shape, bbox)
-    xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
-    bbox_size = max(xmax - xmin, ymax - ymin, zmax - zmin)
-    bbox_center = [(xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2]
-    
-    # Collect all faces
-    face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
-    while face_explorer.More():
-        face = topods.Face(face_explorer.Current())
-        face_objects.append(face)
-        face_explorer.Next()
-    
-    # Ray intersector
-    intersector = IntCurvesFace_ShapeIntersector()
-    intersector.Load(shape, 1e-6)
-    
-    logger.info(f"🎯 JORDAN CURVE THEOREM classification for {len(face_objects)} faces...")
-    
-    for face_idx, face in enumerate(face_objects):
-        try:
-            # Get face center
-            face_props = GProp_GProps()
-            brepgprop.SurfaceProperties(face, face_props)
-            face_center = face_props.CentreOfMass()
-            
-            # FIXED: Cast ray in CONSISTENT direction (always +Z toward sky)
-            # This is more reliable than "away from center"
-            to_infinity = [0, 0, 1]  # Always upward
-            
-            # Start slightly offset from face 
-            start_offset = bbox_size * 0.001
-            start_point = gp_Pnt(
-                face_center.X(),
-                face_center.Y(),
-                face_center.Z() + start_offset  # Offset in +Z
-            )
-            
-            # Ray toward +Z infinity
-            ray_dir = gp_Dir(0, 0, 1)
-            ray = gp_Lin(start_point, ray_dir)
-            
-            # Cast ray and count intersections
-            intersector.Perform(ray, 0, bbox_size * 10)
-            intersection_count = intersector.NbPnt()
-            
-            # JORDAN CURVE THEOREM:
-            # Odd intersections = INNER (must cross boundary to escape)
-            # Even intersections (including 0) = OUTER (already outside or crosses twice)
-            if intersection_count % 2 == 1:
-                face_types[face_idx] = "inner"
-            else:
-                face_types[face_idx] = "outer"
-            
-            # Debug first few faces
-            if face_idx < 5:
-                logger.info(f"  Face {face_idx}: {intersection_count} intersections → {face_types[face_idx]}")
-                
-        except Exception as e:
-            logger.warning(f"Face {face_idx} failed: {e}")
-            face_types[face_idx] = "outer"
-    
-    # === THROUGH-HOLE DETECTION ===
-    edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
-    topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
-    
-    edge_to_face_indices = {}
-    for map_idx in range(1, edge_face_map.Size() + 1):
-        edge = edge_face_map.FindKey(map_idx)
-        face_list = edge_face_map.FindFromIndex(map_idx)
-        
-        adjacent_face_indices = []
-        face_iter = TopTools_ListIteratorOfListOfShape(face_list)
-        while face_iter.More():
-            adj_face = topods.Face(face_iter.Value())
-            for f_idx, stored_face in enumerate(face_objects):
-                if adj_face.IsSame(stored_face):
-                    adjacent_face_indices.append(f_idx)
-                    break
-            face_iter.Next()
-        
-        edge_to_face_indices[edge] = adjacent_face_indices
-    
-    # Detect through-holes
-    for face_idx, face in enumerate(face_objects):
-        if face_types[face_idx] != "inner":
-            continue
-        
-        surface = BRepAdaptor_Surface(face)
-        if surface.GetType() != GeomAbs_Cylinder:
-            continue
-        
-        try:
-            cyl = surface.Cylinder()
-            radius = cyl.Radius()
-            
-            # Small to medium holes (< 15% of bbox)
-            if radius > bbox_size * 0.15:
-                continue
-            
-            # Must connect to outer faces
-            edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
-            outer_connections = 0
-            
-            while edge_exp.More():
-                edge = edge_exp.Current()
-                
-                for map_edge, adj_indices in edge_to_face_indices.items():
-                    if edge.IsSame(map_edge):
-                        for adj_idx in adj_indices:
-                            if adj_idx != face_idx and face_types.get(adj_idx) == "outer":
-                                outer_connections += 1
-                        break
-                edge_exp.Next()
-            
-            # Through-hole if connects to outer surface
-            if outer_connections >= 2:
-                face_types[face_idx] = "through"
-                
-        except:
-            pass
-    
-    logger.info(f"✅ Jordan Curve classification complete!")
-    type_counts = {}
-    for ftype in face_types.values():
-        type_counts[ftype] = type_counts.get(ftype, 0) + 1
-    logger.info(f"   Distribution: {type_counts}")
-    
-    return face_types
 
 
 def recognize_manufacturing_features(shape):
@@ -315,7 +166,7 @@ def recognize_manufacturing_features(shape):
 
 def extract_feature_edges(shape, max_edges=500):
     """Extract TRUE feature edges from BREP geometry"""
-    logger.info("🔍 Extracting BREP feature edges...")
+    logger.info("📐 Extracting BREP feature edges...")
     
     feature_edges = []
     edge_count = 0
@@ -532,13 +383,13 @@ def tessellate_shape(shape):
 
 def classify_mesh_faces(mesh_data, shape):
     """
-    === SECTION 2: COLOR CLASSIFICATION ONLY ===
-    Analyze the already-generated mesh to classify face types.
-    Uses mesh normals and geometry - NO BREP queries!
+    === SECTION 2: COLOR CLASSIFICATION (MESH-BASED) ===
+    FIXED VERSION - Properly handles cylindrical surfaces
     
-    Returns: vertex_colors array mapping each vertex to a color type
+    Key insight: For cylinders, normal direction alone is unreliable!
+    We need to check the RADIUS to determine inner vs outer.
     """
-    logger.info("🎨 Starting MESH-BASED color classification...")
+    logger.info("🎨 Starting IMPROVED mesh-based color classification...")
     
     vertices = mesh_data["vertices"]
     normals = mesh_data["normals"]
@@ -552,30 +403,139 @@ def classify_mesh_faces(mesh_data, shape):
     vertex_count = len(vertices) // 3
     vertex_colors = ["external"] * vertex_count
     
-    # Classify each face using mesh data
+    # Build edge-to-face adjacency map for through-hole detection
+    edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
+    topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
+    
+    logger.info("🔍 Classifying faces by geometry...")
+    
+    # Classify each face
     for face_info in face_data:
         face_idx = face_info['face_idx']
         surf_type = face_info['surf_type']
         center = face_info['center']
         start_vertex = face_info['start_vertex']
         vertex_count_face = face_info['vertex_count']
-        start_index = face_info['start_index']
-        triangle_count = face_info['triangle_count']
+        face_object = face_info['face_object']
         
-        # Get average normal for this face from mesh
-        avg_normal = [0, 0, 0]
-        for tri_idx in range(triangle_count):
-            normal_idx = (start_index + tri_idx * 3) * 3
-            avg_normal[0] += normals[normal_idx]
-            avg_normal[1] += normals[normal_idx + 1]
-            avg_normal[2] += normals[normal_idx + 2]
+        # === PLANAR FACES ===
+        if surf_type == GeomAbs_Plane:
+            for v_idx in range(start_vertex, start_vertex + vertex_count_face):
+                vertex_colors[v_idx] = "planar"
+            continue
         
-        # Normalize
-        n_len = math.sqrt(avg_normal[0]**2 + avg_normal[1]**2 + avg_normal[2]**2)
-        if n_len > 1e-9:
-            avg_normal = [avg_normal[0]/n_len, avg_normal[1]/n_len, avg_normal[2]/n_len]
+        # === CYLINDRICAL FACES - FIXED LOGIC ===
+        if surf_type == GeomAbs_Cylinder:
+            try:
+                surface = BRepAdaptor_Surface(face_object)
+                cyl = surface.Cylinder()
+                radius = cyl.Radius()
+                axis_location = cyl.Axis().Location()
+                
+                # Calculate distance from face center to cylinder axis
+                axis_point = [axis_location.X(), axis_location.Y(), axis_location.Z()]
+                dist_to_axis = math.sqrt(
+                    (center[0] - axis_point[0])**2 +
+                    (center[1] - axis_point[1])**2 +
+                    (center[2] - axis_point[2])**2
+                )
+                
+                # Calculate distance from bbox center to axis
+                bbox_to_axis = math.sqrt(
+                    (bbox_center[0] - axis_point[0])**2 +
+                    (bbox_center[1] - axis_point[1])**2 +
+                    (bbox_center[2] - axis_point[2])**2
+                )
+                
+                # KEY LOGIC:
+                # If face is closer to axis than bbox center → INNER surface (bore, hole)
+                # If face is farther from axis than bbox center → OUTER surface (boss, shell)
+                
+                is_small_hole = radius < bbox_size * 0.15
+                
+                if dist_to_axis < bbox_to_axis:
+                    # Inner cylindrical surface
+                    if is_small_hole:
+                        # Small hole - check if it's a through-hole
+                        has_outer_neighbor = False
+                        edge_exp = TopExp_Explorer(face_object, TopAbs_EDGE)
+                        
+                        while edge_exp.More() and not has_outer_neighbor:
+                            edge = edge_exp.Current()
+                            
+                            for map_idx in range(1, edge_face_map.Size() + 1):
+                                map_edge = edge_face_map.FindKey(map_idx)
+                                if edge.IsSame(map_edge):
+                                    face_list = edge_face_map.FindFromIndex(map_idx)
+                                    face_iter = TopTools_ListIteratorOfListOfShape(face_list)
+                                    
+                                    while face_iter.More():
+                                        adj_face = topods.Face(face_iter.Value())
+                                        
+                                        # Check if adjacent face is external
+                                        for other_info in face_data:
+                                            if adj_face.IsSame(other_info['face_object']):
+                                                # Check if this neighbor is outer
+                                                if other_info['surf_type'] != GeomAbs_Cylinder:
+                                                    has_outer_neighbor = True
+                                                else:
+                                                    try:
+                                                        other_surf = BRepAdaptor_Surface(adj_face)
+                                                        other_cyl = other_surf.Cylinder()
+                                                        other_radius = other_cyl.Radius()
+                                                        other_axis = other_cyl.Axis().Location()
+                                                        other_axis_pt = [other_axis.X(), other_axis.Y(), other_axis.Z()]
+                                                        other_center = other_info['center']
+                                                        
+                                                        other_dist = math.sqrt(
+                                                            (other_center[0] - other_axis_pt[0])**2 +
+                                                            (other_center[1] - other_axis_pt[1])**2 +
+                                                            (other_center[2] - other_axis_pt[2])**2
+                                                        )
+                                                        other_bbox_dist = math.sqrt(
+                                                            (bbox_center[0] - other_axis_pt[0])**2 +
+                                                            (bbox_center[1] - other_axis_pt[1])**2 +
+                                                            (bbox_center[2] - other_axis_pt[2])**2
+                                                        )
+                                                        
+                                                        if other_dist > other_bbox_dist:
+                                                            has_outer_neighbor = True
+                                                    except:
+                                                        pass
+                                                break
+                                        
+                                        if has_outer_neighbor:
+                                            break
+                                        face_iter.Next()
+                                    break
+                            
+                            if has_outer_neighbor:
+                                break
+                            edge_exp.Next()
+                        
+                        # Classify as through-hole or internal
+                        face_type = "through" if has_outer_neighbor else "internal"
+                    else:
+                        # Large inner cylindrical surface (main bore)
+                        face_type = "internal"
+                else:
+                    # Outer cylindrical surface
+                    face_type = "external"
+                
+                # Apply classification
+                for v_idx in range(start_vertex, start_vertex + vertex_count_face):
+                    vertex_colors[v_idx] = face_type
+                
+                if face_idx < 10:
+                    logger.info(f"  Face {face_idx}: Cylinder R={radius:.2f}mm, dist={dist_to_axis:.2f}, bbox_dist={bbox_to_axis:.2f} → {face_type}")
+                
+                continue
+                
+            except Exception as e:
+                logger.warning(f"Cylinder classification failed for face {face_idx}: {e}")
         
-        # Vector from bbox center to face center
+        # === OTHER SURFACES (cones, spheres, etc) ===
+        # Use normal-based classification as fallback
         to_face = [
             center[0] - bbox_center[0],
             center[1] - bbox_center[1],
@@ -585,92 +545,29 @@ def classify_mesh_faces(mesh_data, shape):
         if t_len > 1e-9:
             to_face = [to_face[0]/t_len, to_face[1]/t_len, to_face[2]/t_len]
         
-        # Dot product: normal · to_face
-        # Positive = normal points away from center → OUTER
-        # Negative = normal points toward center → INNER
+        # Get average normal for this face
+        avg_normal = [0, 0, 0]
+        triangle_count = face_info['triangle_count']
+        start_index = face_info['start_index']
+        
+        for tri_idx in range(triangle_count):
+            normal_idx = (start_index + tri_idx * 3) * 3
+            avg_normal[0] += normals[normal_idx]
+            avg_normal[1] += normals[normal_idx + 1]
+            avg_normal[2] += normals[normal_idx + 2]
+        
+        n_len = math.sqrt(avg_normal[0]**2 + avg_normal[1]**2 + avg_normal[2]**2)
+        if n_len > 1e-9:
+            avg_normal = [avg_normal[0]/n_len, avg_normal[1]/n_len, avg_normal[2]/n_len]
+        
         dot_product = avg_normal[0]*to_face[0] + avg_normal[1]*to_face[1] + avg_normal[2]*to_face[2]
         
-        # Classify this face
-        if surf_type == GeomAbs_Plane:
-            face_type = "planar"
-        elif dot_product > 0.1:
-            face_type = "external"
-        else:
-            face_type = "internal"
+        face_type = "external" if dot_product > 0.1 else "internal"
         
-        # Apply color to all vertices of this face
         for v_idx in range(start_vertex, start_vertex + vertex_count_face):
             vertex_colors[v_idx] = face_type
     
-    # Through-hole detection (using face_data)
-    # Build edge adjacency from face_data
-    edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
-    topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
-    
-    for face_info in face_data:
-        face = face_info['face_object']
-        face_idx = face_info['face_idx']
-        surf_type = face_info['surf_type']
-        start_vertex = face_info['start_vertex']
-        vertex_count_face = face_info['vertex_count']
-        
-        # Check if this is an inner cylindrical face
-        if surf_type != GeomAbs_Cylinder:
-            continue
-        
-        # Check if currently classified as internal
-        if vertex_colors[start_vertex] != "internal":
-            continue
-        
-        # Check cylinder size
-        try:
-            surface = BRepAdaptor_Surface(face)
-            cyl = surface.Cylinder()
-            radius = cyl.Radius()
-            
-            if radius > bbox_size * 0.15:
-                continue
-        except:
-            continue
-        
-        # Check if connects to external faces
-        edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
-        has_outer_neighbor = False
-        
-        while edge_exp.More():
-            edge = edge_exp.Current()
-            
-            for map_idx in range(1, edge_face_map.Size() + 1):
-                map_edge = edge_face_map.FindKey(map_idx)
-                if edge.IsSame(map_edge):
-                    face_list = edge_face_map.FindFromIndex(map_idx)
-                    face_iter = TopTools_ListIteratorOfListOfShape(face_list)
-                    
-                    while face_iter.More():
-                        adj_face = topods.Face(face_iter.Value())
-                        
-                        # Find this adjacent face in our face_data
-                        for other_info in face_data:
-                            if adj_face.IsSame(other_info['face_object']):
-                                other_start = other_info['start_vertex']
-                                if vertex_colors[other_start] == "external":
-                                    has_outer_neighbor = True
-                                    break
-                        
-                        if has_outer_neighbor:
-                            break
-                        face_iter.Next()
-                    break
-            
-            if has_outer_neighbor:
-                break
-            edge_exp.Next()
-        
-        # Mark as through-hole
-        if has_outer_neighbor:
-            for v_idx in range(start_vertex, start_vertex + vertex_count_face):
-                vertex_colors[v_idx] = "through"
-    
+    # Count classification results
     type_counts = {}
     for vtype in vertex_colors:
         type_counts[vtype] = type_counts.get(vtype, 0) + 1
@@ -706,18 +603,18 @@ def analyze_cad():
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
-        logger.info("📐 Analyzing BREP geometry...")
+        logger.info("🔍 Analyzing BREP geometry...")
         exact_props = calculate_exact_volume_and_area(shape)
         manufacturing_features = recognize_manufacturing_features(shape)
         
         logger.info("🎨 Generating display mesh...")
         mesh_data = tessellate_shape(shape)
         
-        logger.info("🎨 Classifying face colors...")
+        logger.info("🎨 Classifying face colors using MESH-BASED approach...")
         vertex_colors = classify_mesh_faces(mesh_data, shape)
         mesh_data["vertex_colors"] = vertex_colors
         
-        logger.info("🔍 Extracting BREP edges...")
+        logger.info("📐 Extracting BREP edges...")
         feature_edges = extract_feature_edges(shape, max_edges=500)
         mesh_data["feature_edges"] = feature_edges
         mesh_data["triangle_count"] = len(mesh_data.get("indices", [])) // 3
@@ -759,7 +656,7 @@ def analyze_cad():
                 'vertex_colors': mesh_data['vertex_colors'],
                 'feature_edges': feature_edges,
                 'triangle_count': mesh_data['triangle_count'],
-                'face_classification_method': 'mesh_based_normals'
+                'face_classification_method': 'mesh_based_geometry_radius'
             },
             'volume_cm3': exact_props['volume'] / 1000,
             'surface_area_cm2': exact_props['surface_area'] / 100,
@@ -776,7 +673,7 @@ def analyze_cad():
             'quotation_ready': True,
             'status': 'success',
             'confidence': 0.98,
-            'method': 'mesh_based_classification'
+            'method': 'mesh_based_radius_classification'
         })
 
     except Exception as e:
@@ -793,11 +690,16 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "5.0.0-mesh-based",
+        "version": "6.0.0-mesh-radius-based",
         "status": "running",
         "endpoints": {
             "health": "/health",
             "analyze": "/analyze-cad"
+        },
+        "features": {
+            "classification": "Mesh-based with cylinder radius analysis",
+            "inner_surfaces": "Detected by distance from cylinder axis",
+            "through_holes": "Detected by adjacency to external faces"
         },
         "documentation": "POST multipart/form-data with 'file' field containing .step file"
     })
