@@ -48,50 +48,33 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       geo.computeVertexNormals();
       geo.normalizeNormals();
     } else {
-// For per-face color (topologyColors === true)
-const triangleCount = meshData.triangle_count;
-const positions = new Float32Array(triangleCount * 9);
-const normals = new Float32Array(triangleCount * 9);
-const colors = new Float32Array(triangleCount * 9);
-
-for (let i = 0; i < triangleCount * 3; i++) {
-    // Each i corresponds to a vertex
-    const vOff = i * 3;
-    positions[vOff + 0] = meshData.vertices[vOff + 0];
-    positions[vOff + 1] = meshData.vertices[vOff + 1];
-    positions[vOff + 2] = meshData.vertices[vOff + 2];
-    normals[vOff + 0] = meshData.normals[vOff + 0];
-    normals[vOff + 1] = meshData.normals[vOff + 1];
-    normals[vOff + 2] = meshData.normals[vOff + 2];
-    // Set color from the face type string
-    const faceType = meshData.vertex_colors[i] || "default";
-    const hex = TOPOLOGY_COLORS[faceType] || TOPOLOGY_COLORS.default;
-    const color = new THREE.Color(hex);
-    colors[vOff + 0] = color.r;
-    colors[vOff + 1] = color.g;
-    colors[vOff + 2] = color.b;
-}
-const geo = new THREE.BufferGeometry();
-geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-// no setIndex()
-
-// Material: (make sure to use vertexColors and flatShading)
-<mesh
-    geometry={geo}
-    material={
-        new THREE.MeshStandardMaterial({
-            vertexColors: true,
-            flatShading: true,
-            side: THREE.DoubleSide,
-            // other props...
-        })
+      // Non-indexed geometry for face colors - duplicate vertices per triangle
+      const triangleCount = meshData.indices.length / 3;
+      const positions = new Float32Array(triangleCount * 9); // 3 vertices * 3 coords
+      
+      for (let i = 0; i < triangleCount; i++) {
+        const idx0 = meshData.indices[i * 3];
+        const idx1 = meshData.indices[i * 3 + 1];
+        const idx2 = meshData.indices[i * 3 + 2];
+        
+        // Copy vertex positions for this triangle
+        positions[i * 9 + 0] = meshData.vertices[idx0 * 3];
+        positions[i * 9 + 1] = meshData.vertices[idx0 * 3 + 1];
+        positions[i * 9 + 2] = meshData.vertices[idx0 * 3 + 2];
+        
+        positions[i * 9 + 3] = meshData.vertices[idx1 * 3];
+        positions[i * 9 + 4] = meshData.vertices[idx1 * 3 + 1];
+        positions[i * 9 + 5] = meshData.vertices[idx1 * 3 + 2];
+        
+        positions[i * 9 + 6] = meshData.vertices[idx2 * 3];
+        positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
+        positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
+      }
+      
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      // No setIndex() - non-indexed geometry
+      // No normals - Three.js will compute flat normals automatically
     }
->
-    {/* ... */}
-</mesh>
-
     
     geo.computeBoundingSphere();
     
@@ -119,138 +102,45 @@ geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     return `${pA[0]},${pA[1]},${pA[2]}|${pB[0]},${pB[1]},${pB[2]}`;
   };
 
-  // Apply edge-based face grouping for solid colors
+  // Apply edge-based face grouping for solid colors (NO MORE COLOR BLEEDING!)
   useEffect(() => {
     if (!geometry) return;
     
     if (topologyColors) {
       if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
-        console.log('🎨 Applying edge-based face grouping');
+        console.log('🎨 Applying direct per-triangle face colors (no bleeding)');
         
         const triangleCount = meshData.indices.length / 3;
-        
-        // STEP 1: Build feature edge lookup
-        const featureEdgeSet = new Set<string>();
-        if (meshData.feature_edges) {
-          meshData.feature_edges.forEach((edgePolyline: number[][]) => {
-            for (let i = 0; i < edgePolyline.length - 1; i++) {
-              const p1 = edgePolyline[i];
-              const p2 = edgePolyline[i + 1];
-              const key = makeEdgeKey(p1, p2);
-              featureEdgeSet.add(key);
-            }
-          });
-        }
-        console.log(`Found ${featureEdgeSet.size} feature edges`);
-        
-        // STEP 2: Build triangle adjacency graph
-        const triangleEdges = new Map<number, Array<number[]>>();
-        const edgeToTriangles = new Map<string, number[]>();
-        
-        for (let triIdx = 0; triIdx < triangleCount; triIdx++) {
-          const idx0 = meshData.indices[triIdx * 3];
-          const idx1 = meshData.indices[triIdx * 3 + 1];
-          const idx2 = meshData.indices[triIdx * 3 + 2];
-          
-          const v0 = [meshData.vertices[idx0*3], meshData.vertices[idx0*3+1], meshData.vertices[idx0*3+2]];
-          const v1 = [meshData.vertices[idx1*3], meshData.vertices[idx1*3+1], meshData.vertices[idx1*3+2]];
-          const v2 = [meshData.vertices[idx2*3], meshData.vertices[idx2*3+1], meshData.vertices[idx2*3+2]];
-          
-          triangleEdges.set(triIdx, [v0, v1, v2]);
-          
-          // Store edge->triangle mappings
-          const edges = [
-            makeEdgeKey(v0, v1),
-            makeEdgeKey(v1, v2),
-            makeEdgeKey(v2, v0)
-          ];
-          
-          edges.forEach(edgeKey => {
-            if (!edgeToTriangles.has(edgeKey)) {
-              edgeToTriangles.set(edgeKey, []);
-            }
-            edgeToTriangles.get(edgeKey)!.push(triIdx);
-          });
-        }
-        
-        // STEP 3: Connected components (flood fill)
-        const visited = new Set<number>();
-        const faceGroups: Array<{triangles: number[], type: string}> = [];
-        
-        for (let startTriIdx = 0; startTriIdx < triangleCount; startTriIdx++) {
-          if (visited.has(startTriIdx)) continue;
-          
-          const startVertexIdx = meshData.indices[startTriIdx * 3];
-          const faceType = meshData.vertex_colors[startVertexIdx] || 'default';
-          
-          // BFS to find all connected triangles of same type
-          const currentGroup: number[] = [];
-          const queue = [startTriIdx];
-          visited.add(startTriIdx);
-          
-          while (queue.length > 0) {
-            const triIdx = queue.shift()!;
-            currentGroup.push(triIdx);
-            
-            const verts = triangleEdges.get(triIdx)!;
-            const edges = [
-              makeEdgeKey(verts[0], verts[1]),
-              makeEdgeKey(verts[1], verts[2]),
-              makeEdgeKey(verts[2], verts[0])
-            ];
-            
-            // Check each edge for neighbors
-            edges.forEach(edgeKey => {
-              // Skip if this is a feature edge (boundary)
-              if (featureEdgeSet.has(edgeKey)) return;
-              
-              const neighbors = edgeToTriangles.get(edgeKey) || [];
-              neighbors.forEach(neighborIdx => {
-                if (visited.has(neighborIdx)) return;
-                
-                // Check if neighbor has same face type
-                const neighborVertexIdx = meshData.indices[neighborIdx * 3];
-                const neighborType = meshData.vertex_colors[neighborVertexIdx] || 'default';
-                
-                if (neighborType === faceType) {
-                  visited.add(neighborIdx);
-                  queue.push(neighborIdx);
-                }
-              });
-            });
-          }
-          
-          faceGroups.push({ triangles: currentGroup, type: faceType });
-        }
-        
-        console.log(`Created ${faceGroups.length} face groups from ${triangleCount} triangles`);
-        
-        // STEP 4: Apply solid colors per face group
-        const colors = new Float32Array(triangleCount * 9);
+        const colors = new Float32Array(triangleCount * 9); // 3 vertices * 3 RGB
         const typeCount: { [key: string]: number } = {};
         
-        faceGroups.forEach(group => {
-          typeCount[group.type] = (typeCount[group.type] || 0) + group.triangles.length;
+        // SIMPLIFIED APPROACH: Direct triangle coloring (backend already prevents bleeding)
+        for (let triIdx = 0; triIdx < triangleCount; triIdx++) {
+          // Get the face type from the first vertex of this triangle
+          const vertexIdx = meshData.indices[triIdx * 3];
+          const faceType = meshData.vertex_colors[vertexIdx] || 'default';
           
-          const colorHex = TOPOLOGY_COLORS[group.type as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
+          // Count face types for debugging
+          typeCount[faceType] = (typeCount[faceType] || 0) + 1;
+          
+          // Get color for this face type
+          const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
           const color = new THREE.Color(colorHex);
           
-          // Apply same color to all triangles in this face group
-          group.triangles.forEach(triIdx => {
-            for (let v = 0; v < 3; v++) {
-              colors[triIdx * 9 + v * 3 + 0] = color.r;
-              colors[triIdx * 9 + v * 3 + 1] = color.g;
-              colors[triIdx * 9 + v * 3 + 2] = color.b;
-            }
-          });
-        });
+          // Apply same solid color to all 3 vertices of this triangle
+          for (let v = 0; v < 3; v++) {
+            colors[triIdx * 9 + v * 3 + 0] = color.r;
+            colors[triIdx * 9 + v * 3 + 1] = color.g;
+            colors[triIdx * 9 + v * 3 + 2] = color.b;
+          }
+        }
         
-        console.log('Face group distribution:', typeCount);
+        console.log('Face type distribution:', typeCount);
         
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geometry.attributes.color.needsUpdate = true;
         
-        console.log('✅ Edge-based face colors applied (perfect boundaries)');
+        console.log('✅ Direct face colors applied (backend prevents bleeding)');
         
       } else {
         // ⚠️ FALLBACK: No vertex_colors from backend - apply uniform silver color
