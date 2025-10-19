@@ -139,20 +139,25 @@ def classify_faces_topology(shape):
     
     # STEP 3: Build efficient edge-to-face-indices mapping
     edge_to_face_indices = {}
-    for map_idx in range(1, edge_face_map.Size() + 1):  # FIX: Use Size() instead of Extent()
+    for map_idx in range(1, edge_face_map.Size() + 1):
         edge = edge_face_map.FindKey(map_idx)
         face_list = edge_face_map.FindFromIndex(map_idx)
         
         # Store which face indices are adjacent to this edge
         adjacent_face_indices = []
-        for i in range(len(face_list)):  # FIX: Use len() instead of .Length()
-            adj_face = topods.Face(face_list[i])  # FIX: Use 0-based indexing
+        
+        # Use OCC iterator to traverse TopTools_ListOfShape
+        face_iter = TopTools_ListIteratorOfListOfShape(face_list)
+        while face_iter.More():
+            adj_face = topods.Face(face_iter.Value())
             
             # Find this face's index in our face_objects list
             for face_idx, face in enumerate(face_objects):
                 if adj_face.IsSame(face):
                     adjacent_face_indices.append(face_idx)
                     break
+            
+            face_iter.Next()
         
         edge_to_face_indices[edge] = adjacent_face_indices
     
