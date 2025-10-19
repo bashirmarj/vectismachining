@@ -30,6 +30,7 @@ const TOPOLOGY_COLORS = {
   cylindrical: '#CCCCCC',   // Silver for outer cylindrical surfaces
   planar: '#DDDDDD',        // Light Grey for flat faces
   external: '#CCCCCC',      // Silver for other outer surfaces
+  through: '#FFD700',       // Gold/Yellow for through holes
   default: '#CCCCCC'        // Default silver
 };
 

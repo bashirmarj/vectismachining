@@ -82,6 +82,109 @@ def calculate_exact_volume_and_area(shape):
     }
 
 
+def get_face_midpoint(face):
+    """Get the midpoint of a face for topology classification"""
+    from OCC.Core.BRepTools import breptools_UVBounds
+    surf = BRepAdaptor_Surface(face)
+    umin, umax, vmin, vmax = breptools_UVBounds(face)
+    mid_u = (umin + umax) / 2
+    mid_v = (vmin + vmax) / 2
+    return surf.Value(mid_u, mid_v)
+
+
+def classify_faces_topology(shape):
+    """
+    Classify faces as inner/outer/through using BREP topology.
+    Returns: dict mapping face index to classification type
+    """
+    from OCC.Core.BRepClass3d import BRepClass3d_SolidClassifier
+    from OCC.Core.TopAbs import TopAbs_IN, TopAbs_OUT
+    
+    face_types = {}
+    face_objects = []  # Store face objects in order
+    
+    # STEP 1: Classify each face as inner or outer using solid classifier
+    face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+    face_idx = 0
+    
+    while face_explorer.More():
+        face = topods.Face(face_explorer.Current())
+        face_objects.append(face)
+        
+        try:
+            mid_point = get_face_midpoint(face)
+            
+            # Use BRepClass3d to determine if point is inside solid
+            classifier = BRepClass3d_SolidClassifier(shape)
+            classifier.Perform(mid_point, 1e-6)
+            state = classifier.State()
+            
+            # Store classification
+            if state == TopAbs_IN:
+                face_types[face_idx] = "inner"
+            elif state == TopAbs_OUT:
+                face_types[face_idx] = "outer"
+            else:
+                face_types[face_idx] = "outer"  # Default to outer for boundary cases
+        except Exception as e:
+            logger.warning(f"Face {face_idx} classification failed: {e}")
+            face_types[face_idx] = "outer"  # Safe default
+        
+        face_idx += 1
+        face_explorer.Next()
+    
+    # STEP 2: Build edge-to-faces adjacency map
+    from OCC.Core.TopExp import TopExp
+    edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
+    TopExp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
+    
+    # STEP 3: Detect "through" faces (connect inner and outer)
+    for face_idx, face in enumerate(face_objects):
+        # Get all edges of this face
+        edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
+        
+        has_inner_neighbor = False
+        has_outer_neighbor = False
+        
+        while edge_exp.More():
+            edge = edge_exp.Current()
+            
+            # Find faces sharing this edge
+            for map_idx in range(1, edge_face_map.Extent() + 1):
+                map_edge = edge_face_map.FindKey(map_idx)
+                if edge.IsSame(map_edge):
+                    face_list = edge_face_map.FindFromIndex(map_idx)
+                    
+                    # Check each adjacent face
+                    for adj_face_idx in range(face_list.Length()):
+                        adj_face = topods.Face(face_list.Value(adj_face_idx + 1))
+                        
+                        # Find this face's index in our list
+                        for check_idx, check_face in enumerate(face_objects):
+                            if adj_face.IsSame(check_face) and check_idx != face_idx:
+                                adj_type = face_types.get(check_idx, "outer")
+                                if adj_type == "inner":
+                                    has_inner_neighbor = True
+                                elif adj_type == "outer":
+                                    has_outer_neighbor = True
+                                break
+                    break
+            
+            edge_exp.Next()
+        
+        # If face connects both inner and outer, it's a "through" surface
+        if has_inner_neighbor and has_outer_neighbor:
+            face_types[face_idx] = "through"
+    
+    logger.info(f"🔍 Topology classification complete: {len(face_types)} faces analyzed")
+    type_counts = {}
+    for ftype in face_types.values():
+        type_counts[ftype] = type_counts.get(ftype, 0) + 1
+    logger.info(f"   Distribution: {type_counts}")
+    
+    return face_types
+
+
 def recognize_manufacturing_features(shape):
     """
     Analyze BREP topology to detect manufacturing features.
@@ -350,10 +453,21 @@ def tessellate_shape(shape):
 
         logger.info("📐 Extracting vertices, indices, and normals from triangulation...")
         
+        # Classify all faces using topology analysis ONCE before tessellation
+        logger.info("🔍 Running topology-based face classification...")
+        face_types_topo = classify_faces_topology(shape)
+        
+        # Color mapping for display
+        FACE_COLOR_MAP = {
+            "inner": "internal",      # Red - holes, bores, pockets
+            "outer": "external",      # Gray - external surfaces
+            "through": "through",     # Yellow - holes connecting inside/outside
+        }
+        
         # Priority system: lower number = higher priority (external wins over internal)
         FACE_PRIORITY = {
             "external": 1,      # Highest priority - outer surfaces
-            "cylindrical": 2,   # High priority - main body features
+            "through": 2,       # High priority - through holes
             "planar": 3,        # Medium priority - flat faces
             "internal": 4       # Lowest priority - holes/pockets
         }
@@ -363,6 +477,7 @@ def tessellate_shape(shape):
         current_index = 0
         vertex_tolerance = base_deflection * 0.1  # Weld vertices within 0.01% diagonal
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+        face_idx = 0
 
         while face_explorer.More():
             face = face_explorer.Current()
@@ -370,6 +485,7 @@ def tessellate_shape(shape):
             triangulation = BRep_Tool.Triangulation(face, loc)
             if triangulation is None:
                 face_explorer.Next()
+                face_idx += 1
                 continue
 
             transform = loc.Transformation()
@@ -378,34 +494,18 @@ def tessellate_shape(shape):
             surf_type = surface.GetType()
             center = calculate_face_center(triangulation, transform)
             
-            # Calculate vector from bounding box center to face center
+            # Calculate vector from bounding box center to face center (for normal orientation)
             bbox_center = [cx, cy, cz]
             to_surface = [center[0] - bbox_center[0], center[1] - bbox_center[1], center[2] - bbox_center[2]]
-            to_surface_len = math.sqrt(sum(v * v for v in to_surface)) + 1e-9
             
-            # Get face normal
-            normal_vec = get_average_face_normal(triangulation, transform, reversed_face)
-            normal_len = math.sqrt(sum(n * n for n in normal_vec)) + 1e-9
+            # Get face type from topology classification
+            base_face_type = face_types_topo.get(face_idx, "outer")
             
-            # Dot product: positive if normal points outward, negative if inward
-            dot_product = sum(n * v for n, v in zip(normal_vec, to_surface)) / (normal_len * to_surface_len)
-
-            # Classify face based on geometry type and normal direction
+            # Refine planar faces (keep planar classification for flat surfaces)
             if surf_type == GeomAbs_Plane:
-                # Planar faces are always planar
                 ftype = "planar"
-            elif surf_type == GeomAbs_Cylinder:
-                # Cylindrical surfaces: check if normal points inward (internal) or outward (external)
-                if dot_product < -0.1:  # Normal points inward (toward center)
-                    ftype = "internal"  # Holes, bores, internal cylindrical pockets
-                else:  # Normal points outward or tangent
-                    ftype = "cylindrical"  # External cylindrical surfaces
             else:
-                # Other surface types: use normal direction
-                if dot_product < -0.1:
-                    ftype = "internal"  # Internal complex surfaces
-                else:
-                    ftype = "external"  # External complex surfaces
+                ftype = FACE_COLOR_MAP.get(base_face_type, "external")
 
             # vertices with welding tolerance to close microgaps
             face_vertices = []
@@ -460,6 +560,7 @@ def tessellate_shape(shape):
                     normals.extend(n)
 
             face_explorer.Next()
+            face_idx += 1
 
         vertex_count = len(vertices) // 3
         triangle_count = len(indices) // 3
@@ -574,7 +675,8 @@ def analyze_cad():
                 'normals': mesh_data['normals'],
                 'vertex_colors': mesh_data['vertex_colors'],
                 'feature_edges': feature_edges,
-                'triangle_count': mesh_data['triangle_count']
+                'triangle_count': mesh_data['triangle_count'],
+                'face_classification_method': 'brep_topology'
             },
             
             # Legacy fields for compatibility
