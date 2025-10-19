@@ -43,58 +43,10 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     
     // Apply Fusion 360-style vertex colors
     if (topologyColors && meshData.face_types && meshData.face_types.length > 0) {
-      console.log('🎨 Applying topology colors:', {
-        faceTypesCount: meshData.face_types.length,
-        verticesCount: meshData.vertices.length / 3,
-        indicesCount: meshData.indices.length,
-        faceTypesPreview: meshData.face_types.slice(0, 10)
-      });
+      const colors = new Float32Array(meshData.vertices.length); // Same length as vertices
       
-      const vertexCount = meshData.vertices.length / 3;
-      const colors = new Float32Array(vertexCount * 3); // RGB for each vertex
-      
-      // Create a map to track face type for each vertex
-      // Use priority: internal > planar > cylindrical > external > default
-      const vertexFaceTypes = new Map<number, string>();
-      const faceTypePriority: { [key: string]: number } = {
-        'internal': 4,
-        'planar': 3,
-        'cylindrical': 2,
-        'external': 1,
-        'default': 0
-      };
-      
-      // Iterate through triangles and map face_types to vertices
-      for (let i = 0; i < meshData.indices.length; i += 3) {
-        const triangleIndex = i / 3;
-        
-        // Get the three vertices of this triangle
-        const v1 = meshData.indices[i];
-        const v2 = meshData.indices[i + 1];
-        const v3 = meshData.indices[i + 2];
-        
-        // Get face types for each vertex of this triangle
-        const ft1 = meshData.face_types[triangleIndex * 3] || 'default';
-        const ft2 = meshData.face_types[triangleIndex * 3 + 1] || 'default';
-        const ft3 = meshData.face_types[triangleIndex * 3 + 2] || 'default';
-        
-        // Assign face type to vertices with priority (internal surfaces take precedence)
-        [
-          [v1, ft1],
-          [v2, ft2],
-          [v3, ft3]
-        ].forEach(([vertexIdx, faceType]) => {
-          const currentType = vertexFaceTypes.get(vertexIdx as number);
-          if (!currentType || 
-              faceTypePriority[faceType as string] > faceTypePriority[currentType]) {
-            vertexFaceTypes.set(vertexIdx as number, faceType as string);
-          }
-        });
-      }
-      
-      // Apply colors to vertices based on their face type
-      for (let i = 0; i < vertexCount; i++) {
-        const faceType = vertexFaceTypes.get(i) || 'default';
+      // Each vertex has a face_type, map it to RGB color
+      meshData.face_types.forEach((faceType, vertexIndex) => {
         let colorHex: string;
         
         switch (faceType) {
@@ -115,22 +67,13 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         }
         
         const color = new THREE.Color(colorHex);
-        const colorIndex = i * 3;
+        const colorIndex = vertexIndex * 3;
         colors[colorIndex] = color.r;
         colors[colorIndex + 1] = color.g;
         colors[colorIndex + 2] = color.b;
-      }
+      });
       
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      
-      // Log color distribution for debugging
-      const colorCounts: { [key: string]: number } = {};
-      vertexFaceTypes.forEach(ft => {
-        colorCounts[ft] = (colorCounts[ft] || 0) + 1;
-      });
-      console.log('✅ Topology colors applied:', colorCounts);
-    } else if (topologyColors) {
-      console.warn('⚠️ Topology colors requested but face_types data is missing');
     }
     
     geo.computeVertexNormals(); // Smooth shading for professional appearance
@@ -207,8 +150,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       side: THREE.DoubleSide,
       clippingPlanes: clippingPlane,
       clipIntersection: false,
-      metalness: topologyColors ? 0 : 0,
-      roughness: topologyColors ? 1 : 0.8,
+      metalness: 0,
+      roughness: 0.8,
       envMapIntensity: 0,
     };
     
@@ -219,7 +162,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     }
     
     return { ...base, transparent: false, opacity: 1, wireframe: false };
-  }, [displayStyle, clippingPlane, topologyColors]);
+  }, [displayStyle, clippingPlane]);
   
   return (
     <group>
@@ -230,7 +173,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
             {...materialProps}
             color={topologyColors ? '#ffffff' : SOLID_COLOR}
             vertexColors={topologyColors}
-            flatShading={false}
+            flatShading={!topologyColors}
           />
         </mesh>
       )}
