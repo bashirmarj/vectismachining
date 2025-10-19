@@ -173,7 +173,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
             {...materialProps}
             color={topologyColors ? '#ffffff' : SOLID_COLOR}
             vertexColors={topologyColors}
-            flatShading={false}
+            flatShading={!topologyColors}
           />
         </mesh>
       )}
