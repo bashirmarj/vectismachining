@@ -33,7 +33,7 @@ const TOPOLOGY_COLORS = {
   default: '#CCCCCC'        // Default silver
 };
 
-export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid', topologyColors = false }: MeshModelProps) {
+export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid', topologyColors = true }: MeshModelProps) {
   // Create single unified geometry for professional solid rendering
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();

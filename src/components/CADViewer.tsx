@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
 import { Suspense, useMemo, useEffect, useState, useRef } from 'react';
 import { CardContent } from '@/components/ui/card';
-import { Loader2, Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Palette } from 'lucide-react';
+import { Loader2, Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
@@ -42,7 +42,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   const [showDimensions, setShowDimensions] = useState(false);
   const [measurementMode, setMeasurementMode] = useState<'distance' | 'angle' | 'radius' | null>(null);
   const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
-  const [showTopologyColors, setShowTopologyColors] = useState(false);
+  const showTopologyColors = true; // Always use Fusion 360 topology colors
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const orientationCubeRef = useRef<OrientationCubeHandle>(null);
@@ -449,21 +449,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
               <Box className="w-4 h-4 text-gray-700 hover:text-gray-900" />
             </button>
             
-            {/* Surface Colors Toggle Button - Below Isometric */}
-            <button
-              onClick={() => setShowTopologyColors(!showTopologyColors)}
-              className="absolute top-16 left-5 z-30 p-2 hover:bg-gray-100 rounded-lg transition-all"
-              style={{
-                background: showTopologyColors 
-                  ? 'rgba(91, 155, 213, 0.95)' 
-                  : 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(0, 0, 0, 0.1)',
-              }}
-              title={showTopologyColors ? 'Single Color Mode' : 'Surface Color Mode (Fusion 360 style)'}
-            >
-              <Palette className={`w-4 h-4 ${showTopologyColors ? 'text-white' : 'text-gray-700'}`} />
-            </button>
             
             {/* Orientation Cube - Top Right */}
             <div className="absolute top-5 right-5 z-30">
