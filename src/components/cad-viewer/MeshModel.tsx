@@ -42,6 +42,18 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     geo.setIndex(meshData.indices);
     
     // Apply Fusion 360-style vertex colors
+    if (topologyColors) {
+      if (!meshData.face_types) {
+        console.warn('⚠️ Topology colors requested but face_types data is missing from meshData');
+      } else if (meshData.face_types.length === 0) {
+        console.warn('⚠️ Topology colors requested but face_types array is empty');
+      } else if (meshData.face_types.length !== meshData.vertices.length / 3) {
+        console.warn(`⚠️ Face types count mismatch: ${meshData.face_types.length} face_types vs ${meshData.vertices.length / 3} vertices`);
+      } else {
+        console.log(`✅ Applying topology colors to ${meshData.face_types.length} vertices`);
+      }
+    }
+    
     if (topologyColors && meshData.face_types && meshData.face_types.length > 0) {
       const colors = new Float32Array(meshData.vertices.length); // Same length as vertices
       
