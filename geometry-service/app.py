@@ -176,18 +176,24 @@ def classify_faces_topology(shape):
             in_normal = (state_normal == TopAbs_IN)
             in_opposite = (state_opposite == TopAbs_IN)
             
+            # DEBUG: Log first few faces to understand the pattern
+            if face_idx < 5:
+                logger.info(f"Face {face_idx}: normal_side={'IN' if in_normal else 'OUT'}, "
+                           f"opposite_side={'IN' if in_opposite else 'OUT'}")
+            
+            # SWAPPED LOGIC - try this if previous version was backwards
             if in_normal and not in_opposite:
-                # Normal points inward into solid
-                face_types[face_idx] = "inner"
+                # Normal points inward - classify as OUTER (swapped)
+                face_types[face_idx] = "outer"
             elif not in_normal and in_opposite:
-                # Normal points outward from solid
-                face_types[face_idx] = "outer"
-            elif in_normal and in_opposite:
-                # Both sides are inside (shouldn't happen) - classify as inner
+                # Normal points outward - classify as INNER (swapped)
                 face_types[face_idx] = "inner"
-            else:
-                # Both sides are outside - classify as outer
+            elif in_normal and in_opposite:
+                # Both sides inside
                 face_types[face_idx] = "outer"
+            else:
+                # Both sides outside
+                face_types[face_idx] = "inner"
                     
         except Exception as e:
             logger.warning(f"Face {face_idx} classification failed: {e}")
@@ -717,7 +723,7 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "1.8.0",
+        "version": "1.8.1-swapped",
         "status": "running",
         "endpoints": {
             "health": "/health",
