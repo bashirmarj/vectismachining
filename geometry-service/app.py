@@ -137,7 +137,26 @@ def classify_faces_topology(shape):
     edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
     topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
     
-    # STEP 3: Detect "through" faces (connect inner and outer)
+    # STEP 3: Build efficient edge-to-face-indices mapping
+    edge_to_face_indices = {}
+    for map_idx in range(1, edge_face_map.Size() + 1):  # FIX: Use Size() instead of Extent()
+        edge = edge_face_map.FindKey(map_idx)
+        face_list = edge_face_map.FindFromIndex(map_idx)
+        
+        # Store which face indices are adjacent to this edge
+        adjacent_face_indices = []
+        for i in range(len(face_list)):  # FIX: Use len() instead of .Length()
+            adj_face = topods.Face(face_list[i])  # FIX: Use 0-based indexing
+            
+            # Find this face's index in our face_objects list
+            for face_idx, face in enumerate(face_objects):
+                if adj_face.IsSame(face):
+                    adjacent_face_indices.append(face_idx)
+                    break
+        
+        edge_to_face_indices[edge] = adjacent_face_indices
+    
+    # STEP 4: Detect "through" faces (connect inner and outer)
     for face_idx, face in enumerate(face_objects):
         # Get all edges of this face
         edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
@@ -148,25 +167,17 @@ def classify_faces_topology(shape):
         while edge_exp.More():
             edge = edge_exp.Current()
             
-            # Find faces sharing this edge
-            for map_idx in range(1, edge_face_map.Extent() + 1):
-                map_edge = edge_face_map.FindKey(map_idx)
+            # Find faces sharing this edge using our efficient mapping
+            for map_edge, adj_face_indices in edge_to_face_indices.items():
                 if edge.IsSame(map_edge):
-                    face_list = edge_face_map.FindFromIndex(map_idx)
-                    
                     # Check each adjacent face
-                    for adj_face_idx in range(face_list.Length()):
-                        adj_face = topods.Face(face_list.Value(adj_face_idx + 1))
-                        
-                        # Find this face's index in our list
-                        for check_idx, check_face in enumerate(face_objects):
-                            if adj_face.IsSame(check_face) and check_idx != face_idx:
-                                adj_type = face_types.get(check_idx, "outer")
-                                if adj_type == "inner":
-                                    has_inner_neighbor = True
-                                elif adj_type == "outer":
-                                    has_outer_neighbor = True
-                                break
+                    for adj_idx in adj_face_indices:
+                        if adj_idx != face_idx:
+                            adj_type = face_types.get(adj_idx, "outer")
+                            if adj_type == "inner":
+                                has_inner_neighbor = True
+                            elif adj_type == "outer":
+                                has_outer_neighbor = True
                     break
             
             edge_exp.Next()
