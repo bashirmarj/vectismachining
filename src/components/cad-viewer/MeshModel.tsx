@@ -207,8 +207,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       side: THREE.DoubleSide,
       clippingPlanes: clippingPlane,
       clipIntersection: false,
-      metalness: 0,
-      roughness: 0.8,
+      metalness: topologyColors ? 0 : 0,
+      roughness: topologyColors ? 1 : 0.8,
       envMapIntensity: 0,
     };
     
@@ -219,7 +219,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     }
     
     return { ...base, transparent: false, opacity: 1, wireframe: false };
-  }, [displayStyle, clippingPlane]);
+  }, [displayStyle, clippingPlane, topologyColors]);
   
   return (
     <group>
@@ -230,7 +230,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
             {...materialProps}
             color={topologyColors ? '#ffffff' : SOLID_COLOR}
             vertexColors={topologyColors}
-            flatShading={!topologyColors}
+            flatShading={false}
           />
         </mesh>
       )}
