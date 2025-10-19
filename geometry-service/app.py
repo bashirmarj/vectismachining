@@ -94,8 +94,8 @@ def get_face_midpoint(face):
 
 def classify_faces_topology(shape):
     """
-    Classify faces as inner/outer/through using BREP topology with improved reliability.
-    Uses multi-point sampling for better accuracy on fillets and complex surfaces.
+    Classify faces as inner/outer/through using BREP topology.
+    Uses normal direction with proper offset testing for accurate classification.
     Returns: dict mapping face index to classification type
     """
     from OCC.Core.BRepClass3d import BRepClass3d_SolidClassifier
@@ -110,9 +110,11 @@ def classify_faces_topology(shape):
     bbox_center = gp_Pnt((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
     bbox_size = max(xmax - xmin, ymax - ymin, zmax - zmin)
     
-    # STEP 1: Classify each face using MULTIPLE SAMPLE POINTS
+    # STEP 1: Classify each face by testing points offset along the normal
     face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
     face_idx = 0
+    
+    classifier = BRepClass3d_SolidClassifier(shape)
     
     while face_explorer.More():
         face = topods.Face(face_explorer.Current())
@@ -121,64 +123,48 @@ def classify_faces_topology(shape):
         try:
             surface = BRepAdaptor_Surface(face)
             
+            # Get face properties for center point
+            face_props = GProp_GProps()
+            brepgprop.SurfaceProperties(face, face_props)
+            face_center = face_props.CentreOfMass()
+            
             # Get UV bounds
             umin, umax, vmin, vmax = breptools_UVBounds(face)
+            u_mid = (umin + umax) / 2
+            v_mid = (vmin + vmax) / 2
             
-            # Sample multiple points on the face (3x3 grid)
-            sample_points = []
-            for u_ratio in [0.2, 0.5, 0.8]:
-                for v_ratio in [0.2, 0.5, 0.8]:
-                    u = umin + (umax - umin) * u_ratio
-                    v = vmin + (vmax - vmin) * v_ratio
-                    try:
-                        point = surface.Value(u, v)
-                        sample_points.append(point)
-                    except:
-                        pass
+            # Get normal at face center
+            point_on_surf = gp_Pnt()
+            normal_vec = gp_Vec()
+            BRepGProp_Face(face).Normal(u_mid, v_mid, point_on_surf, normal_vec)
             
-            # Classify based on multiple samples
-            inner_count = 0
-            outer_count = 0
+            # Normalize normal vector
+            normal_length = normal_vec.Magnitude()
+            if normal_length > 1e-9:
+                normal_vec.Divide(normal_length)
+            else:
+                # Fallback if normal calculation fails
+                face_types[face_idx] = "outer"
+                face_idx += 1
+                face_explorer.Next()
+                continue
             
-            classifier = BRepClass3d_SolidClassifier(shape)
+            # Test point OUTSIDE the surface (along normal direction)
+            offset_distance = bbox_size * 0.01  # 1% of bbox size
             
-            for sample_point in sample_points:
-                # Offset point slightly along the normal to move it off the surface
-                try:
-                    # Get normal at this point
-                    u_param = umin + (umax - umin) * 0.5
-                    v_param = vmin + (vmax - vmin) * 0.5
-                    point_on_surf = gp_Pnt()
-                    normal_vec = gp_Vec()
-                    BRepGProp_Face(face).Normal(u_param, v_param, point_on_surf, normal_vec)
-                    
-                    # Normalize
-                    normal_length = normal_vec.Magnitude()
-                    if normal_length > 1e-9:
-                        normal_vec.Divide(normal_length)
-                    
-                    # Create offset point slightly inside (opposite to normal)
-                    offset_distance = bbox_size * 0.001  # 0.1% of bbox size
-                    
-                    test_point_in = gp_Pnt(
-                        sample_point.X() - normal_vec.X() * offset_distance,
-                        sample_point.Y() - normal_vec.Y() * offset_distance,
-                        sample_point.Z() - normal_vec.Z() * offset_distance
-                    )
-                    
-                    classifier.Perform(test_point_in, 1e-6)
-                    state = classifier.State()
-                    
-                    if state == TopAbs_IN:
-                        inner_count += 1
-                    elif state == TopAbs_OUT:
-                        outer_count += 1
-                        
-                except Exception as e:
-                    pass
+            test_point_out = gp_Pnt(
+                face_center.X() + normal_vec.X() * offset_distance,
+                face_center.Y() + normal_vec.Y() * offset_distance,
+                face_center.Z() + normal_vec.Z() * offset_distance
+            )
             
-            # Classify based on majority vote
-            if inner_count > outer_count:
+            # Classify the offset point
+            classifier.Perform(test_point_out, 1e-6)
+            state = classifier.State()
+            
+            # If point OUTSIDE surface is INSIDE solid → face normal points inward → INNER face
+            # If point OUTSIDE surface is OUTSIDE solid → face normal points outward → OUTER face
+            if state == TopAbs_IN:
                 face_types[face_idx] = "inner"
             else:
                 face_types[face_idx] = "outer"
@@ -218,31 +204,31 @@ def classify_faces_topology(shape):
         
         edge_to_face_indices[edge] = adjacent_face_indices
     
-    # STEP 4: Detect "through" faces with STRICTER criteria to prevent false positives
+    # STEP 4: Detect "through" faces (connecting inner and outer)
     for face_idx, face in enumerate(face_objects):
         current_type = face_types[face_idx]
         
-        # Only consider cylindrical faces for through-hole classification
+        # Only cylindrical faces can be through-holes
         surface = BRepAdaptor_Surface(face)
         surf_type = surface.GetType()
         
         if surf_type != GeomAbs_Cylinder:
-            continue  # Through holes are typically cylindrical
+            continue
         
-        # Only inner faces can become through faces
+        # Only consider faces currently classified as "inner"
         if current_type != "inner":
             continue
         
         # Get all edges of this face
         edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
         
-        inner_neighbor_count = 0
-        outer_neighbor_count = 0
+        has_inner_neighbor = False
+        has_outer_neighbor = False
         
         while edge_exp.More():
             edge = edge_exp.Current()
             
-            # Find faces sharing this edge using our efficient mapping
+            # Find faces sharing this edge
             for map_edge, adj_face_indices in edge_to_face_indices.items():
                 if edge.IsSame(map_edge):
                     # Check each adjacent face
@@ -250,16 +236,15 @@ def classify_faces_topology(shape):
                         if adj_idx != face_idx:
                             adj_type = face_types.get(adj_idx, "outer")
                             if adj_type == "inner":
-                                inner_neighbor_count += 1
+                                has_inner_neighbor = True
                             elif adj_type == "outer":
-                                outer_neighbor_count += 1
+                                has_outer_neighbor = True
                     break
             
             edge_exp.Next()
         
-        # STRICTER CRITERIA: Must have MULTIPLE neighbors of each type
-        # This prevents external cylinders from being incorrectly marked as "through"
-        if inner_neighbor_count >= 2 and outer_neighbor_count >= 2:
+        # If this cylindrical inner face connects to BOTH inner and outer faces, it's a through-hole
+        if has_inner_neighbor and has_outer_neighbor:
             face_types[face_idx] = "through"
     
     logger.info(f"🔍 Topology classification complete: {len(face_types)} faces analyzed")
@@ -712,7 +697,7 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "1.6.0",
+        "version": "1.7.0",
         "status": "running",
         "endpoints": {
             "health": "/health",
