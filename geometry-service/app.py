@@ -24,7 +24,7 @@ from OCC.Core.GeomAbs import (GeomAbs_Cylinder, GeomAbs_Plane, GeomAbs_Cone,
                                GeomAbs_BSplineCurve, GeomAbs_BezierCurve)
 from OCC.Core.TopoDS import topods
 from OCC.Core.GProp import GProp_GProps
-from OCC.Core.BRepGProp import brepgprop
+from OCC.Core.BRepGProp import brepgprop, BRepGProp_Face
 from OCC.Core.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListIteratorOfListOfShape
 from OCC.Core.gp import gp_Vec, gp_Pnt
 
@@ -94,16 +94,23 @@ def get_face_midpoint(face):
 
 def classify_faces_topology(shape):
     """
-    Classify faces as inner/outer/through using BREP topology.
+    Classify faces as inner/outer/through using BREP topology with improved reliability.
+    Uses normal direction for better accuracy on curved surfaces.
     Returns: dict mapping face index to classification type
     """
     from OCC.Core.BRepClass3d import BRepClass3d_SolidClassifier
     from OCC.Core.TopAbs import TopAbs_IN, TopAbs_OUT
     
     face_types = {}
-    face_objects = []  # Store face objects in order
+    face_objects = []
     
-    # STEP 1: Classify each face as inner or outer using solid classifier
+    # Get bounding box center for reference
+    bbox = Bnd_Box()
+    brepbndlib.Add(shape, bbox)
+    xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
+    bbox_center = gp_Pnt((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
+    
+    # STEP 1: Classify each face using NORMAL DIRECTION (more reliable than midpoint)
     face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
     face_idx = 0
     
@@ -112,23 +119,60 @@ def classify_faces_topology(shape):
         face_objects.append(face)
         
         try:
-            mid_point = get_face_midpoint(face)
+            surface = BRepAdaptor_Surface(face)
+            surf_type = surface.GetType()
             
-            # Use BRepClass3d to determine if point is inside solid
-            classifier = BRepClass3d_SolidClassifier(shape)
-            classifier.Perform(mid_point, 1e-6)
-            state = classifier.State()
+            # Get face properties
+            face_props = GProp_GProps()
+            brepgprop.SurfaceProperties(face, face_props)
+            face_center = face_props.CentreOfMass()
             
-            # Store classification
-            if state == TopAbs_IN:
-                face_types[face_idx] = "inner"
-            elif state == TopAbs_OUT:
+            # Calculate average normal at face center
+            u_mid = (surface.FirstUParameter() + surface.LastUParameter()) / 2
+            v_mid = (surface.FirstVParameter() + surface.LastVParameter()) / 2
+            point = gp_Pnt()
+            normal_vec = gp_Vec()
+            BRepGProp_Face(face).Normal(u_mid, v_mid, point, normal_vec)
+            
+            # Normalize normal vector
+            normal_length = normal_vec.Magnitude()
+            if normal_length > 1e-9:
+                normal_vec.Divide(normal_length)
+            
+            # Vector from bbox center to face center
+            vec_to_face = gp_Vec(bbox_center, face_center)
+            vec_length = vec_to_face.Magnitude()
+            if vec_length > 1e-9:
+                vec_to_face.Divide(vec_length)
+            
+            # Dot product: positive = normal points away from center (external)
+            #              negative = normal points toward center (internal)
+            dot_product = normal_vec.Dot(vec_to_face)
+            
+            # Handle face orientation (reversed faces have inverted normals)
+            if face.Orientation() == 1:  # TopAbs_REVERSED
+                dot_product *= -1
+            
+            # Classify based on normal direction
+            if dot_product > 0.1:  # Normal points outward
                 face_types[face_idx] = "outer"
+            elif dot_product < -0.1:  # Normal points inward
+                face_types[face_idx] = "inner"
             else:
-                face_types[face_idx] = "outer"  # Default to outer for boundary cases
+                # Ambiguous case - use midpoint classifier as fallback
+                classifier = BRepClass3d_SolidClassifier(shape)
+                mid_point = get_face_midpoint(face)
+                classifier.Perform(mid_point, 1e-6)
+                state = classifier.State()
+                
+                if state == TopAbs_IN:
+                    face_types[face_idx] = "inner"
+                else:
+                    face_types[face_idx] = "outer"
+                    
         except Exception as e:
             logger.warning(f"Face {face_idx} classification failed: {e}")
-            face_types[face_idx] = "outer"  # Safe default
+            face_types[face_idx] = "outer"
         
         face_idx += 1
         face_explorer.Next()
@@ -152,22 +196,35 @@ def classify_faces_topology(shape):
             adj_face = topods.Face(face_iter.Value())
             
             # Find this face's index in our face_objects list
-            for face_idx, face in enumerate(face_objects):
-                if adj_face.IsSame(face):
-                    adjacent_face_indices.append(face_idx)
+            for f_idx, stored_face in enumerate(face_objects):
+                if adj_face.IsSame(stored_face):
+                    adjacent_face_indices.append(f_idx)
                     break
             
             face_iter.Next()
         
         edge_to_face_indices[edge] = adjacent_face_indices
     
-    # STEP 4: Detect "through" faces (connect inner and outer)
+    # STEP 4: Detect "through" faces with STRICTER criteria to prevent false positives
     for face_idx, face in enumerate(face_objects):
+        current_type = face_types[face_idx]
+        
+        # Only consider cylindrical faces for through-hole classification
+        surface = BRepAdaptor_Surface(face)
+        surf_type = surface.GetType()
+        
+        if surf_type != GeomAbs_Cylinder:
+            continue  # Through holes are typically cylindrical
+        
+        # Only inner faces can become through faces
+        if current_type != "inner":
+            continue
+        
         # Get all edges of this face
         edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
         
-        has_inner_neighbor = False
-        has_outer_neighbor = False
+        inner_neighbor_count = 0
+        outer_neighbor_count = 0
         
         while edge_exp.More():
             edge = edge_exp.Current()
@@ -180,15 +237,16 @@ def classify_faces_topology(shape):
                         if adj_idx != face_idx:
                             adj_type = face_types.get(adj_idx, "outer")
                             if adj_type == "inner":
-                                has_inner_neighbor = True
+                                inner_neighbor_count += 1
                             elif adj_type == "outer":
-                                has_outer_neighbor = True
+                                outer_neighbor_count += 1
                     break
             
             edge_exp.Next()
         
-        # If face connects both inner and outer, it's a "through" surface
-        if has_inner_neighbor and has_outer_neighbor:
+        # STRICTER CRITERIA: Must have MULTIPLE neighbors of each type
+        # This prevents external cylinders from being incorrectly marked as "through"
+        if inner_neighbor_count >= 2 and outer_neighbor_count >= 2:
             face_types[face_idx] = "through"
     
     logger.info(f"🔍 Topology classification complete: {len(face_types)} faces analyzed")
@@ -205,8 +263,6 @@ def recognize_manufacturing_features(shape):
     Analyze BREP topology to detect manufacturing features.
     This is for quotation accuracy, not display.
     """
-    from OCC.Core.BRepGProp import BRepGProp_Face
-    from OCC.Core.gp import gp_Pnt
     
     features = {
         'holes': [],
@@ -466,7 +522,7 @@ def tessellate_shape(shape):
         cx, cy, cz = (xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2
         max_radius = max(xmax - xmin, ymax - ymin, zmax - zmin) / 2
 
-        logger.info("📐 Extracting vertices, indices, and normals from triangulation...")
+        logger.info("📊 Extracting vertices, indices, and normals from triangulation...")
         
         # Classify all faces using topology analysis ONCE before tessellation
         logger.info("🔍 Running topology-based face classification...")
@@ -479,86 +535,93 @@ def tessellate_shape(shape):
             "through": "through",     # Yellow - holes connecting inside/outside
         }
         
-        # Priority system: lower number = higher priority (external wins over internal)
-        FACE_PRIORITY = {
-            "external": 1,      # Highest priority - outer surfaces
-            "through": 2,       # High priority - through holes
-            "planar": 3,        # Medium priority - flat faces
-            "internal": 4       # Lowest priority - holes/pockets
-        }
+        vertices, indices, normals, vertex_colors = [], [], [], []
+        current_index = 0
         
-        # At the end of tessellate_shape, replace the construction of these variables:
-all_vertices = []
-all_normals = []
-all_vertex_colors = []  # color as string, e.g. "through", "internal", "external"
-triangle_count = 0
+        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+        face_idx = 0
 
-face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
-face_idx = 0
-while face_explorer.More():
-    face = face_explorer.Current()
-    loc = TopLoc_Location()
-    triangulation = BRep_Tool.Triangulation(face, loc)
-    if triangulation is None:
-        face_explorer.Next()
-        face_idx += 1
-        continue
+        while face_explorer.More():
+            face = face_explorer.Current()
+            loc = TopLoc_Location()
+            triangulation = BRep_Tool.Triangulation(face, loc)
+            if triangulation is None:
+                face_explorer.Next()
+                face_idx += 1
+                continue
 
-    transform = loc.Transformation()
-    surface = BRepAdaptor_Surface(face)
-    reversed_face = face.Orientation() == 1
+            transform = loc.Transformation()
+            surface = BRepAdaptor_Surface(face)
+            reversed_face = face.Orientation() == 1
+            surf_type = surface.GetType()
+            center = calculate_face_center(triangulation, transform)
+            
+            # Calculate vector from bounding box center to face center (for normal orientation)
+            bbox_center = [cx, cy, cz]
+            to_surface = [center[0] - bbox_center[0], center[1] - bbox_center[1], center[2] - bbox_center[2]]
+            
+            # Get face type from topology classification
+            base_face_type = face_types_topo.get(face_idx, "outer")
+            
+            # Refine planar faces (keep planar classification for flat surfaces)
+            if surf_type == GeomAbs_Plane:
+                ftype = "planar"
+            else:
+                ftype = FACE_COLOR_MAP.get(base_face_type, "external")
 
-    # Get face type from classification
-    base_face_type = face_types_topo.get(face_idx, "outer")
-    surf_type = surface.GetType()
-    if surf_type == GeomAbs_Plane:
-        ftype = "planar"
-    else:
-        ftype = FACE_COLOR_MAP.get(base_face_type, "external")
+            # DON'T weld vertices - each face gets independent vertices
+            # This prevents color bleeding at boundaries between different face types
+            face_vertices = []
+            for i in range(1, triangulation.NbNodes() + 1):
+                p = triangulation.Node(i)
+                p.Transform(transform)
+                
+                # Always create NEW vertex (no sharing between faces)
+                vertices.extend([p.X(), p.Y(), p.Z()])
+                vertex_colors.append(ftype)
+                face_vertices.append(current_index)
+                current_index += 1
 
-    # For each triangle, export 3 new vertices and color them by face type
-    for i in range(1, triangulation.NbTriangles() + 1):
-        tri = triangulation.Triangle(i)
-        n1, n2, n3 = tri.Get()
-        indices = [n1, n2, n3]
-        if reversed_face:
-            indices = [n1, n3, n2]
-        verts = []
-        for ni in indices:
-            p = triangulation.Node(ni)
-            p.Transform(transform)
-            verts.append(np.array([p.X(), p.Y(), p.Z()]))
+            # triangles
+            for i in range(1, triangulation.NbTriangles() + 1):
+                tri = triangulation.Triangle(i)
+                n1, n2, n3 = tri.Get()
+                idx = [face_vertices[n1 - 1], face_vertices[n2 - 1], face_vertices[n3 - 1]]
+                if reversed_face:
+                    indices.extend([idx[0], idx[2], idx[1]])
+                else:
+                    indices.extend(idx)
+                v1, v2, v3 = [vertices[j * 3:j * 3 + 3] for j in idx]
+                e1 = [v2[k] - v1[k] for k in range(3)]
+                e2 = [v3[k] - v1[k] for k in range(3)]
+                n = [
+                    e1[1] * e2[2] - e1[2] * e2[1],
+                    e1[2] * e2[0] - e1[0] * e2[2],
+                    e1[0] * e2[1] - e1[1] * e2[0],
+                ]
+                l = math.sqrt(sum(x * x for x in n))
+                if l > 0:
+                    n = [x / l for x in n]
+                if sum(n * v for n, v in zip(n, to_surface)) < 0:
+                    n = [-x for x in n]
+                for _ in range(3):
+                    normals.extend(n)
 
-        v1, v2, v3 = verts
-        # Normal for this triangle
-        e1 = v2 - v1
-        e2 = v3 - v1
-        n = np.cross(e1, e2)
-        l = np.linalg.norm(n)
-        if l > 0:
-            n = n / l
-        else:
-            n = np.array([0, 0, 1])
+            face_explorer.Next()
+            face_idx += 1
 
-        # Duplicate vertex, normal, and color per triangle vertex
-        for v in verts:
-            all_vertices.extend(v.tolist())
-            all_normals.extend(n.tolist())
-            all_vertex_colors.append(ftype)
-        triangle_count += 1
-
-    face_explorer.Next()
-    face_idx += 1
-
-return {
-    "vertices": all_vertices,
-    "normals": all_normals,
-    "vertex_colors": all_vertex_colors,  # length triangle_count * 3
-    "indices": [],  # or None
-    "triangle_count": triangle_count,
-    # ...other keys...
-}
-
+        vertex_count = len(vertices) // 3
+        triangle_count = len(indices) // 3
+        logger.info(
+            f"Tessellation complete: {vertex_count} vertices, {triangle_count} triangles, {len(vertex_colors)} vertex_colors"
+        )
+        return {
+            "vertices": vertices,
+            "indices": indices,
+            "normals": normals,
+            "vertex_colors": vertex_colors,
+            "triangle_count": triangle_count,
+        }
 
     except Exception as e:
         logger.error(f"Tessellation error: {e}")
@@ -612,7 +675,7 @@ def analyze_cad():
         mesh_data = tessellate_shape(shape)  # No quality parameter
         
         # === STEP 3: BREP EDGE EXTRACTION (true CAD edges, not mesh) ===
-        logger.info("📏 Extracting BREP feature edges for professional display...")
+        logger.info("🔍 Extracting BREP feature edges for professional display...")
         feature_edges = extract_feature_edges(shape, max_edges=500)
         mesh_data["feature_edges"] = feature_edges
         mesh_data["triangle_count"] = len(mesh_data.get("indices", [])) // 3
@@ -699,13 +762,13 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "1.4.0",
+        "version": "1.5.0",
         "status": "running",
         "endpoints": {
             "health": "/health",
             "analyze": "/analyze-cad"
         },
-        "documentation": "POST multipart/form-data with 'file' field containing .step file, optional 'edge_density' param"
+        "documentation": "POST multipart/form-data with 'file' field containing .step file"
     })
 
 
