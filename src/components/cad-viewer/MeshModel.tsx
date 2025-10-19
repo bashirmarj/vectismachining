@@ -81,28 +81,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return geo;
   }, [meshData, topologyColors]);
   
-  // Helper function to create consistent edge keys
-  const makeEdgeKey = (v1: number[], v2: number[]): string => {
-    const precision = 4;
-    const p1 = [
-      parseFloat(v1[0].toFixed(precision)),
-      parseFloat(v1[1].toFixed(precision)),
-      parseFloat(v1[2].toFixed(precision))
-    ];
-    const p2 = [
-      parseFloat(v2[0].toFixed(precision)),
-      parseFloat(v2[1].toFixed(precision)),
-      parseFloat(v2[2].toFixed(precision))
-    ];
-    
-    const [pA, pB] = p1[0] < p2[0] || (p1[0] === p2[0] && p1[1] < p2[1]) || (p1[0] === p2[0] && p1[1] === p2[1] && p1[2] < p2[2])
-      ? [p1, p2]
-      : [p2, p1];
-    
-    return `${pA[0]},${pA[1]},${pA[2]}|${pB[0]},${pB[1]},${pB[2]}`;
-  };
-
-  // Apply edge-based face grouping for solid colors (NO MORE COLOR BLEEDING!)
+  // Apply direct per-triangle face colors (backend handles anti-bleeding)
   useEffect(() => {
     if (!geometry) return;
     
