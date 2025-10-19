@@ -155,12 +155,13 @@ def classify_faces_topology(shape):
             classifier.Perform(test_point, 1e-6)
             state = classifier.State()
             
-            # If point in normal direction is OUTSIDE solid → normal points out → OUTER face
-            # If point in normal direction is INSIDE solid → normal points in → INNER face
+            # SWAPPED LOGIC: OpenCascade normals are inverted
+            # If point in normal direction is OUTSIDE solid → INNER face
+            # If point in normal direction is INSIDE solid → OUTER face
             if state == TopAbs_OUT:
-                face_types[face_idx] = "outer"
-            else:
                 face_types[face_idx] = "inner"
+            else:
+                face_types[face_idx] = "outer"
                 
         except Exception as e:
             logger.warning(f"Face {face_idx} failed: {e}")
@@ -709,7 +710,7 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "1.9.0",
+        "version": "1.9.1-inverted",
         "status": "running",
         "endpoints": {
             "health": "/health",
