@@ -48,33 +48,50 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       geo.computeVertexNormals();
       geo.normalizeNormals();
     } else {
-      // Non-indexed geometry for face colors - duplicate vertices per triangle
-      const triangleCount = meshData.indices.length / 3;
-      const positions = new Float32Array(triangleCount * 9); // 3 vertices * 3 coords
-      
-      for (let i = 0; i < triangleCount; i++) {
-        const idx0 = meshData.indices[i * 3];
-        const idx1 = meshData.indices[i * 3 + 1];
-        const idx2 = meshData.indices[i * 3 + 2];
-        
-        // Copy vertex positions for this triangle
-        positions[i * 9 + 0] = meshData.vertices[idx0 * 3];
-        positions[i * 9 + 1] = meshData.vertices[idx0 * 3 + 1];
-        positions[i * 9 + 2] = meshData.vertices[idx0 * 3 + 2];
-        
-        positions[i * 9 + 3] = meshData.vertices[idx1 * 3];
-        positions[i * 9 + 4] = meshData.vertices[idx1 * 3 + 1];
-        positions[i * 9 + 5] = meshData.vertices[idx1 * 3 + 2];
-        
-        positions[i * 9 + 6] = meshData.vertices[idx2 * 3];
-        positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
-        positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
-      }
-      
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      // No setIndex() - non-indexed geometry
-      // No normals - Three.js will compute flat normals automatically
+// For per-face color (topologyColors === true)
+const triangleCount = meshData.triangle_count;
+const positions = new Float32Array(triangleCount * 9);
+const normals = new Float32Array(triangleCount * 9);
+const colors = new Float32Array(triangleCount * 9);
+
+for (let i = 0; i < triangleCount * 3; i++) {
+    // Each i corresponds to a vertex
+    const vOff = i * 3;
+    positions[vOff + 0] = meshData.vertices[vOff + 0];
+    positions[vOff + 1] = meshData.vertices[vOff + 1];
+    positions[vOff + 2] = meshData.vertices[vOff + 2];
+    normals[vOff + 0] = meshData.normals[vOff + 0];
+    normals[vOff + 1] = meshData.normals[vOff + 1];
+    normals[vOff + 2] = meshData.normals[vOff + 2];
+    // Set color from the face type string
+    const faceType = meshData.vertex_colors[i] || "default";
+    const hex = TOPOLOGY_COLORS[faceType] || TOPOLOGY_COLORS.default;
+    const color = new THREE.Color(hex);
+    colors[vOff + 0] = color.r;
+    colors[vOff + 1] = color.g;
+    colors[vOff + 2] = color.b;
+}
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+// no setIndex()
+
+// Material: (make sure to use vertexColors and flatShading)
+<mesh
+    geometry={geo}
+    material={
+        new THREE.MeshStandardMaterial({
+            vertexColors: true,
+            flatShading: true,
+            side: THREE.DoubleSide,
+            // other props...
+        })
     }
+>
+    {/* ... */}
+</mesh>
+
     
     geo.computeBoundingSphere();
     
