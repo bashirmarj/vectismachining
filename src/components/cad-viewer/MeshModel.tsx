@@ -43,10 +43,19 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     
     // Apply Fusion 360-style vertex colors
     if (topologyColors && meshData.face_types && meshData.face_types.length > 0) {
-      const colors = new Float32Array(meshData.vertices.length); // Same length as vertices
+      console.log('🎨 Applying topology colors:', {
+        faceTypesCount: meshData.face_types.length,
+        verticesCount: meshData.vertices.length / 3,
+        faceTypesPreview: meshData.face_types.slice(0, 10)
+      });
       
-      // Each vertex has a face_type, map it to RGB color
-      meshData.face_types.forEach((faceType, vertexIndex) => {
+      const vertexCount = meshData.vertices.length / 3;
+      const colors = new Float32Array(vertexCount * 3); // RGB for each vertex
+      
+      // Map face_types to vertex colors (one face_type per vertex)
+      for (let i = 0; i < vertexCount; i++) {
+        // Get face type for this vertex (or default if missing)
+        const faceType = meshData.face_types[i] || 'default';
         let colorHex: string;
         
         switch (faceType) {
@@ -67,13 +76,16 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         }
         
         const color = new THREE.Color(colorHex);
-        const colorIndex = vertexIndex * 3;
+        const colorIndex = i * 3;
         colors[colorIndex] = color.r;
         colors[colorIndex + 1] = color.g;
         colors[colorIndex + 2] = color.b;
-      });
+      }
       
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      console.log('✅ Topology colors applied successfully');
+    } else if (topologyColors) {
+      console.warn('⚠️ Topology colors requested but face_types data is missing');
     }
     
     geo.computeVertexNormals(); // Smooth shading for professional appearance
