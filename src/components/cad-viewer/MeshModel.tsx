@@ -6,7 +6,7 @@ interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
-  face_types?: string[];
+  vertex_colors?: string[];
   triangle_count: number;
   feature_edges?: number[][][];
 }
@@ -57,54 +57,22 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     if (!geometry) return;
     
     if (topologyColors) {
-      if (meshData.face_types && meshData.face_types.length > 0) {
-        console.log('🎨 Applying backend BREP face types as vertex colors');
+      if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
+        console.log('🎨 Applying vertex colors from backend');
         
         const vertexCount = meshData.vertices.length / 3;
-        const indices = meshData.indices;
         
-        // Backend sends one face_type per vertex
-        if (meshData.face_types.length !== vertexCount) {
-          console.error(`❌ Face types length mismatch: ${meshData.face_types.length} vs ${vertexCount} vertices`);
+        // Now they WILL match!
+        if (meshData.vertex_colors.length !== vertexCount) {
+          console.error(`❌ Vertex colors length mismatch: ${meshData.vertex_colors.length} vs ${vertexCount}`);
           return;
         }
         
-        // Priority system for vertices at boundaries between different face types
-        const vertexFaceTypes = new Map<number, string>();
-        const faceTypePriority: { [key: string]: number } = {
-          'internal': 4,
-          'planar': 3,
-          'cylindrical': 2,
-          'external': 1,
-          'default': 0
-        };
-        
-        // For each triangle, assign face types to vertices with priority
-        for (let i = 0; i < indices.length; i += 3) {
-          const idx1 = indices[i];
-          const idx2 = indices[i + 1];
-          const idx3 = indices[i + 2];
-          
-          // Get face types from backend for these 3 vertices
-          const ft1 = meshData.face_types[idx1] || 'default';
-          const ft2 = meshData.face_types[idx2] || 'default';
-          const ft3 = meshData.face_types[idx3] || 'default';
-          
-          // Apply priority system
-          [[idx1, ft1], [idx2, ft2], [idx3, ft3]].forEach(([vertexIdx, faceType]) => {
-            const currentType = vertexFaceTypes.get(vertexIdx as number);
-            if (!currentType || faceTypePriority[faceType as string] > faceTypePriority[currentType]) {
-              vertexFaceTypes.set(vertexIdx as number, faceType as string);
-            }
-          });
-        }
-        
-        // Apply colors
         const colors = new Float32Array(vertexCount * 3);
         const typeCount: { [key: string]: number } = {};
         
         for (let i = 0; i < vertexCount; i++) {
-          const faceType = vertexFaceTypes.get(i) || 'default';
+          const faceType = meshData.vertex_colors[i] || 'default';
           typeCount[faceType] = (typeCount[faceType] || 0) + 1;
           
           const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
@@ -114,15 +82,15 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
           colors[i * 3 + 2] = color.b;
         }
         
-        console.log('Backend face type distribution:', typeCount);
+        console.log('Backend vertex color distribution:', typeCount);
         
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geometry.attributes.color.needsUpdate = true;
         
         console.log('✅ Vertex colors applied from backend BREP analysis');
       } else {
-        // ⚠️ FALLBACK: No face_types from backend - apply uniform silver color
-        console.warn('⚠️ No face_types from backend, falling back to uniform silver color');
+        // ⚠️ FALLBACK: No vertex_colors from backend - apply uniform silver color
+        console.warn('⚠️ No vertex_colors from backend, falling back to uniform silver color');
         
         const vertexCount = meshData.vertices.length / 3;
         const colors = new Float32Array(vertexCount * 3);

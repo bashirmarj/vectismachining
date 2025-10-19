@@ -27,6 +27,7 @@ export type Database = {
           normals: number[]
           quotation_id: string | null
           triangle_count: number
+          vertex_colors: string[] | null
           vertices: number[]
         }
         Insert: {
@@ -41,6 +42,7 @@ export type Database = {
           normals: number[]
           quotation_id?: string | null
           triangle_count: number
+          vertex_colors?: string[] | null
           vertices: number[]
         }
         Update: {
@@ -55,6 +57,7 @@ export type Database = {
           normals?: number[]
           quotation_id?: string | null
           triangle_count?: number
+          vertex_colors?: string[] | null
           vertices?: number[]
         }
         Relationships: [

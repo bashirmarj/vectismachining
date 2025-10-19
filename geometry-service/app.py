@@ -350,7 +350,7 @@ def tessellate_shape(shape):
 
         logger.info("📐 Extracting vertices, indices, and normals from triangulation...")
         
-        vertices, indices, normals, face_types = [], [], [], []
+        vertices, indices, normals, vertex_colors = [], [], [], []
         vertex_map = {}
         current_index = 0
         vertex_tolerance = base_deflection * 0.1  # Weld vertices within 0.01% diagonal
@@ -397,6 +397,7 @@ def tessellate_shape(shape):
                 if coord not in vertex_map:
                     vertex_map[coord] = current_index
                     vertices.extend(coord)
+                    vertex_colors.append(ftype)  # ✅ Assign face type to new unique vertex
                     face_vertices.append(current_index)
                     current_index += 1
                 else:
@@ -426,19 +427,19 @@ def tessellate_shape(shape):
                     n = [-x for x in n]
                 for _ in range(3):
                     normals.extend(n)
-                    face_types.append(ftype)
 
             face_explorer.Next()
 
+        vertex_count = len(vertices) // 3
         triangle_count = len(indices) // 3
         logger.info(
-            f"Tessellation complete: {len(vertices)//3} vertices, {triangle_count} triangles"
+            f"Tessellation complete: {vertex_count} vertices, {triangle_count} triangles, {len(vertex_colors)} vertex_colors"
         )
         return {
             "vertices": vertices,
             "indices": indices,
             "normals": normals,
-            "face_types": face_types,
+            "vertex_colors": vertex_colors,
             "triangle_count": triangle_count,
         }
 
@@ -448,7 +449,7 @@ def tessellate_shape(shape):
             "vertices": [],
             "indices": [],
             "normals": [],
-            "face_types": [],
+            "vertex_colors": [],
             "triangle_count": 0,
         }
 
