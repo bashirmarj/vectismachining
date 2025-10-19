@@ -308,27 +308,26 @@ def tessellate_shape(shape):
         # Calculate adaptive deflection based on part size
         bbox_diagonal, bbox_coords = calculate_bbox_diagonal(shape)
         
-        # Use refined tessellation (0.2mm max) for high-quality curved surface rendering
-        # This eliminates visible triangulation artifacts on holes and cylinders
-        base_deflection = min(bbox_diagonal * 0.008, 0.2)  # Cap at 0.2mm for professional quality
+        # Standard adaptive tessellation for fast processing
+        base_deflection = min(bbox_diagonal * 0.01, 1.0)  # 1% of diagonal, cap at 1mm
         
-        logger.info(f"🔧 Refined tessellation: diagonal={bbox_diagonal:.2f}mm, base_deflection={base_deflection:.4f}mm")
+        logger.info(f"🔧 Standard tessellation: diagonal={bbox_diagonal:.2f}mm, base_deflection={base_deflection:.4f}mm")
         
-        # Phase A: Apply surface-specific tessellation quality
+        # Apply surface-specific tessellation quality
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
         while face_explorer.More():
             face = topods.Face(face_explorer.Current())
             surface = BRepAdaptor_Surface(face)
             surf_type = surface.GetType()
             
-            # Detect curved surfaces that need fine tessellation
+            # Detect curved surfaces that need finer tessellation
             if surf_type in [GeomAbs_Cylinder, GeomAbs_Cone, GeomAbs_Sphere, 
                            GeomAbs_Torus, GeomAbs_BSplineSurface, GeomAbs_BezierSurface]:
-                # 8x finer for professional smooth curves (no visible triangles)
-                face_deflection = base_deflection / 8.0  # 0.1% of diagonal
-                angular_deflection = 0.15  # Very fine angular steps
+                # 3x finer for smooth curves (balanced quality/speed)
+                face_deflection = base_deflection / 3.0
+                angular_deflection = 0.3  # Standard angular tolerance
             else:
-                # Coarse for flat surfaces (planes don't need refinement)
+                # Standard for flat surfaces
                 face_deflection = base_deflection
                 angular_deflection = 0.5
             
