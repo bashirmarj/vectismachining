@@ -11,13 +11,13 @@ from supabase import create_client, Client
 from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.BRep import BRep_Tool
 from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
-from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_IN, TopAbs_OUT, TopAbs_ON
+from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
 from OCC.Core.TopExp import TopExp_Explorer, topexp
 from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepBndLib import brepbndlib
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
-from OCC.Core.BRepTools import breptools_UVBounds, breptools
+from OCC.Core.BRepTools import breptools
 from OCC.Core.GCPnts import GCPnts_UniformAbscissa, GCPnts_AbscissaPoint
 from OCC.Core.GeomAbs import (GeomAbs_Cylinder, GeomAbs_Plane, GeomAbs_Cone, 
                                GeomAbs_Sphere, GeomAbs_Torus, GeomAbs_BSplineSurface, 
@@ -61,15 +61,13 @@ def calculate_bbox_diagonal(shape):
 
 def calculate_exact_volume_and_area(shape):
     """Calculate exact volume and surface area from BREP geometry (not mesh)"""
-    # Exact volume calculation
     volume_props = GProp_GProps()
     brepgprop.VolumeProperties(shape, volume_props)
-    exact_volume = volume_props.Mass()  # cubic mm
+    exact_volume = volume_props.Mass()
     
-    # Exact surface area calculation
     area_props = GProp_GProps()
     brepgprop.SurfaceProperties(shape, area_props)
-    exact_surface_area = area_props.Mass()  # square mm
+    exact_surface_area = area_props.Mass()
     
     logger.info(f"📐 Exact BREP calculations: volume={exact_volume:.2f}mm³, area={exact_surface_area:.2f}mm²")
     
@@ -84,24 +82,15 @@ def calculate_exact_volume_and_area(shape):
     }
 
 
-def get_face_midpoint(face):
-    """Get the midpoint of a face for topology classification"""
-    surf = BRepAdaptor_Surface(face)
-    umin, umax, vmin, vmax = breptools_UVBounds(face)
-    mid_u = (umin + umax) / 2
-    mid_v = (vmin + vmax) / 2
-    return surf.Value(mid_u, mid_v)
-
-
 def classify_faces_topology(shape):
     """
-    Classify faces using BIDIRECTIONAL RAY-CASTING - the cleanest approach!
+    Classify faces using BIDIRECTIONAL RAY-CASTING approach.
     
     Logic:
-    - If face "sees" nothing in both directions → OUTER (external wall)
-    - If forward ray escapes but backward hits solid → INNER (back wall of cavity)
-    - If ray hits the same face → THROUGH (cylindrical hole)
-    - If ray hits another face → INNER (cavity wall)
+    - Both rays escape → OUTER (external wall)
+    - Forward escapes, backward hits → INNER (back wall of cavity)
+    - Ray hits same face → THROUGH (cylindrical hole)
+    - Ray hits other face → INNER (cavity wall)
     """
     from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
     from OCC.Core.gp import gp_Lin, gp_Dir
@@ -126,7 +115,7 @@ def classify_faces_topology(shape):
     intersector = IntCurvesFace_ShapeIntersector()
     intersector.Load(shape, 1e-6)
     
-    logger.info(f"🔍 Starting bidirectional ray-casting classification for {len(face_objects)} faces...")
+    logger.info(f"🔍 Starting bidirectional ray-casting for {len(face_objects)} faces...")
     
     for face_idx, face in enumerate(face_objects):
         try:
@@ -137,7 +126,6 @@ def classify_faces_topology(shape):
             
             # Get normal at face center
             try:
-                from OCC.Core.BRepTools import breptools
                 umin, umax, vmin, vmax = breptools.UVBounds(face)
                 u_mid = (umin + umax) / 2
                 v_mid = (vmin + vmax) / 2
@@ -154,26 +142,26 @@ def classify_faces_topology(shape):
                 normal_vec.Divide(normal_length)
                 
             except Exception as e:
-                logger.warning(f"Face {face_idx} normal calculation failed: {e}")
+                logger.warning(f"Face {face_idx} normal failed: {e}")
                 face_types[face_idx] = "outer"
                 continue
             
-            # Offset slightly from surface to avoid self-intersection
+            # Offset from surface to avoid self-intersection
             start_offset = bbox_size * 0.001
+            
+            # FORWARD RAY (along normal)
             start_point = gp_Pnt(
                 face_center.X() + normal_vec.X() * start_offset,
                 face_center.Y() + normal_vec.Y() * start_offset,
                 face_center.Z() + normal_vec.Z() * start_offset
             )
-            
-            # FORWARD RAY (along normal direction)
             forward_dir = gp_Dir(normal_vec.X(), normal_vec.Y(), normal_vec.Z())
             forward_ray = gp_Lin(start_point, forward_dir)
             
             intersector.Perform(forward_ray, 0, bbox_size * 3)
             forward_hits = intersector.NbPnt()
             
-            # Check if forward ray hits the same face (through-hole detection)
+            # Check if hits itself (through-hole)
             hits_itself = False
             if forward_hits > 0:
                 for i in range(1, forward_hits + 1):
@@ -183,187 +171,34 @@ def classify_faces_topology(shape):
                         break
             
             # BACKWARD RAY (opposite direction)
-            backward_dir = gp_Dir(-normal_vec.X(), -normal_vec.Y(), -normal_vec.Z())
             backward_start = gp_Pnt(
                 face_center.X() - normal_vec.X() * start_offset,
                 face_center.Y() - normal_vec.Y() * start_offset,
                 face_center.Z() - normal_vec.Z() * start_offset
             )
+            backward_dir = gp_Dir(-normal_vec.X(), -normal_vec.Y(), -normal_vec.Z())
             backward_ray = gp_Lin(backward_start, backward_dir)
             
             intersector.Perform(backward_ray, 0, bbox_size * 3)
             backward_hits = intersector.NbPnt()
             
-            # CLASSIFICATION LOGIC
+            # CLASSIFICATION
             if hits_itself:
-                # Ray wraps around and hits same face → cylindrical through-hole
                 face_types[face_idx] = "through"
-                
             elif forward_hits == 0 and backward_hits == 0:
-                # Both directions escape → external surface
                 face_types[face_idx] = "outer"
-                
             elif forward_hits == 0 and backward_hits > 0:
-                # Forward escapes, backward hits material → back wall of cavity!
                 face_types[face_idx] = "inner"
-                
             elif forward_hits > 0:
-                # Forward hits another face → cavity wall
                 face_types[face_idx] = "inner"
-                
             else:
-                # Default to outer
                 face_types[face_idx] = "outer"
             
         except Exception as e:
             logger.warning(f"Face {face_idx} ray-casting failed: {e}")
             face_types[face_idx] = "outer"
     
-    # STEP 2: Build edge-to-faces adjacency map
-    edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
-    topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
-    
-    # STEP 3: Build efficient edge-to-face-indices mapping
-    edge_to_face_indices = {}
-    for map_idx in range(1, edge_face_map.Size() + 1):
-        edge = edge_face_map.FindKey(map_idx)
-        face_list = edge_face_map.FindFromIndex(map_idx)
-        
-        # Store which face indices are adjacent to this edge
-        adjacent_face_indices = []
-        
-        # Use OCC iterator to traverse TopTools_ListOfShape
-        face_iter = TopTools_ListIteratorOfListOfShape(face_list)
-        while face_iter.More():
-            adj_face = topods.Face(face_iter.Value())
-            
-            # Find this face's index in our face_objects list
-            for f_idx, stored_face in enumerate(face_objects):
-                if adj_face.IsSame(stored_face):
-                    adjacent_face_indices.append(f_idx)
-                    break
-            
-            face_iter.Next()
-        
-        edge_to_face_indices[edge] = adjacent_face_indices
-    
-    # STEP 4: Detect "through" faces - balanced criteria
-    # Small-to-medium cylindrical holes that go through the part
-    for face_idx, face in enumerate(face_objects):
-        current_type = face_types[face_idx]
-        
-        # Must already be classified as "inner"
-        if current_type != "inner":
-            continue
-        
-        # Must be cylindrical
-        surface = BRepAdaptor_Surface(face)
-        surf_type = surface.GetType()
-        
-        if surf_type != GeomAbs_Cylinder:
-            continue
-        
-        # Get cylinder properties
-        try:
-            cyl = surface.Cylinder()
-            radius = cyl.Radius()
-            
-            # Balanced check: holes less than 15% of bbox size
-            # This catches mounting holes but not main bores
-            if radius > bbox_size * 0.15:
-                continue
-                
-        except:
-            continue
-        
-        # Check adjacency: must connect to outer faces (exit point)
-        edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
-        has_outer_neighbor = False
-        
-        while edge_exp.More():
-            edge = edge_exp.Current()
-            
-            for map_edge, adj_face_indices in edge_to_face_indices.items():
-                if edge.IsSame(map_edge):
-                    for adj_idx in adj_face_indices:
-                        if adj_idx != face_idx:
-                            if face_types.get(adj_idx) == "outer":
-                                has_outer_neighbor = True
-                                break
-                    break
-            
-            if has_outer_neighbor:
-                break
-            edge_exp.Next()
-        
-        # Mark as "through" if it connects to outer faces
-        if has_outer_neighbor:
-            face_types[face_idx] = "through" STRICT
-    # Only SMALL cylindrical holes that go completely through the part
-    for face_idx, face in enumerate(face_objects):
-        current_type = face_types[face_idx]
-        
-        # Must already be classified as "inner"
-        if current_type != "inner":
-            continue
-        
-        # Must be cylindrical
-        surface = BRepAdaptor_Surface(face)
-        surf_type = surface.GetType()
-        
-        if surf_type != GeomAbs_Cylinder:
-            continue
-        
-        # Get cylinder properties
-        try:
-            cyl = surface.Cylinder()
-            radius = cyl.Radius()
-            
-            # VERY STRICT: Only consider SMALL holes (less than 5% of bbox size)
-            # This excludes large bores and main cylinders
-            if radius > bbox_size * 0.05:
-                continue
-            
-            # Additional check: face area should be small
-            face_props = GProp_GProps()
-            brepgprop.SurfaceProperties(face, face_props)
-            face_area = face_props.Mass()
-            
-            # Calculate max expected area for a small hole
-            bbox_volume = (xmax - xmin) * (ymax - ymin) * (zmax - zmin)
-            max_hole_area = bbox_volume ** 0.666 * 0.1  # Very small relative to part size
-            
-            if face_area > max_hole_area:
-                continue
-                
-        except:
-            continue
-        
-        # Check adjacency: must connect to outer faces (exit point)
-        edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
-        has_outer_neighbor = False
-        
-        while edge_exp.More():
-            edge = edge_exp.Current()
-            
-            for map_edge, adj_face_indices in edge_to_face_indices.items():
-                if edge.IsSame(map_edge):
-                    for adj_idx in adj_face_indices:
-                        if adj_idx != face_idx:
-                            if face_types.get(adj_idx) == "outer":
-                                has_outer_neighbor = True
-                                break
-                    break
-            
-            if has_outer_neighbor:
-                break
-            edge_exp.Next()
-        
-        # Only mark as "through" if ALL criteria met
-        if has_outer_neighbor:
-            face_types[face_idx] = "through"
-    
-    logger.info(f"🔍 Topology classification complete: {len(face_types)} faces analyzed")
+    logger.info(f"✅ Ray-casting complete: {len(face_types)} faces")
     type_counts = {}
     for ftype in face_types.values():
         type_counts[ftype] = type_counts.get(ftype, 0) + 1
@@ -373,11 +208,7 @@ def classify_faces_topology(shape):
 
 
 def recognize_manufacturing_features(shape):
-    """
-    Analyze BREP topology to detect manufacturing features.
-    This is for quotation accuracy, not display.
-    """
-    
+    """Analyze BREP topology to detect manufacturing features"""
     features = {
         'holes': [],
         'cylindrical_bosses': [],
@@ -385,30 +216,25 @@ def recognize_manufacturing_features(shape):
         'complex_surfaces': []
     }
     
-    # Get bounding box center for internal/external classification
     bbox_diagonal, (xmin, ymin, zmin, xmax, ymax, zmax) = calculate_bbox_diagonal(shape)
     center = [(xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2]
     
-    # Analyze each face
     face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
     while face_explorer.More():
         face = topods.Face(face_explorer.Current())
         surface = BRepAdaptor_Surface(face)
         surf_type = surface.GetType()
         
-        # Calculate face area from BREP (not mesh)
         face_props = GProp_GProps()
         brepgprop.SurfaceProperties(face, face_props)
         face_area = face_props.Mass()
         
-        # Cylindrical faces → holes or bosses
         if surf_type == GeomAbs_Cylinder:
             cyl = surface.Cylinder()
             radius = cyl.Radius()
             axis_dir = cyl.Axis().Direction()
             axis_pos = cyl.Axis().Location()
             
-            # Determine if internal (hole) or external (boss)
             face_center = face_props.CentreOfMass()
             vector_to_center = [
                 center[0] - face_center.X(),
@@ -416,7 +242,6 @@ def recognize_manufacturing_features(shape):
                 center[2] - face_center.Z()
             ]
             
-            # Sample normal at face center
             u_mid = (surface.FirstUParameter() + surface.LastUParameter()) / 2
             v_mid = (surface.FirstVParameter() + surface.LastVParameter()) / 2
             point = gp_Pnt()
@@ -436,12 +261,11 @@ def recognize_manufacturing_features(shape):
                 'area': face_area
             }
             
-            if dot_product > 0:  # Normal points toward center → internal
+            if dot_product > 0:
                 features['holes'].append(feature_data)
-            else:  # Normal points away → external boss
+            else:
                 features['cylindrical_bosses'].append(feature_data)
         
-        # Planar faces
         elif surf_type == GeomAbs_Plane:
             plane = surface.Plane()
             normal = plane.Axis().Direction()
@@ -450,7 +274,6 @@ def recognize_manufacturing_features(shape):
                 'area': face_area
             })
         
-        # Complex surfaces (NURBS, B-splines, cones, etc.)
         else:
             features['complex_surfaces'].append({
                 'type': str(surf_type),
@@ -459,43 +282,31 @@ def recognize_manufacturing_features(shape):
         
         face_explorer.Next()
     
-    # Log summary
-    logger.info(f"🔧 Feature recognition: {len(features['holes'])} holes, "
+    logger.info(f"🔧 Features: {len(features['holes'])} holes, "
                 f"{len(features['cylindrical_bosses'])} bosses, "
-                f"{len(features['planar_faces'])} planar faces, "
-                f"{len(features['complex_surfaces'])} complex surfaces")
+                f"{len(features['planar_faces'])} planar, "
+                f"{len(features['complex_surfaces'])} complex")
     
     return features
 
 
-def extract_feature_edges(shape, max_edges=500, max_time_seconds=20):
-    """
-    Extract TRUE feature edges from BREP geometry (not mesh tessellation).
-    Returns edges as polylines sampled from the actual CAD curves.
-    This eliminates tessellation artifacts - cylinders show clean circles, not triangulated edges.
-    """
-    logger.info("🔍 Extracting BREP feature edges from CAD geometry...")
+def extract_feature_edges(shape, max_edges=500):
+    """Extract TRUE feature edges from BREP geometry"""
+    logger.info("🔍 Extracting BREP feature edges...")
     
     feature_edges = []
     edge_count = 0
     
     try:
-        # Explore all edges in the BREP topology
         edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
         
         while edge_explorer.More() and edge_count < max_edges:
             edge = topods.Edge(edge_explorer.Current())
             
             try:
-                # Get the 3D curve from the edge (BRep_Tool.Curve returns a tuple/list)
                 curve_result = BRep_Tool.Curve(edge)
                 
-                # Handle degenerate edges (no 3D curve or incomplete result)
-                if not curve_result or len(curve_result) < 3:
-                    edge_explorer.Next()
-                    continue
-                
-                if curve_result[0] is None:
+                if not curve_result or len(curve_result) < 3 or curve_result[0] is None:
                     edge_explorer.Next()
                     continue
                 
@@ -503,11 +314,9 @@ def extract_feature_edges(shape, max_edges=500, max_time_seconds=20):
                 first_param = curve_result[1]
                 last_param = curve_result[2]
                 
-                # Create curve adapter for querying curve properties
                 curve_adaptor = BRepAdaptor_Curve(edge)
                 curve_type = curve_adaptor.GetType()
                 
-                # Adaptive sampling based on curve type
                 if curve_type == GeomAbs_Line:
                     num_samples = 2
                 elif curve_type == GeomAbs_Circle:
@@ -517,7 +326,6 @@ def extract_feature_edges(shape, max_edges=500, max_time_seconds=20):
                 else:
                     num_samples = 20
                 
-                # Sample points along the curve
                 points = []
                 for i in range(num_samples + 1):
                     param = first_param + (last_param - first_param) * i / num_samples
@@ -528,23 +336,22 @@ def extract_feature_edges(shape, max_edges=500, max_time_seconds=20):
                     feature_edges.append(points)
                     edge_count += 1
                     
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to extract edge: {type(e).__name__}: {e}")
+            except Exception:
                 pass
             
             edge_explorer.Next()
         
-        logger.info(f"✅ Extracted {len(feature_edges)} BREP feature edges")
+        logger.info(f"✅ Extracted {len(feature_edges)} BREP edges")
         
     except Exception as e:
-        logger.error(f"Error extracting feature edges: {e}")
+        logger.error(f"Error extracting edges: {e}")
         return []
     
     return feature_edges
 
 
 def calculate_face_center(triangulation, transform):
-    """Compute the average center of a face from its triangulation"""
+    """Compute average center of a face"""
     try:
         total = np.zeros(3)
         for i in range(1, triangulation.NbNodes() + 1):
@@ -557,17 +364,13 @@ def calculate_face_center(triangulation, transform):
 
 
 def tessellate_shape(shape):
-    """
-    Generate display mesh with adaptive quality for smooth curved surfaces.
-    This is ONLY for visual verification, NOT for manufacturing calculations.
-    """
+    """Generate display mesh with adaptive quality"""
     try:
         bbox_diagonal, bbox_coords = calculate_bbox_diagonal(shape)
         base_deflection = min(bbox_diagonal * 0.008, 0.2)
         
-        logger.info(f"🔧 Refined tessellation: diagonal={bbox_diagonal:.2f}mm, deflection={base_deflection:.4f}mm")
+        logger.info(f"🔧 Tessellation: diagonal={bbox_diagonal:.2f}mm, deflection={base_deflection:.4f}mm")
         
-        # Apply surface-specific tessellation quality
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
         while face_explorer.More():
             face = topods.Face(face_explorer.Current())
@@ -595,13 +398,10 @@ def tessellate_shape(shape):
         xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
         cx, cy, cz = (xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2
 
-        logger.info("📊 Extracting vertices and generating mesh...")
+        logger.info("📊 Extracting vertices...")
         
-        # Classify all faces using topology analysis
-        logger.info("🔍 Running topology-based face classification...")
         face_types_topo = classify_faces_topology(shape)
         
-        # Color mapping for display
         FACE_COLOR_MAP = {
             "inner": "internal",
             "outer": "external",
@@ -632,16 +432,13 @@ def tessellate_shape(shape):
             bbox_center = [cx, cy, cz]
             to_surface = [center[0] - bbox_center[0], center[1] - bbox_center[1], center[2] - bbox_center[2]]
             
-            # Get face type from topology classification
             base_face_type = face_types_topo.get(face_idx, "outer")
             
-            # Refine planar faces
             if surf_type == GeomAbs_Plane:
                 ftype = "planar"
             else:
                 ftype = FACE_COLOR_MAP.get(base_face_type, "external")
 
-            # NO vertex welding - prevents color bleeding
             face_vertices = []
             for i in range(1, triangulation.NbNodes() + 1):
                 p = triangulation.Node(i)
@@ -652,7 +449,6 @@ def tessellate_shape(shape):
                 face_vertices.append(current_index)
                 current_index += 1
 
-            # Build triangles
             for i in range(1, triangulation.NbTriangles() + 1):
                 tri = triangulation.Triangle(i)
                 n1, n2, n3 = tri.Get()
@@ -712,7 +508,7 @@ def analyze_cad():
 
         file = request.files["file"]
         if not (file.filename.lower().endswith(".step") or file.filename.lower().endswith(".stp")):
-            return jsonify({"error": "Only .step or .stp files are supported"}), 400
+            return jsonify({"error": "Only .step or .stp files supported"}), 400
 
         step_bytes = file.read()
         fd, tmp_path = tempfile.mkstemp(suffix=".step")
@@ -737,7 +533,7 @@ def analyze_cad():
         logger.info("🎨 Generating display mesh...")
         mesh_data = tessellate_shape(shape)
         
-        logger.info("🔍 Extracting BREP feature edges...")
+        logger.info("🔍 Extracting BREP edges...")
         feature_edges = extract_feature_edges(shape, max_edges=500)
         mesh_data["feature_edges"] = feature_edges
         mesh_data["triangle_count"] = len(mesh_data.get("indices", [])) // 3
@@ -779,7 +575,7 @@ def analyze_cad():
                 'vertex_colors': mesh_data['vertex_colors'],
                 'feature_edges': feature_edges,
                 'triangle_count': mesh_data['triangle_count'],
-                'face_classification_method': 'brep_topology_multipoint'
+                'face_classification_method': 'bidirectional_raycasting'
             },
             'volume_cm3': exact_props['volume'] / 1000,
             'surface_area_cm2': exact_props['surface_area'] / 100,
@@ -796,7 +592,7 @@ def analyze_cad():
             'quotation_ready': True,
             'status': 'success',
             'confidence': 0.98,
-            'method': 'brep_dual_representation_multipoint'
+            'method': 'brep_bidirectional_raycasting'
         })
 
     except Exception as e:
