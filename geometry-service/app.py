@@ -25,7 +25,7 @@ from OCC.Core.GeomAbs import (GeomAbs_Cylinder, GeomAbs_Plane, GeomAbs_Cone,
 from OCC.Core.TopoDS import topods
 from OCC.Core.GProp import GProp_GProps
 from OCC.Core.BRepGProp import brepgprop
-from OCC.Core.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+from OCC.Core.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListIteratorOfListOfShape
 from OCC.Core.gp import gp_Vec, gp_Pnt
 
 import logging
