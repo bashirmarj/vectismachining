@@ -18,24 +18,70 @@ interface MeshModelProps {
   showEdges: boolean;
   showHiddenEdges?: boolean;
   displayStyle?: 'solid' | 'wireframe' | 'translucent';
+  topologyColors?: boolean;
 }
 
 // Professional solid color for CAD rendering
 const SOLID_COLOR = '#5b9bd5'; // Professional CAD blue
 
-export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid' }: MeshModelProps) {
+// Fusion 360 Analysis colors
+const TOPOLOGY_COLORS = {
+  internal: '#FF6B6B',      // Coral Red for internal surfaces/pockets
+  cylindrical: '#CCCCCC',   // Silver for outer cylindrical surfaces
+  planar: '#DDDDDD',        // Light Grey for flat faces
+  external: '#CCCCCC',      // Silver for other outer surfaces
+  default: '#CCCCCC'        // Default silver
+};
+
+export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid', topologyColors = false }: MeshModelProps) {
   // Create single unified geometry for professional solid rendering
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     geo.setIndex(meshData.indices);
+    
+    // Apply Fusion 360-style vertex colors
+    if (topologyColors && meshData.face_types && meshData.face_types.length > 0) {
+      const colors = new Float32Array(meshData.vertices.length); // Same length as vertices
+      
+      // Each vertex has a face_type, map it to RGB color
+      meshData.face_types.forEach((faceType, vertexIndex) => {
+        let colorHex: string;
+        
+        switch (faceType) {
+          case 'internal':
+            colorHex = TOPOLOGY_COLORS.internal; // Coral red
+            break;
+          case 'cylindrical':
+            colorHex = TOPOLOGY_COLORS.cylindrical; // Silver
+            break;
+          case 'planar':
+            colorHex = TOPOLOGY_COLORS.planar; // Light grey
+            break;
+          case 'external':
+            colorHex = TOPOLOGY_COLORS.external; // Silver
+            break;
+          default:
+            colorHex = TOPOLOGY_COLORS.default;
+        }
+        
+        const color = new THREE.Color(colorHex);
+        const colorIndex = vertexIndex * 3;
+        colors[colorIndex] = color.r;
+        colors[colorIndex + 1] = color.g;
+        colors[colorIndex + 2] = color.b;
+      });
+      
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    }
+    
     geo.computeVertexNormals(); // Smooth shading for professional appearance
     geo.normalizeNormals(); // Ensure uniform lighting across all faces
     geo.computeBoundingSphere();
     
     return geo;
-  }, [meshData]);
+  }, [meshData, topologyColors]);
   
   // Create feature edges from BREP data (true CAD edges, not mesh tessellation)
   const featureEdges = useMemo(() => {
@@ -125,7 +171,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         <mesh geometry={geometry}>
           <meshStandardMaterial
             {...materialProps}
-            color={SOLID_COLOR}
+            color={topologyColors ? '#ffffff' : SOLID_COLOR}
+            vertexColors={topologyColors}
             flatShading={false}
           />
         </mesh>
