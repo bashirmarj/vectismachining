@@ -350,6 +350,14 @@ def tessellate_shape(shape):
 
         logger.info("📐 Extracting vertices, indices, and normals from triangulation...")
         
+        # Priority system: lower number = higher priority (external wins over internal)
+        FACE_PRIORITY = {
+            "external": 1,      # Highest priority - outer surfaces
+            "cylindrical": 2,   # High priority - main body features
+            "planar": 3,        # Medium priority - flat faces
+            "internal": 4       # Lowest priority - holes/pockets
+        }
+        
         vertices, indices, normals, vertex_colors = [], [], [], []
         vertex_map = {}
         current_index = 0
@@ -395,13 +403,24 @@ def tessellate_shape(shape):
                 # Round to vertex_tolerance precision for welding
                 coord = (round(p.X(), 6), round(p.Y(), 6), round(p.Z(), 6))
                 if coord not in vertex_map:
+                    # New vertex - assign current face type
                     vertex_map[coord] = current_index
                     vertices.extend(coord)
-                    vertex_colors.append(ftype)  # ✅ Assign face type to new unique vertex
+                    vertex_colors.append(ftype)
                     face_vertices.append(current_index)
                     current_index += 1
                 else:
-                    face_vertices.append(vertex_map[coord])
+                    # Existing vertex - check if current face has higher priority
+                    existing_idx = vertex_map[coord]
+                    existing_type = vertex_colors[existing_idx]
+                    current_priority = FACE_PRIORITY.get(ftype, 99)
+                    existing_priority = FACE_PRIORITY.get(existing_type, 99)
+                    
+                    # Update color only if current face has higher priority (lower number)
+                    if current_priority < existing_priority:
+                        vertex_colors[existing_idx] = ftype
+                    
+                    face_vertices.append(existing_idx)
 
             # triangles
             for i in range(1, triangulation.NbTriangles() + 1):
