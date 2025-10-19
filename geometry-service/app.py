@@ -487,108 +487,78 @@ def tessellate_shape(shape):
             "internal": 4       # Lowest priority - holes/pockets
         }
         
-        vertices, indices, normals, vertex_colors = [], [], [], []
-        vertex_map = {}
-        current_index = 0
-        vertex_tolerance = base_deflection * 0.1  # Weld vertices within 0.01% diagonal
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
-        face_idx = 0
+        # At the end of tessellate_shape, replace the construction of these variables:
+all_vertices = []
+all_normals = []
+all_vertex_colors = []  # color as string, e.g. "through", "internal", "external"
+triangle_count = 0
 
-        while face_explorer.More():
-            face = face_explorer.Current()
-            loc = TopLoc_Location()
-            triangulation = BRep_Tool.Triangulation(face, loc)
-            if triangulation is None:
-                face_explorer.Next()
-                face_idx += 1
-                continue
+face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+face_idx = 0
+while face_explorer.More():
+    face = face_explorer.Current()
+    loc = TopLoc_Location()
+    triangulation = BRep_Tool.Triangulation(face, loc)
+    if triangulation is None:
+        face_explorer.Next()
+        face_idx += 1
+        continue
 
-            transform = loc.Transformation()
-            surface = BRepAdaptor_Surface(face)
-            reversed_face = face.Orientation() == 1
-            surf_type = surface.GetType()
-            center = calculate_face_center(triangulation, transform)
-            
-            # Calculate vector from bounding box center to face center (for normal orientation)
-            bbox_center = [cx, cy, cz]
-            to_surface = [center[0] - bbox_center[0], center[1] - bbox_center[1], center[2] - bbox_center[2]]
-            
-            # Get face type from topology classification
-            base_face_type = face_types_topo.get(face_idx, "outer")
-            
-            # Refine planar faces (keep planar classification for flat surfaces)
-            if surf_type == GeomAbs_Plane:
-                ftype = "planar"
-            else:
-                ftype = FACE_COLOR_MAP.get(base_face_type, "external")
+    transform = loc.Transformation()
+    surface = BRepAdaptor_Surface(face)
+    reversed_face = face.Orientation() == 1
 
-            # vertices with welding tolerance to close microgaps
-            face_vertices = []
-            for i in range(1, triangulation.NbNodes() + 1):
-                p = triangulation.Node(i)
-                p.Transform(transform)
-                # Round to vertex_tolerance precision for welding
-                coord = (round(p.X(), 6), round(p.Y(), 6), round(p.Z(), 6))
-                if coord not in vertex_map:
-                    # New vertex - assign current face type
-                    vertex_map[coord] = current_index
-                    vertices.extend(coord)
-                    vertex_colors.append(ftype)
-                    face_vertices.append(current_index)
-                    current_index += 1
-                else:
-                    # Existing vertex - check if current face has higher priority
-                    existing_idx = vertex_map[coord]
-                    existing_type = vertex_colors[existing_idx]
-                    current_priority = FACE_PRIORITY.get(ftype, 99)
-                    existing_priority = FACE_PRIORITY.get(existing_type, 99)
-                    
-                    # Update color only if current face has higher priority (lower number)
-                    if current_priority < existing_priority:
-                        vertex_colors[existing_idx] = ftype
-                    
-                    face_vertices.append(existing_idx)
+    # Get face type from classification
+    base_face_type = face_types_topo.get(face_idx, "outer")
+    surf_type = surface.GetType()
+    if surf_type == GeomAbs_Plane:
+        ftype = "planar"
+    else:
+        ftype = FACE_COLOR_MAP.get(base_face_type, "external")
 
-            # triangles
-            for i in range(1, triangulation.NbTriangles() + 1):
-                tri = triangulation.Triangle(i)
-                n1, n2, n3 = tri.Get()
-                idx = [face_vertices[n1 - 1], face_vertices[n2 - 1], face_vertices[n3 - 1]]
-                if reversed_face:
-                    indices.extend([idx[0], idx[2], idx[1]])
-                else:
-                    indices.extend(idx)
-                v1, v2, v3 = [vertices[j * 3:j * 3 + 3] for j in idx]
-                e1 = [v2[k] - v1[k] for k in range(3)]
-                e2 = [v3[k] - v1[k] for k in range(3)]
-                n = [
-                    e1[1] * e2[2] - e1[2] * e2[1],
-                    e1[2] * e2[0] - e1[0] * e2[2],
-                    e1[0] * e2[1] - e1[1] * e2[0],
-                ]
-                l = math.sqrt(sum(x * x for x in n))
-                if l > 0:
-                    n = [x / l for x in n]
-                if sum(n * v for n, v in zip(n, to_surface)) < 0:
-                    n = [-x for x in n]
-                for _ in range(3):
-                    normals.extend(n)
+    # For each triangle, export 3 new vertices and color them by face type
+    for i in range(1, triangulation.NbTriangles() + 1):
+        tri = triangulation.Triangle(i)
+        n1, n2, n3 = tri.Get()
+        indices = [n1, n2, n3]
+        if reversed_face:
+            indices = [n1, n3, n2]
+        verts = []
+        for ni in indices:
+            p = triangulation.Node(ni)
+            p.Transform(transform)
+            verts.append(np.array([p.X(), p.Y(), p.Z()]))
 
-            face_explorer.Next()
-            face_idx += 1
+        v1, v2, v3 = verts
+        # Normal for this triangle
+        e1 = v2 - v1
+        e2 = v3 - v1
+        n = np.cross(e1, e2)
+        l = np.linalg.norm(n)
+        if l > 0:
+            n = n / l
+        else:
+            n = np.array([0, 0, 1])
 
-        vertex_count = len(vertices) // 3
-        triangle_count = len(indices) // 3
-        logger.info(
-            f"Tessellation complete: {vertex_count} vertices, {triangle_count} triangles, {len(vertex_colors)} vertex_colors"
-        )
-        return {
-            "vertices": vertices,
-            "indices": indices,
-            "normals": normals,
-            "vertex_colors": vertex_colors,
-            "triangle_count": triangle_count,
-        }
+        # Duplicate vertex, normal, and color per triangle vertex
+        for v in verts:
+            all_vertices.extend(v.tolist())
+            all_normals.extend(n.tolist())
+            all_vertex_colors.append(ftype)
+        triangle_count += 1
+
+    face_explorer.Next()
+    face_idx += 1
+
+return {
+    "vertices": all_vertices,
+    "normals": all_normals,
+    "vertex_colors": all_vertex_colors,  # length triangle_count * 3
+    "indices": [],  # or None
+    "triangle_count": triangle_count,
+    # ...other keys...
+}
+
 
     except Exception as e:
         logger.error(f"Tessellation error: {e}")
