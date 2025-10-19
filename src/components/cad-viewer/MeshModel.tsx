@@ -118,7 +118,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     
     // Use EdgesGeometry to detect edges where adjacent triangles meet at significant angles
     // Angle threshold of 15° captures outer cylinder perimeters and sharp features
-    const edgesGeometry = new THREE.EdgesGeometry(geometry, 15);
+    const edgesGeometry = new THREE.EdgesGeometry(geometry, 30);
     
     return edgesGeometry;
   }, [geometry, showEdges, displayStyle]);
