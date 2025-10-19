@@ -85,6 +85,7 @@ interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
+  face_types?: string[];
   triangle_count: number;
   feature_edges?: number[][][];
 }
@@ -731,6 +732,7 @@ async function storeMeshData(
         vertices: meshData.vertices,
         indices: meshData.indices,
         normals: meshData.normals,
+        face_types: meshData.face_types || [],
         triangle_count: meshData.triangle_count,
         feature_edges: Array.isArray(meshData.feature_edges) ? meshData.feature_edges : []
       })
