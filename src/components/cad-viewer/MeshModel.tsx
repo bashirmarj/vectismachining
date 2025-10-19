@@ -39,14 +39,22 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
     geo.setIndex(meshData.indices);
     
-    // Only compute smooth normals when NOT using topology colors
+    // Only use backend normals when NOT using topology colors
     if (!topologyColors) {
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
       geo.computeVertexNormals();
       geo.normalizeNormals();
+    } else {
+      // For topology colors: don't set normals
+      // Three.js will automatically compute flat normals per-face
+      // This prevents color interpolation between vertices
+      if (geo.hasAttribute('normal')) {
+        geo.deleteAttribute('normal');
+      }
     }
+    
     geo.computeBoundingSphere();
     
     return geo;
