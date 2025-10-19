@@ -541,7 +541,7 @@ def analyze_cad():
                 'vertices': mesh_data['vertices'],
                 'indices': mesh_data['indices'],
                 'normals': mesh_data['normals'],
-                'face_types': mesh_data['face_types'],
+                'vertex_colors': mesh_data['vertex_colors'],
                 'feature_edges': feature_edges,
                 'triangle_count': mesh_data['triangle_count']
             },
