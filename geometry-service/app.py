@@ -11,7 +11,7 @@ from supabase import create_client, Client
 from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.BRep import BRep_Tool
 from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
-from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
+from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_IN
 from OCC.Core.TopExp import TopExp_Explorer, topexp
 from OCC.Core.TopLoc import TopLoc_Location
 from OCC.Core.Bnd import Bnd_Box
@@ -27,8 +27,7 @@ from OCC.Core.TopoDS import topods
 from OCC.Core.GProp import GProp_GProps
 from OCC.Core.BRepGProp import brepgprop, BRepGProp_Face
 from OCC.Core.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListIteratorOfListOfShape
-from OCC.Core.gp import gp_Vec, gp_Pnt, gp_Lin, gp_Dir
-from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
+from OCC.Core.gp import gp_Vec, gp_Pnt
 
 import logging
 
@@ -84,16 +83,14 @@ def calculate_exact_volume_and_area(shape):
 
 def classify_faces_topology(shape):
     """
-    Classify faces using BIDIRECTIONAL RAY-CASTING approach.
+    HYBRID MULTI-METHOD CLASSIFICATION - Best of all approaches!
     
-    Logic:
-    - Both rays escape → OUTER (external wall)
-    - Forward escapes, backward hits → INNER (back wall of cavity)
-    - Ray hits same face → THROUGH (cylindrical hole)
-    - Ray hits other face → INNER (cavity wall)
+    Uses 3 methods intelligently based on surface type:
+    1. Curvature analysis for cylinders
+    2. Volume sampling for planes  
+    3. Multi-directional accessibility for complex surfaces
     """
-    from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
-    from OCC.Core.gp import gp_Lin, gp_Dir
+    from OCC.Core.BRepClass3d import BRepClass3d_SolidClassifier
     
     face_types = {}
     face_objects = []
@@ -103,6 +100,7 @@ def classify_faces_topology(shape):
     brepbndlib.Add(shape, bbox)
     xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
     bbox_size = max(xmax - xmin, ymax - ymin, zmax - zmin)
+    bbox_center = gp_Pnt((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
     
     # Collect all faces
     face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
@@ -111,94 +109,196 @@ def classify_faces_topology(shape):
         face_objects.append(face)
         face_explorer.Next()
     
-    # Create ray intersector
-    intersector = IntCurvesFace_ShapeIntersector()
-    intersector.Load(shape, 1e-6)
+    classifier = BRepClass3d_SolidClassifier(shape)
     
-    logger.info(f"🔍 Starting bidirectional ray-casting for {len(face_objects)} faces...")
+    logger.info(f"🎯 Hybrid multi-method classification for {len(face_objects)} faces...")
     
     for face_idx, face in enumerate(face_objects):
         try:
+            surface = BRepAdaptor_Surface(face)
+            surf_type = surface.GetType()
+            
             # Get face center
             face_props = GProp_GProps()
             brepgprop.SurfaceProperties(face, face_props)
             face_center = face_props.CentreOfMass()
             
-            # Get normal at face center
-            try:
-                umin, umax, vmin, vmax = breptools.UVBounds(face)
-                u_mid = (umin + umax) / 2
-                v_mid = (vmin + vmax) / 2
+            # === METHOD 1: CYLINDER CURVATURE ANALYSIS ===
+            if surf_type == GeomAbs_Cylinder:
+                cyl = surface.Cylinder()
+                cyl_axis_location = cyl.Location()
+                radius = cyl.Radius()
                 
-                point_on_surf = gp_Pnt()
-                normal_vec = gp_Vec()
-                BRepGProp_Face(face).Normal(u_mid, v_mid, point_on_surf, normal_vec)
+                # Vector from cylinder axis to face center (radius direction)
+                radial_vec = gp_Vec(cyl_axis_location, face_center)
+                radial_dist = radial_vec.Magnitude()
                 
-                normal_length = normal_vec.Magnitude()
-                if normal_length < 1e-9:
-                    face_types[face_idx] = "outer"
+                if radial_dist > 1e-6:
+                    radial_vec.Normalize()
+                    
+                    # Point at center of curvature (on cylinder axis)
+                    curvature_center = cyl_axis_location
+                    
+                    # Check if curvature center is inside or outside the solid
+                    classifier.Perform(curvature_center, 1e-6)
+                    state = classifier.State()
+                    
+                    # If axis is INSIDE solid → cylinder curves inward → INNER (hole/bore)
+                    # If axis is OUTSIDE solid → cylinder curves outward → OUTER (boss/shaft)
+                    from OCC.Core.TopAbs import TopAbs_IN
+                    if state == TopAbs_IN:
+                        face_types[face_idx] = "inner"
+                    else:
+                        face_types[face_idx] = "outer"
                     continue
+            
+            # === METHOD 2: PLANAR FACE VOLUME SAMPLING ===
+            if surf_type == GeomAbs_Plane:
+                try:
+                    umin, umax, vmin, vmax = breptools.UVBounds(face)
+                    u_mid = (umin + umax) / 2
+                    v_mid = (vmin + vmax) / 2
+                    
+                    point_on_surf = gp_Pnt()
+                    normal_vec = gp_Vec()
+                    BRepGProp_Face(face).Normal(u_mid, v_mid, point_on_surf, normal_vec)
+                    
+                    normal_length = normal_vec.Magnitude()
+                    if normal_length > 1e-9:
+                        normal_vec.Divide(normal_length)
+                        
+                        # Sample multiple points on both sides
+                        offset = bbox_size * 0.01
+                        inside_count = 0
+                        outside_count = 0
+                        
+                        # Test 5 points on each side
+                        for sample_offset in [0.5, 1.0, 1.5, 2.0, 2.5]:
+                            # Positive normal side
+                            test_pos = gp_Pnt(
+                                face_center.X() + normal_vec.X() * offset * sample_offset,
+                                face_center.Y() + normal_vec.Y() * offset * sample_offset,
+                                face_center.Z() + normal_vec.Z() * offset * sample_offset
+                            )
+                            classifier.Perform(test_pos, 1e-6)
+                            if classifier.State() == TopAbs_IN:
+                                inside_count += 1
+                            
+                            # Negative normal side
+                            test_neg = gp_Pnt(
+                                face_center.X() - normal_vec.X() * offset * sample_offset,
+                                face_center.Y() - normal_vec.Y() * offset * sample_offset,
+                                face_center.Z() - normal_vec.Z() * offset * sample_offset
+                            )
+                            classifier.Perform(test_neg, 1e-6)
+                            if classifier.State() == TopAbs_IN:
+                                outside_count += 1
+                        
+                        # More material on positive side = inner face (back wall)
+                        # More material on negative side = outer face
+                        if inside_count > outside_count:
+                            face_types[face_idx] = "inner"
+                        else:
+                            face_types[face_idx] = "outer"
+                        continue
+                except:
+                    pass
+            
+            # === METHOD 3: MULTI-DIRECTIONAL ACCESSIBILITY TEST ===
+            # Cast rays in 6 cardinal directions
+            test_directions = [
+                (1, 0, 0), (-1, 0, 0),   # ±X
+                (0, 1, 0), (0, -1, 0),   # ±Y
+                (0, 0, 1), (0, 0, -1)    # ±Z
+            ]
+            
+            escape_count = 0
+            offset = bbox_size * 0.05
+            
+            for dx, dy, dz in test_directions:
+                test_point = gp_Pnt(
+                    face_center.X() + dx * offset,
+                    face_center.Y() + dy * offset,
+                    face_center.Z() + dz * offset
+                )
                 
-                normal_vec.Divide(normal_length)
-                
-            except Exception as e:
-                logger.warning(f"Face {face_idx} normal failed: {e}")
+                classifier.Perform(test_point, 1e-6)
+                if classifier.State() != TopAbs_IN:
+                    escape_count += 1
+            
+            # If majority of directions escape → outer face
+            # If majority blocked → inner face
+            if escape_count >= 4:  # At least 4 out of 6 escape
                 face_types[face_idx] = "outer"
-                continue
-            
-            # Offset from surface to avoid self-intersection
-            start_offset = bbox_size * 0.001
-            
-            # FORWARD RAY (along normal)
-            start_point = gp_Pnt(
-                face_center.X() + normal_vec.X() * start_offset,
-                face_center.Y() + normal_vec.Y() * start_offset,
-                face_center.Z() + normal_vec.Z() * start_offset
-            )
-            forward_dir = gp_Dir(normal_vec.X(), normal_vec.Y(), normal_vec.Z())
-            forward_ray = gp_Lin(start_point, forward_dir)
-            
-            intersector.Perform(forward_ray, 0, bbox_size * 3)
-            forward_hits = intersector.NbPnt()
-            
-            # Check if hits itself (through-hole)
-            hits_itself = False
-            if forward_hits > 0:
-                for i in range(1, forward_hits + 1):
-                    hit_face = intersector.Face(i)
-                    if hit_face.IsSame(face):
-                        hits_itself = True
-                        break
-            
-            # BACKWARD RAY (opposite direction)
-            backward_start = gp_Pnt(
-                face_center.X() - normal_vec.X() * start_offset,
-                face_center.Y() - normal_vec.Y() * start_offset,
-                face_center.Z() - normal_vec.Z() * start_offset
-            )
-            backward_dir = gp_Dir(-normal_vec.X(), -normal_vec.Y(), -normal_vec.Z())
-            backward_ray = gp_Lin(backward_start, backward_dir)
-            
-            intersector.Perform(backward_ray, 0, bbox_size * 3)
-            backward_hits = intersector.NbPnt()
-            
-            # CLASSIFICATION
-            if hits_itself:
-                face_types[face_idx] = "through"
-            elif forward_hits == 0 and backward_hits == 0:
-                face_types[face_idx] = "outer"
-            elif forward_hits == 0 and backward_hits > 0:
-                face_types[face_idx] = "inner"
-            elif forward_hits > 0:
-                face_types[face_idx] = "inner"
             else:
-                face_types[face_idx] = "outer"
-            
+                face_types[face_idx] = "inner"
+                
         except Exception as e:
-            logger.warning(f"Face {face_idx} ray-casting failed: {e}")
+            logger.warning(f"Face {face_idx} classification failed: {e}")
             face_types[face_idx] = "outer"
     
-    logger.info(f"✅ Ray-casting complete: {len(face_types)} faces")
+    # === STEP 2: SMART THROUGH-HOLE DETECTION ===
+    # Build edge adjacency
+    edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
+    topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
+    
+    edge_to_face_indices = {}
+    for map_idx in range(1, edge_face_map.Size() + 1):
+        edge = edge_face_map.FindKey(map_idx)
+        face_list = edge_face_map.FindFromIndex(map_idx)
+        
+        adjacent_face_indices = []
+        face_iter = TopTools_ListIteratorOfListOfShape(face_list)
+        while face_iter.More():
+            adj_face = topods.Face(face_iter.Value())
+            for f_idx, stored_face in enumerate(face_objects):
+                if adj_face.IsSame(stored_face):
+                    adjacent_face_indices.append(f_idx)
+                    break
+            face_iter.Next()
+        
+        edge_to_face_indices[edge] = adjacent_face_indices
+    
+    # Detect through-holes: small cylindrical inner faces that connect to outer
+    for face_idx, face in enumerate(face_objects):
+        if face_types[face_idx] != "inner":
+            continue
+        
+        surface = BRepAdaptor_Surface(face)
+        if surface.GetType() != GeomAbs_Cylinder:
+            continue
+        
+        try:
+            cyl = surface.Cylinder()
+            radius = cyl.Radius()
+            
+            # Small holes only (< 12% of bbox)
+            if radius > bbox_size * 0.12:
+                continue
+            
+            # Check if connects to outer faces
+            edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
+            outer_neighbor_count = 0
+            
+            while edge_exp.More():
+                edge = edge_exp.Current()
+                
+                for map_edge, adj_indices in edge_to_face_indices.items():
+                    if edge.IsSame(map_edge):
+                        for adj_idx in adj_indices:
+                            if adj_idx != face_idx and face_types.get(adj_idx) == "outer":
+                                outer_neighbor_count += 1
+                        break
+                edge_exp.Next()
+            
+            # If has multiple connections to outer faces → through-hole
+            if outer_neighbor_count >= 2:
+                face_types[face_idx] = "through"
+                
+        except:
+            pass
+    
+    logger.info(f"✅ Hybrid classification complete: {len(face_types)} faces")
     type_counts = {}
     for ftype in face_types.values():
         type_counts[ftype] = type_counts.get(ftype, 0) + 1
@@ -575,7 +675,7 @@ def analyze_cad():
                 'vertex_colors': mesh_data['vertex_colors'],
                 'feature_edges': feature_edges,
                 'triangle_count': mesh_data['triangle_count'],
-                'face_classification_method': 'bidirectional_raycasting'
+                'face_classification_method': 'hybrid_multimethod'
             },
             'volume_cm3': exact_props['volume'] / 1000,
             'surface_area_cm2': exact_props['surface_area'] / 100,
@@ -592,7 +692,7 @@ def analyze_cad():
             'quotation_ready': True,
             'status': 'success',
             'confidence': 0.98,
-            'method': 'brep_bidirectional_raycasting'
+            'method': 'brep_hybrid_multimethod'
         })
 
     except Exception as e:
@@ -609,7 +709,7 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "2.0.0-raycasting",
+        "version": "3.0.0-hybrid",
         "status": "running",
         "endpoints": {
             "health": "/health",
