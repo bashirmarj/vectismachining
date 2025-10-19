@@ -377,23 +377,35 @@ def tessellate_shape(shape):
             reversed_face = face.Orientation() == 1
             surf_type = surface.GetType()
             center = calculate_face_center(triangulation, transform)
-            vector_to_center = [cx - center[0], cy - center[1], cz - center[2]]
+            
+            # Calculate vector from bounding box center to face center
+            bbox_center = [cx, cy, cz]
+            to_surface = [center[0] - bbox_center[0], center[1] - bbox_center[1], center[2] - bbox_center[2]]
+            to_surface_len = math.sqrt(sum(v * v for v in to_surface)) + 1e-9
+            
+            # Get face normal
             normal_vec = get_average_face_normal(triangulation, transform, reversed_face)
-            dot = sum(n * v for n, v in zip(normal_vec, vector_to_center))
-            dot /= (math.sqrt(sum(v * v for v in vector_to_center)) + 1e-9)
+            normal_len = math.sqrt(sum(n * n for n in normal_vec)) + 1e-9
+            
+            # Dot product: positive if normal points outward, negative if inward
+            dot_product = sum(n * v for n, v in zip(normal_vec, to_surface)) / (normal_len * to_surface_len)
 
-            # classify face
-            if surf_type == GeomAbs_Cylinder:
-                cyl = surface.Cylinder()
-                r = cyl.Radius()
-                if r < max_radius * 0.4 or dot > 0:
-                    ftype = "internal"
-                else:
-                    ftype = "cylindrical"
-            elif surf_type == GeomAbs_Plane:
-                ftype = "internal" if dot > 0.5 else "planar"
+            # Classify face based on geometry type and normal direction
+            if surf_type == GeomAbs_Plane:
+                # Planar faces are always planar
+                ftype = "planar"
+            elif surf_type == GeomAbs_Cylinder:
+                # Cylindrical surfaces: check if normal points inward (internal) or outward (external)
+                if dot_product < -0.1:  # Normal points inward (toward center)
+                    ftype = "internal"  # Holes, bores, internal cylindrical pockets
+                else:  # Normal points outward or tangent
+                    ftype = "cylindrical"  # External cylindrical surfaces
             else:
-                ftype = "internal" if dot > 0.3 else "external"
+                # Other surface types: use normal direction
+                if dot_product < -0.1:
+                    ftype = "internal"  # Internal complex surfaces
+                else:
+                    ftype = "external"  # External complex surfaces
 
             # vertices with welding tolerance to close microgaps
             face_vertices = []
