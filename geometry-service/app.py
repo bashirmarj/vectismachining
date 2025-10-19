@@ -454,7 +454,7 @@ def tessellate_shape(shape):
                 l = math.sqrt(sum(x * x for x in n))
                 if l > 0:
                     n = [x / l for x in n]
-                if sum(n * v for n, v in zip(n, vector_to_center)) < 0:
+                if sum(n * v for n, v in zip(n, to_surface)) < 0:
                     n = [-x for x in n]
                 for _ in range(3):
                     normals.extend(n)
