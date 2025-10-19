@@ -404,6 +404,7 @@ def classify_mesh_faces(mesh_data, shape):
     vertex_count = len(vertices) // 3
     vertex_colors = ["external"] * vertex_count
     face_classifications = {}  # Store classification for each face
+    locked_faces = set()  # Faces classified in step 1 - don't change these!
     
     # Build edge-to-face adjacency map
     edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
@@ -513,6 +514,7 @@ def classify_mesh_faces(mesh_data, shape):
             
             # Store classification
             face_classifications[face_idx] = face_type
+            locked_faces.add(face_idx)  # Lock this classification
             
             # Apply to vertices
             for v_idx in range(start_vertex, start_vertex + vertex_count_face):
@@ -525,70 +527,90 @@ def classify_mesh_faces(mesh_data, shape):
             logger.warning(f"Cylinder classification failed for face {face_idx}: {e}")
             face_classifications[face_idx] = "external"
     
-    logger.info("🔍 STEP 2: Propagating classification to adjacent faces...")
+    logger.info("🔍 STEP 2: Multi-pass propagation to adjacent faces...")
     
-    # STEP 2: Propagate classification from cylinders to adjacent faces
-    # This handles boss fillets, planar faces, back walls, etc.
-    for face_info in face_data:
-        face_idx = face_info['face_idx']
+    # STEP 2: Multi-pass propagation until stable
+    # Iterate multiple times to ensure all connected faces get proper classification
+    max_iterations = 10
+    
+    for iteration in range(max_iterations):
+        changes_made = False
         
-        # Skip if already classified
-        if face_idx in face_classifications:
-            continue
-        
-        surf_type = face_info['surf_type']
-        face_object = face_info['face_object']
-        start_vertex = face_info['start_vertex']
-        vertex_count_face = face_info['vertex_count']
-        
-        # Find adjacent faces via shared edges
-        edge_exp = TopExp_Explorer(face_object, TopAbs_EDGE)
-        neighbor_types = []
-        
-        while edge_exp.More():
-            edge = edge_exp.Current()
+        for face_info in face_data:
+            face_idx = face_info['face_idx']
             
-            # Find all faces sharing this edge
-            for map_idx in range(1, edge_face_map.Size() + 1):
-                map_edge = edge_face_map.FindKey(map_idx)
-                if edge.IsSame(map_edge):
-                    face_list = edge_face_map.FindFromIndex(map_idx)
-                    face_iter = TopTools_ListIteratorOfListOfShape(face_list)
-                    
-                    while face_iter.More():
-                        adj_face = topods.Face(face_iter.Value())
-                        
-                        # Find this adjacent face in our data
-                        for other_info in face_data:
-                            if adj_face.IsSame(other_info['face_object']):
-                                other_idx = other_info['face_idx']
-                                if other_idx != face_idx and other_idx in face_classifications:
-                                    neighbor_types.append(face_classifications[other_idx])
-                                break
-                        
-                        face_iter.Next()
-                    break
+            # Skip locked faces (cylindrical faces from step 1)
+            if face_idx in locked_faces:
+                continue
             
-            edge_exp.Next()
-        
-        # Determine face type based on neighbors
-        if neighbor_types:
-            # Priority: internal > through > external
-            # This ensures boss features get classified as internal if connected to internal surfaces
-            if "internal" in neighbor_types:
-                face_type = "internal"
-            elif "through" in neighbor_types:
-                face_type = "through"
+            surf_type = face_info['surf_type']
+            face_object = face_info['face_object']
+            start_vertex = face_info['start_vertex']
+            vertex_count_face = face_info['vertex_count']
+            
+            # Get current classification
+            current_type = face_classifications.get(face_idx)
+            
+            # Find adjacent faces via shared edges
+            edge_exp = TopExp_Explorer(face_object, TopAbs_EDGE)
+            neighbor_types = []
+            
+            while edge_exp.More():
+                edge = edge_exp.Current()
+                
+                # Find all faces sharing this edge
+                for map_idx in range(1, edge_face_map.Size() + 1):
+                    map_edge = edge_face_map.FindKey(map_idx)
+                    if edge.IsSame(map_edge):
+                        face_list = edge_face_map.FindFromIndex(map_idx)
+                        face_iter = TopTools_ListIteratorOfListOfShape(face_list)
+                        
+                        while face_iter.More():
+                            adj_face = topods.Face(face_iter.Value())
+                            
+                            # Find this adjacent face in our data
+                            for other_info in face_data:
+                                if adj_face.IsSame(other_info['face_object']):
+                                    other_idx = other_info['face_idx']
+                                    if other_idx != face_idx and other_idx in face_classifications:
+                                        neighbor_types.append(face_classifications[other_idx])
+                                    break
+                            
+                            face_iter.Next()
+                        break
+                
+                edge_exp.Next()
+            
+            # Determine new type based on neighbors
+            new_type = None
+            
+            if neighbor_types:
+                # Priority: internal > through > external
+                if "internal" in neighbor_types:
+                    new_type = "internal"
+                elif "through" in neighbor_types:
+                    new_type = "through"
+                else:
+                    new_type = "external"
             else:
-                face_type = "external"
-        else:
-            # No classified neighbors - use planar default or external
-            face_type = "planar" if surf_type == GeomAbs_Plane else "external"
+                # No neighbors - keep current or assign default
+                if current_type is None:
+                    new_type = "planar" if surf_type == GeomAbs_Plane else "external"
+                else:
+                    new_type = current_type
+            
+            # Update if changed
+            if current_type != new_type:
+                face_classifications[face_idx] = new_type
+                for v_idx in range(start_vertex, start_vertex + vertex_count_face):
+                    vertex_colors[v_idx] = new_type
+                changes_made = True
         
-        # Store and apply
-        face_classifications[face_idx] = face_type
-        for v_idx in range(start_vertex, start_vertex + vertex_count_face):
-            vertex_colors[v_idx] = face_type
+        if not changes_made:
+            logger.info(f"  Propagation converged after {iteration + 1} iterations")
+            break
+        elif iteration == max_iterations - 1:
+            logger.info(f"  Propagation stopped at max iterations ({max_iterations})")
     
     # Count results
     type_counts = {}
