@@ -42,18 +42,6 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     geo.setIndex(meshData.indices);
     
     // Apply Fusion 360-style vertex colors
-    if (topologyColors) {
-      if (!meshData.face_types) {
-        console.warn('⚠️ Topology colors requested but face_types data is missing from meshData');
-      } else if (meshData.face_types.length === 0) {
-        console.warn('⚠️ Topology colors requested but face_types array is empty');
-      } else if (meshData.face_types.length !== meshData.vertices.length / 3) {
-        console.warn(`⚠️ Face types count mismatch: ${meshData.face_types.length} face_types vs ${meshData.vertices.length / 3} vertices`);
-      } else {
-        console.log(`✅ Applying topology colors to ${meshData.face_types.length} vertices`);
-      }
-    }
-    
     if (topologyColors && meshData.face_types && meshData.face_types.length > 0) {
       const colors = new Float32Array(meshData.vertices.length); // Same length as vertices
       
@@ -124,17 +112,6 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return geometry;
   }, [meshData.feature_edges, showEdges, displayStyle]);
 
-  // Create dynamic silhouette edges using EdgesGeometry (for outer circular perimeters)
-  const silhouetteEdges = useMemo(() => {
-    if (!showEdges && displayStyle !== 'wireframe') return null;
-    
-    // Use EdgesGeometry to detect edges where adjacent triangles meet at significant angles
-    // Angle threshold of 15° captures outer cylinder perimeters and sharp features
-    const edgesGeometry = new THREE.EdgesGeometry(geometry, 30);
-    
-    return edgesGeometry;
-  }, [geometry, showEdges, displayStyle]);
-
   
   // Section cut plane
   const clippingPlane = useMemo(() => {
@@ -204,18 +181,6 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       {/* Render BREP feature edges (true CAD edges from backend) */}
       {featureEdges && (
         <lineSegments geometry={featureEdges}>
-          <lineBasicMaterial 
-            color="#000000" 
-            linewidth={1}
-            clippingPlanes={clippingPlane}
-            clipIntersection={false}
-          />
-        </lineSegments>
-      )}
-      
-      {/* Render dynamic silhouette edges (outer circular perimeters and sharp features) */}
-      {silhouetteEdges && (
-        <lineSegments geometry={silhouetteEdges}>
           <lineBasicMaterial 
             color="#000000" 
             linewidth={1}
