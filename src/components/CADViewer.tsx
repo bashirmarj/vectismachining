@@ -10,18 +10,6 @@ import { MeshModel } from './cad-viewer/MeshModel';
 import { DimensionAnnotations } from './cad-viewer/DimensionAnnotations';
 import { MeasurementTool } from './cad-viewer/MeasurementTool';
 import { OrientationCubePreview, OrientationCubeHandle } from './cad-viewer/OrientationCubePreview';
-import { useCameraAnimation } from '@/hooks/useCameraAnimation'; // ⭐ NEW
-
-// ⭐ NEW: Interface for feature selection
-interface SelectedFeature {
-  type: 'through_hole' | 'blind_hole' | 'bore' | 'boss' | 'fillet';
-  index: number;
-  triangleStart: number;
-  triangleEnd: number;
-  center: [number, number, number];
-  diameter?: number;
-  label: string;
-}
 
 interface CADViewerProps {
   file?: File;
@@ -30,10 +18,6 @@ interface CADViewerProps {
   meshId?: string;
   meshData?: MeshData;
   detectedFeatures?: any;
-  manufacturing_features?: any;      // ⭐ NEW
-  feature_summary?: any;             // ⭐ NEW
-  onFeatureSelect?: (feature: SelectedFeature | null) => void; // ⭐ NEW
-  selectedFeature?: SelectedFeature | null; // ⭐ NEW
 }
 
 interface MeshData {
@@ -45,18 +29,7 @@ interface MeshData {
   feature_edges?: number[][][];
 }
 
-export function CADViewer({ 
-  file, 
-  fileUrl, 
-  fileName, 
-  meshId, 
-  meshData: propMeshData, 
-  detectedFeatures,
-  manufacturing_features,    // ⭐ NEW
-  feature_summary,           // ⭐ NEW
-  onFeatureSelect,           // ⭐ NEW
-  selectedFeature            // ⭐ NEW
-}: CADViewerProps) {
+export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshData, detectedFeatures }: CADViewerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchedMeshData, setFetchedMeshData] = useState<MeshData | null>(null);
@@ -73,16 +46,6 @@ export function CADViewer({
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const orientationCubeRef = useRef<OrientationCubeHandle>(null);
-  
-  // ⭐ NEW: Camera animation for feature highlighting
-  useCameraAnimation(
-    selectedFeature ? {
-      center: selectedFeature.center,
-      diameter: selectedFeature.diameter || 10,
-      duration: 800
-    } : null,
-    controlsRef.current
-  );
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isSTEP = ['step', 'stp'].includes(fileExtension);
@@ -486,18 +449,6 @@ export function CADViewer({
               <Box className="w-4 h-4 text-gray-700 hover:text-gray-900" />
             </button>
             
-            {/* ⭐ NEW: Selected Feature Badge */}
-            {selectedFeature && (
-              <div className="absolute top-20 left-5 z-30 bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
-                <span className="font-medium text-sm">{selectedFeature.label}</span>
-                <button
-                  onClick={() => onFeatureSelect?.(null)}
-                  className="ml-2 hover:bg-orange-600 rounded px-2 py-1 transition-colors text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
             
             {/* Orientation Cube - Top Right */}
             <div className="absolute top-5 right-5 z-30">
@@ -545,6 +496,10 @@ export function CADViewer({
                   color="#ffffff"
                 />
                 
+                {/* Subtle grid (light gray) */}
+...
+                
+                
                 {/* Auto-framed camera */}
                 <PerspectiveCamera
                   ref={cameraRef}
@@ -566,7 +521,6 @@ export function CADViewer({
                   showHiddenEdges={showHiddenEdges}
                   displayStyle={displayStyle}
                   topologyColors={showTopologyColors}
-                  selectedFeature={selectedFeature}  // ⭐ NEW: Pass selected feature
                 />
                 
                 {/* Soft contact shadow */}
@@ -634,6 +588,3 @@ export function CADViewer({
     </div>
   );
 }
-
-export { CADViewer };
-export default CADViewer;
