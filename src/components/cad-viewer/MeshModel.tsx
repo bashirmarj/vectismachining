@@ -22,7 +22,7 @@ interface MeshModelProps {
 }
 
 // Professional solid color for CAD rendering
-const SOLID_COLOR = '#5b9bd5'; // Professional CAD blue
+const SOLID_COLOR = '#CCCCCC'; // Light gray
 
 // Fusion 360 Analysis colors
 const TOPOLOGY_COLORS = {

@@ -42,7 +42,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   const [showDimensions, setShowDimensions] = useState(false);
   const [measurementMode, setMeasurementMode] = useState<'distance' | 'angle' | 'radius' | null>(null);
   const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
-  const showTopologyColors = true; // Always use Fusion 360 topology colors
+  const showTopologyColors = false; // Disabled - use solid light gray
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const orientationCubeRef = useRef<OrientationCubeHandle>(null);
