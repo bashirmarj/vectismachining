@@ -55,7 +55,7 @@ interface PartConfigScreenProps {
   isSubmitting: boolean;
 }
 
-const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
+export const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
   files,
   materials,
   processes,
@@ -412,5 +412,3 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
     </div>
   );
 };
-
-export default PartConfigScreen;
