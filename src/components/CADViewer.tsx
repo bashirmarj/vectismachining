@@ -1,8 +1,8 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { Suspense, useMemo, useEffect, useState, useRef } from 'react';
 import { CardContent } from '@/components/ui/card';
-import { Loader2, Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
@@ -42,22 +42,27 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   const [showDimensions, setShowDimensions] = useState(false);
   const [measurementMode, setMeasurementMode] = useState<'distance' | 'angle' | 'radius' | null>(null);
   const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
-  const showTopologyColors = true; // Always use Fusion 360 topology colors
+  const showTopologyColors = true;
+  
+  // SolidWorks-style dynamic rotation center
+  const [rotationTarget, setRotationTarget] = useState<[number, number, number]>([0, 0, 0]);
+  
+  // Refs
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const orientationCubeRef = useRef<OrientationCubeHandle>(null);
+  const meshRef = useRef<THREE.Group>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const raycaster = useRef(new THREE.Raycaster());
+  const mouse = useRef(new THREE.Vector2());
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isSTEP = ['step', 'stp'].includes(fileExtension);
   const isIGES = ['iges', 'igs'].includes(fileExtension);
   const isRenderableFormat = ['stl', 'step', 'stp', 'iges', 'igs'].includes(fileExtension);
   
-  // STEP/IGES files are now processed server-side via geometry service
-  // Mesh data is fetched from database using meshId (provided after server analysis)
-  
   // Fetch mesh data from database when meshId is provided (for admin view)
   useEffect(() => {
-    // Priority 1: Use mesh data passed via props
     if (propMeshData) {
       console.log('✅ Mesh data received from backend:', {
         vertices: propMeshData.vertices.length,
@@ -68,13 +73,12 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       return;
     }
     
-    // Priority 2: Fetch from database if meshId is provided
     if (!meshId) {
       console.log('⚠️ No mesh data available (no propMeshData or meshId)');
       return;
     }
     
-    if (fetchedMeshData) return; // Already fetched
+    if (fetchedMeshData) return;
     
     const fetchMesh = async () => {
       setIsLoading(true);
@@ -105,10 +109,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     fetchMesh();
   }, [meshId, propMeshData, fetchedMeshData]);
   
-  // Use mesh data from props or fetched data
   const activeMeshData = propMeshData || fetchedMeshData;
   
-  // Calculate bounding box for camera and annotations
+  // Calculate bounding box
   const boundingBox = useMemo(() => {
     if (!activeMeshData || !activeMeshData.vertices || activeMeshData.vertices.length === 0) {
       return { width: 100, height: 100, depth: 100, center: [0, 0, 0] as [number, number, number] };
@@ -138,7 +141,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     return { width, height, depth, center };
   }, [activeMeshData]);
   
-  // FIXED: Calculate dynamic camera and fog distances based on part size
+  // Dynamic viewport settings
   const viewportSettings = useMemo(() => {
     const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
     
@@ -152,10 +155,15 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     };
   }, [boundingBox]);
   
-  // Determine if we have valid 3D data to display
+  // Initialize rotation target to part center
+  useEffect(() => {
+    if (boundingBox) {
+      setRotationTarget(boundingBox.center);
+    }
+  }, [boundingBox]);
+  
   const hasValidModel = activeMeshData && activeMeshData.vertices && activeMeshData.vertices.length > 0;
   
-  // Create object URL for File objects, cleanup on unmount
   const objectUrl = useMemo(() => {
     if (file) {
       return URL.createObjectURL(file);
@@ -188,82 +196,46 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
         boundingBox.center[2] + distance
       );
       
+      setRotationTarget(boundingBox.center);
       controlsRef.current.target.set(...boundingBox.center);
       controlsRef.current.update();
     }
   };
   
-  // Helper function to classify click region (face, edge, or corner)
-  const classifyClickRegion = (localPoint: THREE.Vector3) => {
-    const faceDistance = 1.5; // Cube is 3x3x3, so face distance from center is 1.5
-    const edgeThreshold = 0.4;
-    const cornerThreshold = 0.6;
+  // SolidWorks-style: Dynamic rotation center based on cursor position
+  const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!cameraRef.current || !meshRef.current || !canvasRef.current) return;
     
-    const absX = Math.abs(localPoint.x);
-    const absY = Math.abs(localPoint.y);
-    const absZ = Math.abs(localPoint.z);
+    // Only update target on left mouse button (rotation)
+    if (event.button !== 0) return;
     
-    const nearMaxX = absX > (faceDistance - edgeThreshold);
-    const nearMaxY = absY > (faceDistance - edgeThreshold);
-    const nearMaxZ = absZ > (faceDistance - edgeThreshold);
+    // Calculate mouse position in normalized device coordinates
+    const rect = canvasRef.current.getBoundingClientRect();
+    mouse.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     
-    const edgeCount = [nearMaxX, nearMaxY, nearMaxZ].filter(Boolean).length;
+    // Update raycaster
+    raycaster.current.setFromCamera(mouse.current, cameraRef.current);
     
-    // CORNER: All 3 dimensions near maximum
-    if (edgeCount === 3) {
-      const direction = new THREE.Vector3(
-        Math.sign(localPoint.x),
-        Math.sign(localPoint.y),
-        Math.sign(localPoint.z)
-      ).normalize();
+    // Find intersection with mesh
+    const intersects = raycaster.current.intersectObject(meshRef.current, true);
+    
+    if (intersects.length > 0) {
+      // Clicked on model - rotate around that point
+      const point = intersects[0].point;
+      const newTarget: [number, number, number] = [point.x, point.y, point.z];
+      setRotationTarget(newTarget);
       
-      return {
-        type: 'corner' as const,
-        direction,
-        description: `Corner (${Math.sign(localPoint.x) > 0 ? '+' : '-'}X, ${Math.sign(localPoint.y) > 0 ? '+' : '-'}Y, ${Math.sign(localPoint.z) > 0 ? '+' : '-'}Z)`
-      };
-    }
-    // EDGE: Exactly 2 dimensions near maximum
-    else if (edgeCount === 2) {
-      const direction = new THREE.Vector3(
-        nearMaxX ? Math.sign(localPoint.x) : 0,
-        nearMaxY ? Math.sign(localPoint.y) : 0,
-        nearMaxZ ? Math.sign(localPoint.z) : 0
-      ).normalize();
-      
-      return {
-        type: 'edge' as const,
-        direction,
-        description: 'Edge view'
-      };
-    }
-    // FACE: Only 1 dimension near maximum
-    else {
-      if (absX > absY && absX > absZ) {
-        return {
-          type: 'face' as const,
-          direction: new THREE.Vector3(Math.sign(localPoint.x), 0, 0),
-          description: Math.sign(localPoint.x) > 0 ? 'Right' : 'Left'
-        };
-      } else if (absY > absX && absY > absZ) {
-        return {
-          type: 'face' as const,
-          direction: new THREE.Vector3(0, Math.sign(localPoint.y), 0),
-          description: Math.sign(localPoint.y) > 0 ? 'Top' : 'Bottom'
-        };
-      } else {
-        return {
-          type: 'face' as const,
-          direction: new THREE.Vector3(0, 0, Math.sign(localPoint.z)),
-          description: Math.sign(localPoint.z) > 0 ? 'Front' : 'Back'
-        };
+      if (controlsRef.current) {
+        controlsRef.current.target.set(...newTarget);
+        controlsRef.current.update();
       }
+      
+      console.log('🎯 Rotation center set to cursor position:', newTarget);
     }
+    // If clicked on empty space, keep current rotation target
   };
-
-  // Orientation cube removed - using OrientationCubePreview component instead
   
-  // Isometric view helper
   const setIsometricView = () => {
     if (!cameraRef.current || !controlsRef.current) return;
     
@@ -271,9 +243,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     const distance = maxDim * 2;
     const target = new THREE.Vector3(...boundingBox.center);
     
-    // Isometric angles: 45° horizontal, 35.264° vertical
-    const phi = Math.PI / 4; // 45°
-    const theta = Math.asin(Math.tan(Math.PI / 6)); // 35.264°
+    const phi = Math.PI / 4;
+    const theta = Math.asin(Math.tan(Math.PI / 6));
     
     cameraRef.current.position.set(
       target.x + distance * Math.sin(phi) * Math.cos(theta),
@@ -281,11 +252,11 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       target.z + distance * Math.cos(phi) * Math.cos(theta)
     );
     
+    setRotationTarget(boundingBox.center);
     controlsRef.current.target.copy(target);
     controlsRef.current.update();
   };
   
-  // Smooth camera orientation to any direction (face, edge, or corner)
   const orientMainCameraToDirection = (direction: THREE.Vector3) => {
     if (!cameraRef.current || !controlsRef.current) return;
     
@@ -293,29 +264,17 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     const distance = maxDim * 2.5;
     const target = new THREE.Vector3(...boundingBox.center);
     
-    // INVERT direction: to look AT a face, camera must be OPPOSITE to it
     const cameraDirection = direction.clone().normalize().multiplyScalar(-1);
+    const newPosition = target.clone().add(cameraDirection.multiplyScalar(distance));
     
-    // Calculate new camera position
-    const newPosition = target.clone().add(
-      cameraDirection.multiplyScalar(distance)
-    );
-    
-    // Handle up vector for top/bottom views
     const up = new THREE.Vector3(0, 1, 0);
-    // Check the ORIGINAL direction for top/bottom (before inverting)
     if (Math.abs(direction.y) > 0.99) {
       up.set(0, 0, direction.y > 0 ? -1 : 1);
     }
     
-    const lookAtMatrix = new THREE.Matrix4().lookAt(
-      newPosition,
-      target,
-      up
-    );
+    const lookAtMatrix = new THREE.Matrix4().lookAt(newPosition, target, up);
     const targetQuat = new THREE.Quaternion().setFromRotationMatrix(lookAtMatrix);
     
-    // Smooth animation
     const startPos = cameraRef.current.position.clone();
     const startQuat = cameraRef.current.quaternion.clone();
     const duration = 600;
@@ -324,11 +283,12 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     const animate = (t: number) => {
       const elapsed = t - t0;
       const k = Math.min(1, elapsed / duration);
-      const easedK = 1 - Math.pow(1 - k, 3); // Ease-out cubic
+      const easedK = 1 - Math.pow(1 - k, 3);
       
       cameraRef.current.position.lerpVectors(startPos, newPosition, easedK);
       cameraRef.current.quaternion.slerpQuaternions(startQuat, targetQuat, easedK);
       
+      setRotationTarget(boundingBox.center);
       controlsRef.current.target.copy(target);
       controlsRef.current.update();
       
@@ -340,13 +300,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     requestAnimationFrame(animate);
   };
   
-  // Handle UP vector change from orientation cube
   const handleCubeUpVectorChange = (newUpVector: THREE.Vector3) => {
     if (!cameraRef.current || !controlsRef.current) return;
     
     const target = new THREE.Vector3(...boundingBox.center);
-    
-    // Animate the main camera's UP vector
     const startUp = cameraRef.current.up.clone();
     const duration = 400;
     const t0 = performance.now();
@@ -380,11 +337,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     };
     
     const directionVector = rotationMap[direction];
-    
-    // Rotate main camera
     orientMainCameraToDirection(directionVector);
     
-    // Also rotate the orientation cube preview
     if (orientationCubeRef.current) {
       orientationCubeRef.current.rotateCube(directionVector);
     }
@@ -393,7 +347,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Ignore if typing in input fields
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       
       if (e.code === 'Space') {
@@ -447,9 +400,13 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
             </Button>
           </div>
         ) : hasValidModel ? (
-          <div className="relative h-full" style={{ background: '#f8f9fa' }}>
+          <div 
+            ref={canvasRef}
+            className="relative h-full" 
+            style={{ background: '#f8f9fa' }}
+            onMouseDown={handleCanvasMouseDown}
+          >
             
-            {/* Isometric Reset Button - Top Left */}
             <button
               onClick={setIsometricView}
               className="absolute top-5 left-5 z-30 p-2 hover:bg-gray-100 rounded-lg transition-all"
@@ -463,8 +420,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
               <Box className="w-4 h-4 text-gray-700 hover:text-gray-900" />
             </button>
             
-            
-            {/* Orientation Cube - Top Right */}
             <div className="absolute top-5 right-5 z-30">
               <OrientationCubePreview 
                 ref={orientationCubeRef}
@@ -474,7 +429,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
               />
             </div>
             
-            {/* Vectis Manufacturing Watermark */}
             <div className="absolute bottom-4 left-4 z-10 text-xs text-black/30 font-medium">
               Vectis Manufacturing | Automating Precision
             </div>
@@ -498,13 +452,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
               dpr={[1, 2]}
             >
               <Suspense fallback={null}>
-                {/* Clean white background */}
                 <color attach="background" args={['#f8f9fa']} />
-                
-                {/* FIXED: Dynamic fog based on part size */}
                 <fog attach="fog" args={['#f8f9fa', viewportSettings.fogNear, viewportSettings.fogFar]} />
                 
-                {/* Professional CAD lighting - subtle depth without color variation */}
                 <ambientLight intensity={0.5} />
                 <directionalLight 
                   position={[10, 10, 5]} 
@@ -517,7 +467,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   color="#ffffff"
                 />
                 
-                {/* Auto-framed camera with DYNAMIC far plane */}
                 <PerspectiveCamera
                   ref={cameraRef}
                   makeDefault
@@ -531,18 +480,18 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   far={viewportSettings.farPlane}
                 />
                 
-                {/* 3D Model */}
-                <MeshModel
-                  meshData={activeMeshData!}
-                  sectionPlane={sectionPlane}
-                  sectionPosition={sectionPosition}
-                  showEdges={showEdges}
-                  showHiddenEdges={showHiddenEdges}
-                  displayStyle={displayStyle}
-                  topologyColors={showTopologyColors}
-                />
+                <group ref={meshRef}>
+                  <MeshModel
+                    meshData={activeMeshData!}
+                    sectionPlane={sectionPlane}
+                    sectionPosition={sectionPosition}
+                    showEdges={showEdges}
+                    showHiddenEdges={showHiddenEdges}
+                    displayStyle={displayStyle}
+                    topologyColors={showTopologyColors}
+                  />
+                </group>
                 
-                {/* Soft contact shadow */}
                 <mesh
                   rotation={[-Math.PI / 2, 0, 0]}
                   position={[0, -boundingBox.height / 2 - 10.5, 0]}
@@ -552,7 +501,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   <shadowMaterial opacity={0.15} />
                 </mesh>
                 
-                {/* Dimension Annotations */}
                 {showDimensions && detectedFeatures && (
                   <DimensionAnnotations
                     features={detectedFeatures}
@@ -560,24 +508,35 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   />
                 )}
                 
-                {/* Measurement Tool */}
                 <MeasurementTool
                   enabled={measurementMode !== null}
                   mode={measurementMode}
                 />
                 
-                {/* Camera controls with DYNAMIC distances */}
+                {/* SolidWorks-style orbit controls */}
                 <OrbitControls
                   ref={controlsRef}
                   makeDefault
-                  target={boundingBox.center}
-                  enableDamping
-                  dampingFactor={0.08}
+                  target={rotationTarget}
+                  enableDamping={true}
+                  dampingFactor={0.15}
                   minDistance={viewportSettings.minDistance}
                   maxDistance={viewportSettings.maxDistance}
-                  rotateSpeed={0.6}
-                  panSpeed={0.8}
+                  rotateSpeed={1.0}
+                  panSpeed={1.0}
                   zoomSpeed={1.2}
+                  screenSpacePanning={true}
+                  minPolarAngle={0}
+                  maxPolarAngle={Math.PI}
+                  minAzimuthAngle={-Infinity}
+                  maxAzimuthAngle={Infinity}
+                  enableZoom={true}
+                  zoomToCursor={true}
+                  mouseButtons={{
+                    LEFT: THREE.MOUSE.ROTATE,
+                    MIDDLE: THREE.MOUSE.DOLLY,
+                    RIGHT: THREE.MOUSE.PAN
+                  }}
                 />
               </Suspense>
             </Canvas>
