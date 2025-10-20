@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Box, Ruler, DollarSign, Sparkles } from 'lucide-react';
 import { CADViewer } from '@/components/CADViewer';
-import { FeatureTree } from '@/components/FeatureTree';
+import FeatureTree from '@/components/FeatureTree';
 
 interface PartDetailTabsProps {
   lineItem: {
@@ -76,8 +76,8 @@ export function PartDetailTabs({ lineItem, featureTree, onUpdateLineItem }: Part
       <TabsContent value="features" className="mt-4">
         {featureTree ? (
           <FeatureTree 
-            partName={lineItem.file_name}
-            featureTree={featureTree}
+            features={featureTree}
+            featureSummary={undefined}
           />
         ) : (
           <Card>

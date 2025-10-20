@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CADViewer } from "./CADViewer";
-import { FeatureTree } from "./FeatureTree";
+import FeatureTree from "./FeatureTree";
 import { 
   Package, 
   Layers, 
@@ -219,8 +219,8 @@ export function PartDetailCustomer({
                   
                   {hasFeatures ? (
                     <FeatureTree 
-                      partName={file.file.name}
-                      featureTree={file.analysis.feature_tree}
+                      features={file.analysis.detected_features}
+                      featureSummary={file.analysis.feature_tree}
                     />
                   ) : (
                     <Card className="border-dashed">
