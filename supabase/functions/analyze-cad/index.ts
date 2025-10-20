@@ -113,6 +113,9 @@ interface AnalysisResult {
   feature_tree?: FeatureTree;
   mesh_id?: string;
   mesh_data?: MeshData;
+  // ✅ FIX: Add manufacturing_features and feature_summary from Python backend
+  manufacturing_features?: any;  // Raw features from BREP analysis
+  feature_summary?: any;  // Feature counts and complexity
   // Industrial routing enhancements
   recommended_routings?: string[];
   routing_reasoning?: string[];
@@ -598,6 +601,14 @@ async function analyzeSTEPViaService(
       }
     });
     
+    // 🔍 DEBUG: Log what Python backend actually returned
+    console.log(`🔍 DEBUG - Python Backend Response:`);
+    console.log(`   - manufacturing_features exists: ${!!data.manufacturing_features}`);
+    console.log(`   - manufacturing_features value:`, JSON.stringify(data.manufacturing_features, null, 2));
+    console.log(`   - feature_summary exists: ${!!data.feature_summary}`);
+    console.log(`   - feature_summary value:`, JSON.stringify(data.feature_summary, null, 2));
+    console.log(`   - Full response keys:`, Object.keys(data));
+    
     // Map service response to our result format with BREP data
     const detected_features: DetectedFeatures = {
       is_cylindrical: (data.manufacturing_features?.holes?.length > 0 || 
@@ -671,6 +682,9 @@ async function analyzeSTEPViaService(
       mesh_data: data.mesh_data, // Display mesh from tessellation
       feature_tree,
       triangle_count: data.mesh_data?.triangle_count,
+      // ✅ FIX: Pass through manufacturing_features and feature_summary from Python backend
+      manufacturing_features: data.manufacturing_features,
+      feature_summary: data.feature_summary,
       // Industrial routing data from geometry service
       recommended_routings: data.recommended_routings,
       routing_reasoning: data.routing_reasoning,

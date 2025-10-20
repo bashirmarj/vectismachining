@@ -734,6 +734,31 @@ def classify_mesh_faces(mesh_data, shape):
     return vertex_colors
 
 
+def convert_colors_to_hex(vertex_colors):
+    """
+    ✅ NEW FUNCTION: Convert semantic color labels to hex color codes for frontend display
+    
+    Color scheme:
+    - external: Grey #999999
+    - internal: Red #FF0000
+    - through: Gold #FFD700
+    - planar: Light grey #DDDDDD
+    """
+    color_map = {
+        'external': '#999999',
+        'internal': '#FF0000',
+        'through': '#FFD700',
+        'planar': '#DDDDDD'
+    }
+    
+    hex_colors = []
+    for color_label in vertex_colors:
+        hex_colors.append(color_map.get(color_label, '#999999'))  # Default to grey
+    
+    logger.info(f"🎨 Converted {len(hex_colors)} vertex colors to hex codes")
+    return hex_colors
+
+
 @app.route("/analyze-cad", methods=["POST"])
 def analyze_cad():
     """Upload a STEP file, analyze BREP geometry, generate display mesh"""
@@ -769,8 +794,11 @@ def analyze_cad():
         mesh_data = tessellate_shape(shape)
         
         logger.info("🎨 Classifying face colors using MESH-BASED approach...")
-        vertex_colors = classify_mesh_faces(mesh_data, shape)
-        mesh_data["vertex_colors"] = vertex_colors
+        vertex_colors_labels = classify_mesh_faces(mesh_data, shape)
+        
+        # ✅ FIX: Convert semantic labels to hex codes
+        vertex_colors_hex = convert_colors_to_hex(vertex_colors_labels)
+        mesh_data["vertex_colors"] = vertex_colors_hex
         
         logger.info("📐 Extracting BREP edges...")
         feature_edges = extract_feature_edges(shape, max_edges=500)
@@ -829,7 +857,7 @@ def analyze_cad():
                 'vertices': mesh_data['vertices'],
                 'indices': mesh_data['indices'],
                 'normals': mesh_data['normals'],
-                'vertex_colors': mesh_data['vertex_colors'],
+                'vertex_colors': mesh_data['vertex_colors'],  # ✅ Now hex codes!
                 'feature_edges': feature_edges,
                 'triangle_count': mesh_data['triangle_count'],
                 'face_classification_method': 'mesh_based_with_propagation'
@@ -876,7 +904,8 @@ def root():
             "classification": "Mesh-based with neighbor propagation",
             "feature_detection": "Accurate through-hole, blind hole, bore, and boss detection",
             "inner_surfaces": "Detected by cylinder radius and propagated to adjacent faces",
-            "through_holes": "Detected by size and connectivity analysis"
+            "through_holes": "Detected by size and connectivity analysis",
+            "color_output": "Hex color codes for frontend display"
         },
         "documentation": "POST multipart/form-data with 'file' field containing .step file"
     })
