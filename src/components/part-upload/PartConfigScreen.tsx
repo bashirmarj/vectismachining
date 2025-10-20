@@ -1,19 +1,15 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ChevronLeft, Info, ChevronDown, Package, DollarSign, Clock } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
-import { CADViewer } from "../CADViewer";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Badge } from "@/components/ui/badge";
-import { RoutingEditor } from "./RoutingEditor";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import FeatureTree from "../FeatureTree";
+import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { ChevronLeft, ChevronDown, ChevronUp, Mail, Phone, Building2, MapPin, User } from 'lucide-react';
+import CADViewer from '@/components/CADViewer';
+import FeatureTree from '@/components/FeatureTree';
+import RoutingEditor from './RoutingEditor';
 
 interface FileWithData {
   file: File;
@@ -25,12 +21,26 @@ interface FileWithData {
     vertices: number[];
     indices: number[];
     normals: number[];
+    vertex_colors?: string[];
     triangle_count: number;
     face_types?: string[];
     feature_edges?: number[][][];
   };
-  analysis?: any;
+  analysis?: {
+    volume_cm3: number;
+    surface_area_cm2: number;
+    complexity_score: number;
+    confidence: number;
+    method: string;
+    detected_features: Record<string, boolean>;
+    manufacturing_features?: any;
+    feature_summary?: any;
+    recommended_processes?: string[];
+    routing_reasoning?: string[];
+    machining_summary?: any[];
+  };
   quote?: any;
+  isAnalyzing?: boolean;
 }
 
 interface PartConfigScreenProps {
@@ -45,7 +55,7 @@ interface PartConfigScreenProps {
   isSubmitting: boolean;
 }
 
-export const PartConfigScreen = ({
+const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
   files,
   materials,
   processes,
@@ -54,405 +64,341 @@ export const PartConfigScreen = ({
   onUpdateFile,
   selectedFileIndex,
   onSelectFile,
-  isSubmitting
-}: PartConfigScreenProps) => {
-  const [name, setName] = useState("");
-  const [company, setCompany] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
-  const [message, setMessage] = useState("");
-  const [showContactForm, setShowContactForm] = useState(false);
+  isSubmitting,
+}) => {
+  const [contactFormExpanded, setContactFormExpanded] = useState(false);
+  const [contactInfo, setContactInfo] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    company: '',
+    address: '',
+    message: '',
+  });
 
   const selectedFile = files[selectedFileIndex];
 
   const handleSubmit = () => {
     onSubmit({
-      name,
-      company,
-      email,
-      phone,
-      address,
-      message
+      files: files,
+      contact: contactInfo,
     });
   };
 
-  return (
-    <div className="flex h-[calc(100vh-12rem)] gap-0">
-      {/* Left Sidebar - Configuration Panel (30% width) */}
-      <div className="w-[30%] min-w-[380px] border-r bg-muted/30">
-        <ScrollArea className="h-full">
-          <div className="p-6 space-y-5">
-            {/* Header */}
-            <div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onBack}
-                className="mb-3"
-              >
-                <ChevronLeft className="h-4 w-4 mr-1.5" />
-                Back
-              </Button>
-              <h2 className="text-xl font-bold">Part Configuration</h2>
-              <p className="text-xs text-muted-foreground mt-1.5">
-                Configure manufacturing parameters for quotation
-              </p>
-            </div>
+  const handleContactInfoChange = (field: string, value: string) => {
+    setContactInfo(prev => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
 
-            <Separator className="bg-border/60" />
+  const isFormValid = () => {
+    // Check if all files have material and quantity
+    const filesValid = files.every(f => f.material && f.quantity > 0);
+    // Check if contact info is filled
+    const contactValid = contactInfo.name && contactInfo.email && contactInfo.phone;
+    return filesValid && contactValid;
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="flex h-screen">
+        {/* Left Sidebar - 30% */}
+        <div className="w-[30%] bg-white border-r overflow-y-auto">
+          <div className="p-6 space-y-6">
+            {/* Back Button */}
+            <Button
+              variant="ghost"
+              onClick={onBack}
+              className="w-full justify-start"
+            >
+              <ChevronLeft className="w-4 h-4 mr-2" />
+              Back to Upload
+            </Button>
 
             {/* File Selection */}
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Parts ({files.length})
-              </Label>
-              <div className="space-y-1.5">
-                {files.map((fileItem, index) => (
+            <Card>
+              <CardHeader>
+                <CardTitle>Parts ({files.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {files.map((file, index) => (
                   <button
                     key={index}
                     onClick={() => onSelectFile(index)}
-                    className={`w-full p-2.5 rounded-md border text-left transition-all ${
-                      selectedFileIndex === index
-                        ? 'border-primary bg-primary/10 shadow-sm'
-                        : 'border-border/50 hover:border-primary/30 hover:bg-muted/50'
+                    className={`w-full p-3 text-left rounded-lg border transition-colors ${
+                      index === selectedFileIndex
+                        ? 'bg-blue-50 border-blue-500'
+                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                     }`}
                   >
-                    <p className="font-medium text-xs truncate">{fileItem.file.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-muted-foreground">Qty: {fileItem.quantity}</span>
-                      {fileItem.material && (
-                        <>
-                          <span className="text-xs text-muted-foreground">•</span>
-                          <span className="text-xs text-muted-foreground">{fileItem.material}</span>
-                        </>
-                      )}
+                    <div className="font-medium text-sm truncate">
+                      {file.file.name}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Qty: {file.quantity} | {file.material || 'No material'}
                     </div>
                   </button>
                 ))}
-              </div>
-            </div>
-
-            <Separator className="bg-border/60" />
+              </CardContent>
+            </Card>
 
             {/* Part Configuration */}
-            <Collapsible defaultOpen>
-              <CollapsibleTrigger className="flex items-center justify-between w-full group">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-                  <Package className="h-3.5 w-3.5" />
-                  Basic Information
-                </Label>
-                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-3 mt-3">
-                <div>
-                  <Label htmlFor="product-name" className="text-xs font-medium">Product Name</Label>
-                  <Input
-                    id="product-name"
-                    value={selectedFile.file.name.replace(/\.[^/.]+$/, "")}
-                    readOnly
-                    className="mt-1.5 bg-muted/50 text-sm h-9"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="quantity" className="text-xs font-medium">Quantity</Label>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    min="1"
-                    value={selectedFile.quantity}
-                    onChange={(e) => onUpdateFile(selectedFileIndex, { quantity: parseInt(e.target.value) || 1 })}
-                    className="mt-1.5 text-sm h-9"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="material" className="text-xs font-medium">Material</Label>
+            <Card>
+              <CardHeader>
+                <CardTitle>Configuration</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Material Selection */}
+                <div className="space-y-2">
+                  <Label htmlFor="material">Material *</Label>
                   <Select
-                    value={selectedFile.material}
+                    value={selectedFile.material || ''}
                     onValueChange={(value) => onUpdateFile(selectedFileIndex, { material: value })}
                   >
-                    <SelectTrigger className="mt-1.5 h-9 text-sm">
+                    <SelectTrigger id="material">
                       <SelectValue placeholder="Select material" />
                     </SelectTrigger>
-                    <SelectContent className="bg-background z-50">
+                    <SelectContent>
                       {materials.map((material) => (
-                        <SelectItem key={material} value={material} className="text-sm">
+                        <SelectItem key={material} value={material}>
                           {material}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              </CollapsibleContent>
-            </Collapsible>
 
-            <Separator className="bg-border/60" />
+                {/* Quantity */}
+                <div className="space-y-2">
+                  <Label htmlFor="quantity">Quantity *</Label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    min="1"
+                    value={selectedFile.quantity}
+                    onChange={(e) => onUpdateFile(selectedFileIndex, { quantity: parseInt(e.target.value) || 1 })}
+                  />
+                </div>
+
+                {/* Process (Optional) */}
+                <div className="space-y-2">
+                  <Label htmlFor="process">Preferred Process (Optional)</Label>
+                  <Select
+                    value={selectedFile.process || ''}
+                    onValueChange={(value) => onUpdateFile(selectedFileIndex, { process: value })}
+                  >
+                    <SelectTrigger id="process">
+                      <SelectValue placeholder="Auto-select (recommended)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Auto-select (recommended)</SelectItem>
+                      {processes.map((process) => (
+                        <SelectItem key={process} value={process}>
+                          {process}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Routing Editor */}
-            <RoutingEditor
-              routings={selectedFile.analysis?.recommended_routings || (selectedFile.process ? [selectedFile.process] : [])}
-              onRoutingsChange={(routings) => {
-                onUpdateFile(selectedFileIndex, { 
-                  process: routings[0] || '',
-                  analysis: {
-                    ...selectedFile.analysis,
-                    recommended_routings: routings
-                  }
-                });
-              }}
-              analysisReasoning={selectedFile.analysis?.routing_reasoning}
-            />
-
-            <Separator className="bg-border/60" />
+            {selectedFile.analysis?.recommended_processes && (
+              <RoutingEditor
+                recommendedRoutings={selectedFile.analysis.recommended_processes}
+                routingReasoning={selectedFile.analysis.routing_reasoning || []}
+                machiningOperations={selectedFile.analysis.machining_summary || []}
+              />
+            )}
 
             {/* Analysis Results */}
             {selectedFile.analysis && (
-              <>
-                <Collapsible defaultOpen>
-                  <CollapsibleTrigger className="flex items-center justify-between w-full group">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Part Details
-                    </Label>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-2.5 mt-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="p-2.5 bg-muted/50 rounded-md border border-border/50">
-                        <p className="text-xs text-muted-foreground mb-0.5">Volume</p>
-                        <p className="font-semibold text-sm">{selectedFile.analysis.volume_cm3?.toFixed(2)} cm³</p>
-                      </div>
-                      <div className="p-2.5 bg-muted/50 rounded-md border border-border/50">
-                        <p className="text-xs text-muted-foreground mb-0.5">Surface Area</p>
-                        <p className="font-semibold text-sm">{selectedFile.analysis.surface_area_cm2?.toFixed(2)} cm²</p>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Analysis Results</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-2 bg-gray-50 rounded">
+                      <div className="text-xs text-gray-500">Volume</div>
+                      <div className="font-medium">
+                        {selectedFile.analysis.volume_cm3.toFixed(2)} cm³
                       </div>
                     </div>
-                    {selectedFile.analysis.detected_features && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {selectedFile.analysis.detected_features.is_cylindrical && (
-                          <Badge variant="outline" className="text-xs">Cylindrical</Badge>
-                        )}
-                        {selectedFile.analysis.detected_features.has_keyway && (
-                          <Badge variant="outline" className="text-xs">Keyway</Badge>
-                        )}
-                        {selectedFile.analysis.detected_features.has_internal_holes && (
-                          <Badge variant="outline" className="text-xs">Internal Holes</Badge>
-                        )}
-                      </div>
-                    )}
-                  </CollapsibleContent>
-                </Collapsible>
-                <Separator className="bg-border/60" />
-              </>
-            )}
-
-            {/* Quote Information */}
-            {selectedFile.quote && (
-              <>
-                <Collapsible defaultOpen>
-                  <CollapsibleTrigger className="flex items-center justify-between w-full group">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-                      <DollarSign className="h-3.5 w-3.5" />
-                      Quotation Summary
-                    </Label>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3">
-                    <div className="p-3 bg-primary/5 border border-primary/20 rounded-md space-y-2.5">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">Unit Price:</span>
-                        <span className="text-lg font-bold text-primary">
-                          ${selectedFile.quote.unit_price.toFixed(2)}
-                        </span>
-                      </div>
-                      <Separator className="bg-border/40" />
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground">Total ({selectedFile.quantity}x):</span>
-                        <span className="font-semibold text-sm">
-                          ${selectedFile.quote.total_price.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                          <Clock className="h-3 w-3" />
-                          Lead Time:
-                        </span>
-                        <span className="text-xs font-medium">
-                          {selectedFile.quote.lead_time_days} days
-                        </span>
+                    <div className="p-2 bg-gray-50 rounded">
+                      <div className="text-xs text-gray-500">Surface Area</div>
+                      <div className="font-medium">
+                        {selectedFile.analysis.surface_area_cm2.toFixed(2)} cm²
                       </div>
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
-                <Separator className="bg-border/60" />
-              </>
+                    <div className="p-2 bg-gray-50 rounded">
+                      <div className="text-xs text-gray-500">Complexity</div>
+                      <div className="font-medium">
+                        {selectedFile.analysis.complexity_score}/10
+                      </div>
+                    </div>
+                    <div className="p-2 bg-gray-50 rounded">
+                      <div className="text-xs text-gray-500">Confidence</div>
+                      <div className="font-medium">
+                        {(selectedFile.analysis.confidence * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
 
-            {/* Contact Information Toggle */}
-            <Collapsible open={showContactForm} onOpenChange={setShowContactForm}>
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" className="w-full h-9 text-sm">
-                  {showContactForm ? 'Hide' : 'Add'} Contact Information
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-3 mt-3">
-                <div>
-                  <Label htmlFor="name" className="text-xs font-medium">Full Name *</Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="mt-1.5 h-9 text-sm"
-                    required
-                  />
+            {/* Contact Information (Collapsible) */}
+            <Card>
+              <CardHeader className="cursor-pointer" onClick={() => setContactFormExpanded(!contactFormExpanded)}>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Contact Information *</CardTitle>
+                  {contactFormExpanded ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
                 </div>
-                <div>
-                  <Label htmlFor="email" className="text-xs font-medium">Email *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="mt-1.5 h-9 text-sm"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="company" className="text-xs font-medium">Company</Label>
-                  <Input
-                    id="company"
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                    className="mt-1.5 h-9 text-sm"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="phone" className="text-xs font-medium">Phone</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="mt-1.5 h-9 text-sm"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="address" className="text-xs font-medium">Shipping Address</Label>
-                  <Textarea
-                    id="address"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="mt-1.5 text-sm"
-                    rows={2}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="message" className="text-xs font-medium">Additional Notes</Label>
-                  <Textarea
-                    id="message"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    className="mt-1.5 text-sm"
-                    rows={2}
-                  />
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+              </CardHeader>
+              {contactFormExpanded && (
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name" className="flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Full Name *
+                    </Label>
+                    <Input
+                      id="name"
+                      value={contactInfo.name}
+                      onChange={(e) => handleContactInfoChange('name', e.target.value)}
+                      placeholder="John Doe"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="flex items-center gap-2">
+                      <Mail className="w-4 h-4" />
+                      Email *
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={contactInfo.email}
+                      onChange={(e) => handleContactInfoChange('email', e.target.value)}
+                      placeholder="john@example.com"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone" className="flex items-center gap-2">
+                      <Phone className="w-4 h-4" />
+                      Phone *
+                    </Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      value={contactInfo.phone}
+                      onChange={(e) => handleContactInfoChange('phone', e.target.value)}
+                      placeholder="+1 (555) 123-4567"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="company" className="flex items-center gap-2">
+                      <Building2 className="w-4 h-4" />
+                      Company (Optional)
+                    </Label>
+                    <Input
+                      id="company"
+                      value={contactInfo.company}
+                      onChange={(e) => handleContactInfoChange('company', e.target.value)}
+                      placeholder="Acme Corp"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="address" className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4" />
+                      Shipping Address
+                    </Label>
+                    <Textarea
+                      id="address"
+                      value={contactInfo.address}
+                      onChange={(e) => handleContactInfoChange('address', e.target.value)}
+                      placeholder="123 Main St, City, State, ZIP"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="message">Additional Notes</Label>
+                    <Textarea
+                      id="message"
+                      value={contactInfo.message}
+                      onChange={(e) => handleContactInfoChange('message', e.target.value)}
+                      placeholder="Any special requirements or notes..."
+                      rows={3}
+                    />
+                  </div>
+                </CardContent>
+              )}
+            </Card>
 
             {/* Submit Button */}
             <Button
-              className="w-full h-10"
               onClick={handleSubmit}
-              disabled={isSubmitting || !showContactForm || !name || !email}
+              disabled={!isFormValid() || isSubmitting}
+              className="w-full"
+              size="lg"
             >
-              {isSubmitting ? 'Submitting Quote Request...' : 'Request Quotation'}
+              {isSubmitting ? 'Submitting...' : 'Submit Quote Request'}
             </Button>
-
-            {!showContactForm && (
-              <Alert className="border-primary/20">
-                <Info className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  Add contact information to request a quote
-                </AlertDescription>
-              </Alert>
-            )}
           </div>
-        </ScrollArea>
-      </div>
-
-      {/* Right Panel - 3D Viewer & Features (70% width) */}
-      <div className="flex-1 bg-gradient-to-br from-slate-50 to-white">
-        {/* 🔴 TOP LEVEL DEBUG - SHOULD ALWAYS BE VISIBLE */}
-        <div className="p-4 bg-red-200 border-4 border-red-600">
-          <p className="font-bold text-red-900">🚨 DEBUG: Component is rendering!</p>
-          <p className="text-sm text-red-900">Selected file: {selectedFile.file.name}</p>
-          <p className="text-sm text-red-900">Has analysis: {selectedFile.analysis ? 'YES' : 'NO'}</p>
         </div>
-        {/* 🔴 END TOP DEBUG */}
-        
-        <Tabs defaultValue="model" className="h-full flex flex-col">
-          <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <TabsList className="w-full justify-start rounded-none border-0 bg-transparent p-0 h-auto">
-              <TabsTrigger 
-                value="model" 
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6 py-3"
-              >
-                3D Model
-              </TabsTrigger>
-              <TabsTrigger 
-                value="features" 
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6 py-3"
-              >
-                Features
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          
-          <TabsContent value="model" className="flex-1 m-0">
-            <div className="h-full">
-              <CADViewer
-                file={selectedFile.file}
-                fileName={selectedFile.file.name}
-                meshId={selectedFile.meshId}
-                meshData={selectedFile.meshData}
-                detectedFeatures={selectedFile.analysis?.detected_features}
-              />
+
+        {/* Right Panel - 70% */}
+        <div className="flex-1 bg-white overflow-hidden">
+          <Tabs defaultValue="3d-model" className="h-full flex flex-col">
+            <div className="border-b px-6 pt-6">
+              <TabsList className="w-full">
+                <TabsTrigger value="3d-model" className="flex-1">
+                  3D Model
+                </TabsTrigger>
+                <TabsTrigger value="features" className="flex-1">
+                  Features
+                </TabsTrigger>
+              </TabsList>
             </div>
-          </TabsContent>
-          
-          <TabsContent value="features" className="flex-1 m-0 p-6 overflow-auto">
-            {/* 🔴 TEMPORARY DEBUG - ALWAYS VISIBLE - Remove after testing */}
-            <div className="mb-4 p-4 bg-yellow-100 dark:bg-yellow-900/20 border-2 border-yellow-500 rounded">
-              <p className="font-bold mb-2 text-yellow-900 dark:text-yellow-100">🔍 DEBUG - Full Analysis Object:</p>
-              <div className="bg-white dark:bg-gray-800 p-2 rounded text-xs overflow-auto max-h-96">
-                <pre className="whitespace-pre-wrap break-words">
-                  {selectedFile.analysis ? JSON.stringify(selectedFile.analysis, null, 2) : 'NO ANALYSIS DATA - selectedFile.analysis is null/undefined'}
-                </pre>
-              </div>
-              <p className="text-xs mt-2 text-yellow-900 dark:text-yellow-100">
-                Keys available: {selectedFile.analysis ? Object.keys(selectedFile.analysis).join(', ') : 'None'}
-              </p>
-            </div>
-            {/* 🔴 END DEBUG */}
-            
-            {selectedFile.analysis?.manufacturing_features || selectedFile.analysis?.detected_features || selectedFile.analysis?.feature_tree ? (
-              <FeatureTree 
-                features={selectedFile.analysis?.manufacturing_features || selectedFile.analysis?.detected_features}
-                featureSummary={selectedFile.analysis?.feature_summary || selectedFile.analysis?.feature_tree}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center text-muted-foreground">
-                  <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm font-medium">No feature analysis available</p>
-                  <p className="text-xs mt-1">Analysis will be performed after upload</p>
+
+            <div className="flex-1 overflow-y-auto">
+              {/* 3D Model Tab */}
+              <TabsContent value="3d-model" className="h-full m-0 p-6">
+                <div className="h-full min-h-[600px]">
+                  <CADViewer
+                    file={selectedFile.file}
+                    fileName={selectedFile.file.name}
+                    meshId={selectedFile.meshId}
+                    meshData={selectedFile.meshData}
+                    detectedFeatures={selectedFile.analysis?.detected_features}
+                  />
                 </div>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+              </TabsContent>
+
+              {/* Features Tab - UPDATED TO USE NEW PROPS */}
+              <TabsContent value="features" className="m-0 p-6">
+                <FeatureTree
+                  features={selectedFile.analysis?.manufacturing_features}
+                  featureSummary={selectedFile.analysis?.feature_summary}
+                />
+              </TabsContent>
+            </div>
+          </Tabs>
+        </div>
       </div>
     </div>
   );
 };
+
+export default PartConfigScreen;
