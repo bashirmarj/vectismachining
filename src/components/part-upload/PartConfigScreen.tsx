@@ -414,10 +414,10 @@ export const PartConfigScreen = ({
           </TabsContent>
           
           <TabsContent value="features" className="flex-1 m-0 p-6 overflow-auto">
-            {selectedFile.analysis?.detected_features || selectedFile.analysis?.feature_tree ? (
+            {selectedFile.analysis?.manufacturing_features || selectedFile.analysis?.detected_features || selectedFile.analysis?.feature_tree ? (
               <FeatureTree 
-                features={selectedFile.analysis?.detected_features}
-                featureSummary={selectedFile.analysis?.feature_tree}
+                features={selectedFile.analysis?.manufacturing_features || selectedFile.analysis?.detected_features}
+                featureSummary={selectedFile.analysis?.feature_summary || selectedFile.analysis?.feature_tree}
               />
             ) : (
               <div className="flex items-center justify-center h-full">
