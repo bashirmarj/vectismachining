@@ -15,7 +15,7 @@ import { Loader2, ArrowLeft, Download, Save, Send, Sparkles } from 'lucide-react
 import { StatusBadge } from '@/components/admin/StatusBadge';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { PartDetailTabs } from '@/components/admin/PartDetailTabs';
+import PartDetailTabs from '@/components/admin/PartDetailTabs';
 
 interface QuotationData {
   id: string;
@@ -52,6 +52,10 @@ interface LineItem {
   finish_type: string | null;
   estimated_machine_time_hours: number | null;
   mesh_id: string | null;
+  machining_operations: any[] | null;
+  estimated_machining_cost: number | null;
+  recommended_routings: string[] | null;
+  routing_reasoning: string[] | null;
 }
 
 interface Quote {
@@ -139,7 +143,7 @@ const QuotationDetails = () => {
         .order('created_at', { ascending: true });
 
       if (!lineItemsError && lineItemsData) {
-        setLineItems(lineItemsData);
+        setLineItems(lineItemsData as LineItem[]);
 
         // Fetch feature trees for each line item
         const featureTreesMap = new Map();

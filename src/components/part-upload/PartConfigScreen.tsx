@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ChevronLeft, ChevronDown, ChevronUp, Mail, Phone, Building2, MapPin, User } from 'lucide-react';
 import { CADViewer } from '@/components/CADViewer';
 import FeatureTree from '@/components/FeatureTree';
-import RoutingEditor from './RoutingEditor';
+import { RoutingEditor } from './RoutingEditor';
 
 interface FileWithData {
   file: File;
@@ -27,12 +27,12 @@ interface FileWithData {
     feature_edges?: number[][][];
   };
   analysis?: {
-    volume_cm3: number;
-    surface_area_cm2: number;
-    complexity_score: number;
-    confidence: number;
-    method: string;
-    detected_features: Record<string, boolean>;
+    volume_cm3?: number;
+    surface_area_cm2?: number;
+    complexity_score?: number;
+    confidence?: number;
+    method?: string;
+    detected_features?: Record<string, boolean>;
     manufacturing_features?: any;
     feature_summary?: any;
     recommended_processes?: string[];
@@ -206,11 +206,20 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
 
             {/* Routing Editor */}
             {selectedFile.analysis?.recommended_processes && (
-              <RoutingEditor
-                recommendedRoutings={selectedFile.analysis.recommended_processes}
-                routingReasoning={selectedFile.analysis.routing_reasoning || []}
-                machiningOperations={selectedFile.analysis.machining_summary || []}
-              />
+              <Card>
+                <CardHeader>
+                  <CardTitle>Process Routing</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <RoutingEditor
+                    routings={selectedFile.analysis.recommended_processes}
+                    onRoutingsChange={(routings) => onUpdateFile(selectedFileIndex, { 
+                      analysis: { ...selectedFile.analysis, recommended_processes: routings }
+                    })}
+                    analysisReasoning={selectedFile.analysis.routing_reasoning?.join('\n')}
+                  />
+                </CardContent>
+              </Card>
             )}
 
             {/* Analysis Results */}

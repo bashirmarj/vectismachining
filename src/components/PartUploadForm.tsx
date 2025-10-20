@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { FileUploadScreen } from "./part-upload/FileUploadScreen";
-import { PartConfigScreen } from "./part-upload/PartConfigScreen";
+import PartConfigScreen from "./part-upload/PartConfigScreen";
 
 // Using Supabase Edge Function proxy for Flask backend (handles cold starts & retries)
 
