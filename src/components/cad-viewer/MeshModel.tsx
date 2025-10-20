@@ -156,7 +156,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   
   // ===== NEW: Pre-compute edge connectivity for dynamic silhouettes =====
   const edgeMap = useMemo(() => {
-    if (!showEdges) return null;
+    // Only compute for solid mode with edges
+    if (!showEdges || displayStyle === 'wireframe') return null;
     
     const map = new Map<string, {
       v1: THREE.Vector3;
@@ -215,13 +216,13 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     }
     
     return map;
-  }, [meshData.vertices, meshData.indices, showEdges]);
+  }, [meshData.vertices, meshData.indices, showEdges, displayStyle]);
   
   // ===== NEW: Dynamic silhouette edge rendering =====
   useFrame(() => {
-    // Only run if edges enabled and not in wireframe
-    if (!showEdges || displayStyle === 'wireframe' || !edgeMap || !meshRef.current || !dynamicEdgesRef.current) {
-      // Clear edges if disabled
+    // Only run in solid mode with edges enabled
+    if (displayStyle === 'wireframe' || !showEdges || !edgeMap || !meshRef.current || !dynamicEdgesRef.current) {
+      // Clear edges if not in correct mode
       if (dynamicEdgesRef.current && dynamicEdgesRef.current.children.length > 0) {
         while (dynamicEdgesRef.current.children.length > 0) {
           const child = dynamicEdgesRef.current.children[0];
@@ -307,7 +308,9 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       const mat = new THREE.LineBasicMaterial({ 
         color: '#000000', 
         linewidth: 1.5,
-        toneMapped: false 
+        toneMapped: false,
+        depthTest: true,
+        depthWrite: false
       });
       const lines = new THREE.LineSegments(geo, mat);
       edgesGroup.add(lines);
@@ -316,32 +319,9 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   
   // Create feature edges from BREP data (true CAD edges, not mesh tessellation)
   const featureEdges = useMemo(() => {
-    if (!showEdges && displayStyle !== 'wireframe') return null;
-    
-    // Check if backend provided BREP feature edges
-    if (!meshData.feature_edges || meshData.feature_edges.length === 0) {
-      console.warn('No BREP feature edges available from backend');
-      return null;
-    }
-    
-    // Convert BREP edge polylines to Three.js line segments
-    const positions: number[] = [];
-    
-    meshData.feature_edges.forEach((edge: number[][]) => {
-      // Each edge is an array of [x, y, z] points representing a polyline
-      for (let i = 0; i < edge.length - 1; i++) {
-        // Add line segment from point i to point i+1
-        positions.push(...edge[i], ...edge[i + 1]);
-      }
-    });
-    
-    if (positions.length === 0) return null;
-    
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    
-    return geometry;
-  }, [meshData.feature_edges, showEdges, displayStyle]);
+    // Disable BREP edges completely - using dynamic edges instead
+    return null;
+  }, []);
 
   
   // Section cut plane
@@ -408,20 +388,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         />
       </mesh>
       
-      {/* NEW: Dynamic silhouette edges - updated every frame */}
-      <group ref={dynamicEdgesRef} />
-      
-      {/* Render BREP feature edges (true CAD edges from backend) - OPTIONAL */}
-      {featureEdges && false && (
-        <lineSegments geometry={featureEdges}>
-          <lineBasicMaterial 
-            color="#000000" 
-            linewidth={1}
-            clippingPlanes={clippingPlane}
-            clipIntersection={false}
-          />
-        </lineSegments>
-      )}
+      {/* NEW: Dynamic silhouette edges - ONLY in solid mode with edges */}
+      {displayStyle !== 'wireframe' && <group ref={dynamicEdgesRef} />}
     </group>
   );
 }
