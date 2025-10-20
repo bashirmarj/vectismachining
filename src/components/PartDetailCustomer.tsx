@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { ChevronsUpDown, Check } from "lucide-react";
+import * as React from "react";
 
 interface PartDetailCustomerProps {
   file: {
@@ -34,6 +35,7 @@ interface PartDetailCustomerProps {
       method?: string;
       recommended_processes?: string[];
       detected_features?: any;
+      manufacturing_features?: any;
       feature_tree?: {
         common_dimensions: Array<{
           label: string;
@@ -45,6 +47,7 @@ interface PartDetailCustomerProps {
           features: any[];
         }>;
       };
+      feature_summary?: any;
       recommended_routings?: string[];
       routing_reasoning?: string[];
       machining_summary?: Array<{
@@ -81,10 +84,21 @@ export function PartDetailCustomer({
   onRemove 
 }: PartDetailCustomerProps) {
   const hasAnalysis = !!file.analysis;
-  const hasFeatures = hasAnalysis && file.analysis.feature_tree;
+  const hasFeatures = hasAnalysis && (
+    file.analysis.manufacturing_features || 
+    file.analysis.feature_tree || 
+    file.analysis.detected_features
+  );
   const hasQuote = !!file.quote;
+  
+  // Calculate feature count from either old or new structure
   const featureCount = hasFeatures 
-    ? file.analysis.feature_tree!.oriented_sections.reduce((sum, s) => sum + s.features.length, 0)
+    ? (file.analysis.feature_tree?.oriented_sections?.reduce((sum, s) => sum + s.features.length, 0) || 
+       (file.analysis.feature_summary ? 
+         (file.analysis.feature_summary.through_holes || 0) +
+         (file.analysis.feature_summary.blind_holes || 0) +
+         (file.analysis.feature_summary.bores || 0) +
+         (file.analysis.feature_summary.bosses || 0) : 0))
     : 0;
 
   return (
@@ -219,8 +233,8 @@ export function PartDetailCustomer({
                   
                   {hasFeatures ? (
                     <FeatureTree 
-                      features={file.analysis.detected_features}
-                      featureSummary={file.analysis.feature_tree}
+                      features={file.analysis?.manufacturing_features || file.analysis?.detected_features}
+                      featureSummary={file.analysis?.feature_summary || file.analysis?.feature_tree}
                     />
                   ) : (
                     <Card className="border-dashed">
@@ -466,5 +480,3 @@ function MaterialSelector({
     </div>
   );
 }
-
-import * as React from "react";
