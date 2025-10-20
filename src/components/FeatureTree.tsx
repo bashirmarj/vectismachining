@@ -1,26 +1,62 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   ChevronRight,
   ChevronDown,
   Circle,
   Box,
   Cylinder,
-  Wrench,
-  Drill,
-  AlertCircle,
+  Eye,
 } from 'lucide-react';
 
-// TypeScript Interfaces
-interface ManufacturingFeature {
+// ⭐ NEW: Interface for feature selection
+interface SelectedFeature {
+  type: 'through_hole' | 'blind_hole' | 'bore' | 'boss' | 'fillet';
+  index: number;
+  triangleStart: number;
+  triangleEnd: number;
+  center: [number, number, number];
   diameter?: number;
-  radius?: number;
-  depth?: number;
-  area?: number;
-  position?: [number, number, number];
-  axis?: [number, number, number];
+  label: string;
+}
+
+interface ManufacturingFeatures {
+  through_holes?: Array<{
+    diameter: number;
+    position: [number, number, number];
+    triangle_start?: number;
+    triangle_end?: number;
+    center?: [number, number, number];
+  }>;
+  blind_holes?: Array<{
+    diameter: number;
+    depth?: number;
+    position: [number, number, number];
+    triangle_start?: number;
+    triangle_end?: number;
+    center?: [number, number, number];
+  }>;
+  bores?: Array<{
+    diameter: number;
+    position: [number, number, number];
+    triangle_start?: number;
+    triangle_end?: number;
+    center?: [number, number, number];
+  }>;
+  bosses?: Array<{
+    diameter: number;
+    position: [number, number, number];
+    triangle_start?: number;
+    triangle_end?: number;
+    center?: [number, number, number];
+  }>;
+  fillets?: Array<{
+    area: number;
+    triangle_start?: number;
+    triangle_end?: number;
+    center?: [number, number, number];
+  }>;
 }
 
 interface FeatureSummary {
@@ -28,48 +64,25 @@ interface FeatureSummary {
   blind_holes: number;
   bores: number;
   bosses: number;
-  total_holes: number;
   fillets: number;
-  planar_faces: number;
   complexity_score: number;
 }
 
-interface ManufacturingFeatures {
-  through_holes?: ManufacturingFeature[];
-  blind_holes?: ManufacturingFeature[];
-  bores?: ManufacturingFeature[];
-  bosses?: ManufacturingFeature[];
-  planar_faces?: ManufacturingFeature[];
-  fillets?: ManufacturingFeature[];
-  complex_surfaces?: ManufacturingFeature[];
-}
-
 interface FeatureTreeProps {
-  features?: ManufacturingFeatures;
-  featureSummary?: FeatureSummary;
-  // Support old format for backward compatibility
-  featureTree?: {
-    oriented_sections?: any[];
-    common_dimensions?: any;
-  };
+  manufacturing_features?: ManufacturingFeatures;
+  feature_summary?: FeatureSummary;
+  onFeatureSelect?: (feature: SelectedFeature | null) => void; // ⭐ NEW: Callback for selection
 }
 
 const FeatureTree: React.FC<FeatureTreeProps> = ({ 
-  features, 
-  featureSummary,
-  featureTree 
+  manufacturing_features, 
+  feature_summary,
+  onFeatureSelect 
 }) => {
-  // State for expandable sections
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set([
-      'manufacturing',
-      'surfaces',
-      'through-holes',
-      'blind-holes',
-      'bores',
-      'bosses'
-    ])
+    new Set(['through_holes', 'blind_holes', 'bores', 'bosses'])
   );
+  const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -81,389 +94,442 @@ const FeatureTree: React.FC<FeatureTreeProps> = ({
     setExpandedSections(newExpanded);
   };
 
-  const expandAll = () => {
-    setExpandedSections(new Set([
-      'manufacturing',
-      'surfaces',
-      'through-holes',
-      'blind-holes',
-      'bores',
-      'bosses',
-      'planar-faces',
-      'fillets'
-    ]));
+  // ⭐ NEW: Handle feature click
+  const handleFeatureClick = (feature: SelectedFeature, featureId: string) => {
+    if (selectedFeatureId === featureId) {
+      // Deselect if clicking the same feature
+      setSelectedFeatureId(null);
+      onFeatureSelect?.(null);
+    } else {
+      // Select new feature
+      setSelectedFeatureId(featureId);
+      onFeatureSelect?.(feature);
+    }
   };
 
-  const collapseAll = () => {
-    setExpandedSections(new Set());
-  };
-
-  // Helper to format numbers
-  const formatNumber = (num: number | undefined, decimals: number = 2): string => {
-    if (num === undefined || num === null) return 'N/A';
-    return num.toFixed(decimals);
-  };
-
-  // Get complexity color
-  const getComplexityColor = (score: number): string => {
-    if (score <= 3) return 'text-green-600';
-    if (score <= 6) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getComplexityBadge = (score: number): string => {
-    if (score <= 3) return 'bg-green-100 text-green-800';
-    if (score <= 6) return 'bg-yellow-100 text-yellow-800';
-    return 'bg-red-100 text-red-800';
-  };
-
-  // Check if we have new format data
-  const hasNewFormat = features || featureSummary;
-  
-  // If no data at all, show empty state
-  if (!hasNewFormat && !featureTree) {
+  if (!manufacturing_features || !feature_summary) {
     return (
       <Card className="w-full">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            No Feature Data Available
+            <Box className="w-5 h-5" />
+            Manufacturing Features
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-gray-500">
-            Upload and analyze a CAD file to see detected manufacturing features.
-          </p>
+          <div className="text-center text-muted-foreground py-8">
+            <Circle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+            <p>No feature data available</p>
+            <p className="text-sm mt-1">Upload and analyze a CAD file to see detected features.</p>
+          </div>
         </CardContent>
       </Card>
     );
   }
 
-  // Render new format (manufacturing features)
-  if (hasNewFormat) {
+  const through_holes = manufacturing_features.through_holes || [];
+  const blind_holes = manufacturing_features.blind_holes || [];
+  const bores = manufacturing_features.bores || [];
+  const bosses = manufacturing_features.bosses || [];
+  const fillets = manufacturing_features.fillets || [];
+
+  const totalFeatures = 
+    through_holes.length + 
+    blind_holes.length + 
+    bores.length + 
+    bosses.length + 
+    fillets.length;
+
+  // ⭐ SECTION: Through-Holes
+  const renderThroughHoles = () => {
+    if (through_holes.length === 0) return null;
+    
+    const isExpanded = expandedSections.has('through_holes');
+
     return (
-      <div className="space-y-4">
-        {/* Header Card with Summary */}
-        {featureSummary && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle>Manufacturing Features</CardTitle>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={expandAll}>
-                    Expand All
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={collapseAll}>
-                    Collapse All
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Complexity Score */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="font-medium">Complexity Score</span>
-                <Badge className={getComplexityBadge(featureSummary.complexity_score)}>
-                  {featureSummary.complexity_score} / 10
-                </Badge>
-              </div>
+      <div className="mb-3">
+        <button
+          onClick={() => toggleSection('through_holes')}
+          className="w-full flex items-center gap-2 p-2 rounded hover:bg-accent transition-colors text-left"
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 flex-shrink-0" />
+          )}
+          <Circle className="w-4 h-4 flex-shrink-0 text-yellow-600" fill="currentColor" />
+          <span className="font-medium">Through-Holes</span>
+          <Badge variant="secondary" className="ml-auto">{through_holes.length}</Badge>
+        </button>
 
-              {/* Quick Stats Grid */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <div className="text-2xl font-bold text-yellow-700">
-                    {featureSummary.through_holes}
-                  </div>
-                  <div className="text-sm text-gray-600">Through-Holes</div>
-                </div>
-                <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
-                  <div className="text-2xl font-bold text-orange-700">
-                    {featureSummary.blind_holes}
-                  </div>
-                  <div className="text-sm text-gray-600">Blind Holes</div>
-                </div>
-                <div className="p-3 bg-red-50 rounded-lg border border-red-200">
-                  <div className="text-2xl font-bold text-red-700">
-                    {featureSummary.bores}
-                  </div>
-                  <div className="text-sm text-gray-600">Bores</div>
-                </div>
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="text-2xl font-bold text-blue-700">
-                    {featureSummary.bosses}
-                  </div>
-                  <div className="text-sm text-gray-600">Bosses</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {isExpanded && (
+          <div className="ml-6 mt-1 space-y-1">
+            {through_holes.map((hole, idx) => {
+              const featureId = `through_hole_${idx}`;
+              const isSelected = selectedFeatureId === featureId;
+              const hasMapping = hole.triangle_start !== undefined && hole.triangle_end !== undefined;
 
-        {/* Detailed Features Card */}
-        {features && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Detailed Feature Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {/* Manufacturing Features Section */}
-              <div className="border rounded-lg overflow-hidden">
+              return (
                 <button
-                  onClick={() => toggleSection('manufacturing')}
-                  className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  key={idx}
+                  onClick={() => {
+                    if (hasMapping) {
+                      handleFeatureClick({
+                        type: 'through_hole',
+                        index: idx,
+                        triangleStart: hole.triangle_start!,
+                        triangleEnd: hole.triangle_end!,
+                        center: hole.center || hole.position,
+                        diameter: hole.diameter,
+                        label: `Through-Hole ${idx + 1} - Ø${hole.diameter.toFixed(1)}mm`
+                      }, featureId);
+                    }
+                  }}
+                  disabled={!hasMapping}
+                  className={`w-full flex items-center gap-2 p-2 pl-6 rounded text-sm transition-colors ${
+                    isSelected 
+                      ? 'bg-orange-100 dark:bg-orange-900/30 border-2 border-orange-500' 
+                      : 'hover:bg-accent'
+                  } ${!hasMapping ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
-                  <div className="flex items-center gap-2">
-                    {expandedSections.has('manufacturing') ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                    <span className="font-medium">Manufacturing Features</span>
-                  </div>
-                  <Badge variant="secondary">
-                    {(features.through_holes?.length || 0) + 
-                     (features.blind_holes?.length || 0) + 
-                     (features.bores?.length || 0) + 
-                     (features.bosses?.length || 0)}
-                  </Badge>
+                  <Cylinder className="w-3 h-3 flex-shrink-0 text-yellow-600" />
+                  <span className="flex-1 text-left">
+                    Hole {idx + 1} - Ø{hole.diameter.toFixed(1)}mm (Through)
+                  </span>
+                  {isSelected && <Eye className="w-4 h-4 text-orange-500" />}
+                  {hasMapping && !isSelected && (
+                    <span className="text-xs text-muted-foreground">Click to highlight</span>
+                  )}
                 </button>
-                
-                {expandedSections.has('manufacturing') && (
-                  <div className="p-3 space-y-3">
-                    {/* Through-Holes */}
-                    {features.through_holes && features.through_holes.length > 0 && (
-                      <div>
-                        <button
-                          onClick={() => toggleSection('through-holes')}
-                          className="w-full flex items-center justify-between p-2 hover:bg-gray-50 rounded transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            {expandedSections.has('through-holes') ? (
-                              <ChevronDown className="w-3 h-3" />
-                            ) : (
-                              <ChevronRight className="w-3 h-3" />
-                            )}
-                            <Drill className="w-4 h-4 text-yellow-600" />
-                            <span className="text-sm font-medium">Through-Holes</span>
-                          </div>
-                          <Badge variant="outline" className="bg-yellow-50">
-                            {features.through_holes.length}
-                          </Badge>
-                        </button>
-                        
-                        {expandedSections.has('through-holes') && (
-                          <div className="ml-6 mt-2 space-y-2">
-                            {features.through_holes.map((hole, idx) => (
-                              <div key={idx} className="p-2 bg-yellow-50 rounded text-sm">
-                                <div className="font-medium">Hole {idx + 1}</div>
-                                <div className="text-gray-600 space-y-1 mt-1">
-                                  <div>Diameter: {formatNumber(hole.diameter)} mm</div>
-                                  {hole.area && <div>Area: {formatNumber(hole.area)} mm²</div>}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Blind Holes */}
-                    {features.blind_holes && features.blind_holes.length > 0 && (
-                      <div>
-                        <button
-                          onClick={() => toggleSection('blind-holes')}
-                          className="w-full flex items-center justify-between p-2 hover:bg-gray-50 rounded transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            {expandedSections.has('blind-holes') ? (
-                              <ChevronDown className="w-3 h-3" />
-                            ) : (
-                              <ChevronRight className="w-3 h-3" />
-                            )}
-                            <Drill className="w-4 h-4 text-orange-600" />
-                            <span className="text-sm font-medium">Blind Holes</span>
-                          </div>
-                          <Badge variant="outline" className="bg-orange-50">
-                            {features.blind_holes.length}
-                          </Badge>
-                        </button>
-                        
-                        {expandedSections.has('blind-holes') && (
-                          <div className="ml-6 mt-2 space-y-2">
-                            {features.blind_holes.map((hole, idx) => (
-                              <div key={idx} className="p-2 bg-orange-50 rounded text-sm">
-                                <div className="font-medium">Blind Hole {idx + 1}</div>
-                                <div className="text-gray-600 space-y-1 mt-1">
-                                  <div>Diameter: {formatNumber(hole.diameter)} mm</div>
-                                  {hole.depth && <div>Depth: {formatNumber(hole.depth)} mm</div>}
-                                  {hole.area && <div>Area: {formatNumber(hole.area)} mm²</div>}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Bores */}
-                    {features.bores && features.bores.length > 0 && (
-                      <div>
-                        <button
-                          onClick={() => toggleSection('bores')}
-                          className="w-full flex items-center justify-between p-2 hover:bg-gray-50 rounded transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            {expandedSections.has('bores') ? (
-                              <ChevronDown className="w-3 h-3" />
-                            ) : (
-                              <ChevronRight className="w-3 h-3" />
-                            )}
-                            <Cylinder className="w-4 h-4 text-red-600" />
-                            <span className="text-sm font-medium">Bores</span>
-                          </div>
-                          <Badge variant="outline" className="bg-red-50">
-                            {features.bores.length}
-                          </Badge>
-                        </button>
-                        
-                        {expandedSections.has('bores') && (
-                          <div className="ml-6 mt-2 space-y-2">
-                            {features.bores.map((bore, idx) => (
-                              <div key={idx} className="p-2 bg-red-50 rounded text-sm">
-                                <div className="font-medium">Bore {idx + 1}</div>
-                                <div className="text-gray-600 space-y-1 mt-1">
-                                  <div>Diameter: {formatNumber(bore.diameter)} mm</div>
-                                  {bore.area && <div>Area: {formatNumber(bore.area)} mm²</div>}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Bosses */}
-                    {features.bosses && features.bosses.length > 0 && (
-                      <div>
-                        <button
-                          onClick={() => toggleSection('bosses')}
-                          className="w-full flex items-center justify-between p-2 hover:bg-gray-50 rounded transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            {expandedSections.has('bosses') ? (
-                              <ChevronDown className="w-3 h-3" />
-                            ) : (
-                              <ChevronRight className="w-3 h-3" />
-                            )}
-                            <Box className="w-4 h-4 text-blue-600" />
-                            <span className="text-sm font-medium">Bosses</span>
-                          </div>
-                          <Badge variant="outline" className="bg-blue-50">
-                            {features.bosses.length}
-                          </Badge>
-                        </button>
-                        
-                        {expandedSections.has('bosses') && (
-                          <div className="ml-6 mt-2 space-y-2">
-                            {features.bosses.map((boss, idx) => (
-                              <div key={idx} className="p-2 bg-blue-50 rounded text-sm">
-                                <div className="font-medium">Boss {idx + 1}</div>
-                                <div className="text-gray-600 space-y-1 mt-1">
-                                  <div>Diameter: {formatNumber(boss.diameter)} mm</div>
-                                  {boss.area && <div>Area: {formatNumber(boss.area)} mm²</div>}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Surface Features Section */}
-              <div className="border rounded-lg overflow-hidden">
-                <button
-                  onClick={() => toggleSection('surfaces')}
-                  className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    {expandedSections.has('surfaces') ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                    <span className="font-medium">Surface Features</span>
-                  </div>
-                  <Badge variant="secondary">
-                    {(features.planar_faces?.length || 0) + 
-                     (features.fillets?.length || 0)}
-                  </Badge>
-                </button>
-                
-                {expandedSections.has('surfaces') && (
-                  <div className="p-3 space-y-2">
-                    {/* Planar Faces */}
-                    {features.planar_faces && features.planar_faces.length > 0 && (
-                      <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                        <div className="flex items-center gap-2">
-                          <Wrench className="w-4 h-4 text-gray-600" />
-                          <span className="text-sm">Planar Faces</span>
-                        </div>
-                        <Badge variant="outline">{features.planar_faces.length}</Badge>
-                      </div>
-                    )}
-
-                    {/* Fillets */}
-                    {features.fillets && features.fillets.length > 0 && (
-                      <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                        <div className="flex items-center gap-2">
-                          <Circle className="w-4 h-4 text-purple-600" />
-                          <span className="text-sm">Fillets/Rounds</span>
-                        </div>
-                        <Badge variant="outline">{features.fillets.length}</Badge>
-                      </div>
-                    )}
-
-                    {/* Complex Surfaces */}
-                    {features.complex_surfaces && features.complex_surfaces.length > 0 && (
-                      <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                        <div className="flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4 text-gray-600" />
-                          <span className="text-sm">Complex Surfaces</span>
-                        </div>
-                        <Badge variant="outline">{features.complex_surfaces.length}</Badge>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+              );
+            })}
+          </div>
         )}
       </div>
     );
-  }
+  };
 
-  // Fallback: Render old format (for backward compatibility)
-  if (featureTree?.oriented_sections) {
+  // ⭐ SECTION: Blind Holes
+  const renderBlindHoles = () => {
+    if (blind_holes.length === 0) return null;
+    
+    const isExpanded = expandedSections.has('blind_holes');
+
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Feature Tree (Legacy Format)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-gray-500 mb-4">
-            This part uses an older analysis format. Re-upload for detailed manufacturing features.
-          </p>
-          {/* You can keep your old rendering logic here if needed */}
-        </CardContent>
-      </Card>
-    );
-  }
+      <div className="mb-3">
+        <button
+          onClick={() => toggleSection('blind_holes')}
+          className="w-full flex items-center gap-2 p-2 rounded hover:bg-accent transition-colors text-left"
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 flex-shrink-0" />
+          )}
+          <Circle className="w-4 h-4 flex-shrink-0 text-red-600" fill="currentColor" />
+          <span className="font-medium">Blind Holes</span>
+          <Badge variant="secondary" className="ml-auto">{blind_holes.length}</Badge>
+        </button>
 
-  return null;
+        {isExpanded && (
+          <div className="ml-6 mt-1 space-y-1">
+            {blind_holes.map((hole, idx) => {
+              const featureId = `blind_hole_${idx}`;
+              const isSelected = selectedFeatureId === featureId;
+              const hasMapping = hole.triangle_start !== undefined && hole.triangle_end !== undefined;
+
+              return (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    if (hasMapping) {
+                      handleFeatureClick({
+                        type: 'blind_hole',
+                        index: idx,
+                        triangleStart: hole.triangle_start!,
+                        triangleEnd: hole.triangle_end!,
+                        center: hole.center || hole.position,
+                        diameter: hole.diameter,
+                        label: `Blind Hole ${idx + 1} - Ø${hole.diameter.toFixed(1)}mm × ${hole.depth?.toFixed(1) || '?'}mm deep`
+                      }, featureId);
+                    }
+                  }}
+                  disabled={!hasMapping}
+                  className={`w-full flex items-center gap-2 p-2 pl-6 rounded text-sm transition-colors ${
+                    isSelected 
+                      ? 'bg-orange-100 dark:bg-orange-900/30 border-2 border-orange-500' 
+                      : 'hover:bg-accent'
+                  } ${!hasMapping ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <Cylinder className="w-3 h-3 flex-shrink-0 text-red-600" />
+                  <span className="flex-1 text-left">
+                    Hole {idx + 1} - Ø{hole.diameter.toFixed(1)}mm × {hole.depth?.toFixed(1) || '?'}mm deep
+                  </span>
+                  {isSelected && <Eye className="w-4 h-4 text-orange-500" />}
+                  {hasMapping && !isSelected && (
+                    <span className="text-xs text-muted-foreground">Click to highlight</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ⭐ SECTION: Bores
+  const renderBores = () => {
+    if (bores.length === 0) return null;
+    
+    const isExpanded = expandedSections.has('bores');
+
+    return (
+      <div className="mb-3">
+        <button
+          onClick={() => toggleSection('bores')}
+          className="w-full flex items-center gap-2 p-2 rounded hover:bg-accent transition-colors text-left"
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 flex-shrink-0" />
+          )}
+          <Circle className="w-4 h-4 flex-shrink-0 text-purple-600" fill="currentColor" />
+          <span className="font-medium">Bores</span>
+          <Badge variant="secondary" className="ml-auto">{bores.length}</Badge>
+        </button>
+
+        {isExpanded && (
+          <div className="ml-6 mt-1 space-y-1">
+            {bores.map((bore, idx) => {
+              const featureId = `bore_${idx}`;
+              const isSelected = selectedFeatureId === featureId;
+              const hasMapping = bore.triangle_start !== undefined && bore.triangle_end !== undefined;
+
+              return (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    if (hasMapping) {
+                      handleFeatureClick({
+                        type: 'bore',
+                        index: idx,
+                        triangleStart: bore.triangle_start!,
+                        triangleEnd: bore.triangle_end!,
+                        center: bore.center || bore.position,
+                        diameter: bore.diameter,
+                        label: `Bore ${idx + 1} - Ø${bore.diameter.toFixed(1)}mm`
+                      }, featureId);
+                    }
+                  }}
+                  disabled={!hasMapping}
+                  className={`w-full flex items-center gap-2 p-2 pl-6 rounded text-sm transition-colors ${
+                    isSelected 
+                      ? 'bg-orange-100 dark:bg-orange-900/30 border-2 border-orange-500' 
+                      : 'hover:bg-accent'
+                  } ${!hasMapping ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <Cylinder className="w-3 h-3 flex-shrink-0 text-purple-600" />
+                  <span className="flex-1 text-left">
+                    Bore {idx + 1} - Ø{bore.diameter.toFixed(1)}mm
+                  </span>
+                  {isSelected && <Eye className="w-4 h-4 text-orange-500" />}
+                  {hasMapping && !isSelected && (
+                    <span className="text-xs text-muted-foreground">Click to highlight</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ⭐ SECTION: Bosses
+  const renderBosses = () => {
+    if (bosses.length === 0) return null;
+    
+    const isExpanded = expandedSections.has('bosses');
+
+    return (
+      <div className="mb-3">
+        <button
+          onClick={() => toggleSection('bosses')}
+          className="w-full flex items-center gap-2 p-2 rounded hover:bg-accent transition-colors text-left"
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 flex-shrink-0" />
+          )}
+          <Circle className="w-4 h-4 flex-shrink-0 text-green-600" fill="currentColor" />
+          <span className="font-medium">Bosses</span>
+          <Badge variant="secondary" className="ml-auto">{bosses.length}</Badge>
+        </button>
+
+        {isExpanded && (
+          <div className="ml-6 mt-1 space-y-1">
+            {bosses.map((boss, idx) => {
+              const featureId = `boss_${idx}`;
+              const isSelected = selectedFeatureId === featureId;
+              const hasMapping = boss.triangle_start !== undefined && boss.triangle_end !== undefined;
+
+              return (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    if (hasMapping) {
+                      handleFeatureClick({
+                        type: 'boss',
+                        index: idx,
+                        triangleStart: boss.triangle_start!,
+                        triangleEnd: boss.triangle_end!,
+                        center: boss.center || boss.position,
+                        diameter: boss.diameter,
+                        label: `Boss ${idx + 1} - Ø${boss.diameter.toFixed(1)}mm`
+                      }, featureId);
+                    }
+                  }}
+                  disabled={!hasMapping}
+                  className={`w-full flex items-center gap-2 p-2 pl-6 rounded text-sm transition-colors ${
+                    isSelected 
+                      ? 'bg-orange-100 dark:bg-orange-900/30 border-2 border-orange-500' 
+                      : 'hover:bg-accent'
+                  } ${!hasMapping ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <Cylinder className="w-3 h-3 flex-shrink-0 text-green-600" />
+                  <span className="flex-1 text-left">
+                    Boss {idx + 1} - Ø{boss.diameter.toFixed(1)}mm
+                  </span>
+                  {isSelected && <Eye className="w-4 h-4 text-orange-500" />}
+                  {hasMapping && !isSelected && (
+                    <span className="text-xs text-muted-foreground">Click to highlight</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ⭐ SECTION: Fillets
+  const renderFillets = () => {
+    if (fillets.length === 0) return null;
+    
+    const isExpanded = expandedSections.has('fillets');
+
+    return (
+      <div className="mb-3">
+        <button
+          onClick={() => toggleSection('fillets')}
+          className="w-full flex items-center gap-2 p-2 rounded hover:bg-accent transition-colors text-left"
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 flex-shrink-0" />
+          )}
+          <Circle className="w-4 h-4 flex-shrink-0 text-blue-600" fill="currentColor" />
+          <span className="font-medium">Fillets</span>
+          <Badge variant="secondary" className="ml-auto">{fillets.length}</Badge>
+        </button>
+
+        {isExpanded && (
+          <div className="ml-6 mt-1 space-y-1">
+            {fillets.map((fillet, idx) => {
+              const featureId = `fillet_${idx}`;
+              const isSelected = selectedFeatureId === featureId;
+              const hasMapping = fillet.triangle_start !== undefined && fillet.triangle_end !== undefined;
+
+              return (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    if (hasMapping) {
+                      handleFeatureClick({
+                        type: 'fillet',
+                        index: idx,
+                        triangleStart: fillet.triangle_start!,
+                        triangleEnd: fillet.triangle_end!,
+                        center: fillet.center || [0, 0, 0],
+                        label: `Fillet ${idx + 1}`
+                      }, featureId);
+                    }
+                  }}
+                  disabled={!hasMapping}
+                  className={`w-full flex items-center gap-2 p-2 pl-6 rounded text-sm transition-colors ${
+                    isSelected 
+                      ? 'bg-orange-100 dark:bg-orange-900/30 border-2 border-orange-500' 
+                      : 'hover:bg-accent'
+                  } ${!hasMapping ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <Circle className="w-3 h-3 flex-shrink-0 text-blue-600" />
+                  <span className="flex-1 text-left">
+                    Fillet {idx + 1}
+                  </span>
+                  {isSelected && <Eye className="w-4 h-4 text-orange-500" />}
+                  {hasMapping && !isSelected && (
+                    <span className="text-xs text-muted-foreground">Click to highlight</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Box className="w-5 h-5" />
+            Manufacturing Features
+          </div>
+          <Badge variant="outline" className="text-sm">
+            {totalFeatures} {totalFeatures === 1 ? 'Feature' : 'Features'}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {/* Complexity Score Badge */}
+          <div className="mb-4 p-3 bg-muted rounded-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Complexity Score</span>
+              <Badge 
+                variant={
+                  feature_summary.complexity_score >= 7 ? 'destructive' : 
+                  feature_summary.complexity_score >= 4 ? 'default' : 
+                  'secondary'
+                }
+              >
+                {feature_summary.complexity_score}/10
+              </Badge>
+            </div>
+          </div>
+
+          {/* Feature Tree */}
+          {renderThroughHoles()}
+          {renderBlindHoles()}
+          {renderBores()}
+          {renderBosses()}
+          {renderFillets()}
+
+          {/* Help Text */}
+          <div className="mt-4 p-3 bg-muted/50 rounded text-xs text-muted-foreground">
+            💡 Click any feature to highlight it in the 3D viewer and zoom to its location
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 };
 
 export default FeatureTree;
