@@ -36,9 +36,14 @@ const TOPOLOGY_COLORS = {
 
 export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid', topologyColors = true }: MeshModelProps) {
   
-  const { camera, scene } = useThree();
+  const { camera } = useThree();
   const meshRef = useRef<THREE.Mesh>(null);
   const edgesGroupRef = useRef<THREE.Group>(null);
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 MeshModel props:', { showEdges, displayStyle, hasEdgesGroupRef: !!edgesGroupRef.current, hasMeshRef: !!meshRef.current });
+  }, [showEdges, displayStyle]);
   
   // Create single unified geometry for professional solid rendering
   const geometry = useMemo(() => {
@@ -130,6 +135,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   
   // Pre-compute edge connectivity map
   const edgeMap = useMemo(() => {
+    console.log('🔧 Computing edge map...');
     const map = new Map<string, {
       v1: THREE.Vector3;
       v2: THREE.Vector3;
@@ -184,12 +190,44 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       });
     }
     
+    console.log(`✅ Edge map computed: ${map.size} unique edges`);
     return map;
   }, [meshData.vertices, meshData.indices]);
   
-  // CRITICAL FIX: Update edges every frame with proper debugging
+  // Frame counter for debugging
+  const frameCount = useRef(0);
+  
+  // Update edges every frame
   useFrame(() => {
-    if (!showEdges || displayStyle === 'wireframe' || !meshRef.current || !edgesGroupRef.current) {
+    frameCount.current++;
+    
+    // Log every 60 frames (once per second at 60fps)
+    if (frameCount.current % 60 === 0) {
+      console.log('🎬 useFrame running:', {
+        frame: frameCount.current,
+        showEdges,
+        displayStyle,
+        hasMesh: !!meshRef.current,
+        hasEdgesGroup: !!edgesGroupRef.current
+      });
+    }
+    
+    if (!showEdges || displayStyle === 'wireframe') {
+      // Clear edges when disabled
+      if (edgesGroupRef.current && edgesGroupRef.current.children.length > 0) {
+        while (edgesGroupRef.current.children.length > 0) {
+          const child = edgesGroupRef.current.children[0];
+          edgesGroupRef.current.remove(child);
+          if (child instanceof THREE.LineSegments) {
+            child.geometry.dispose();
+            (child.material as THREE.Material).dispose();
+          }
+        }
+      }
+      return;
+    }
+    
+    if (!meshRef.current || !edgesGroupRef.current) {
       return;
     }
     
@@ -269,6 +307,10 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       });
       const lines = new THREE.LineSegments(geo, mat);
       edgesGroup.add(lines);
+      
+      if (frameCount.current % 60 === 0) {
+        console.log(`✅ Drew ${silhouettePositions.length / 6} edge segments`);
+      }
     }
   });
   
