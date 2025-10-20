@@ -92,20 +92,13 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     
     if (topologyColors) {
       if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
-        console.log('🎨 Applying direct per-triangle face colors (no bleeding)');
-        
         const triangleCount = meshData.indices.length / 3;
         const colors = new Float32Array(triangleCount * 9); // 3 vertices * 3 RGB
-        const typeCount: { [key: string]: number } = {};
         
-        // SIMPLIFIED APPROACH: Direct triangle coloring (backend already prevents bleeding)
         for (let triIdx = 0; triIdx < triangleCount; triIdx++) {
           // Get the face type from the first vertex of this triangle
           const vertexIdx = meshData.indices[triIdx * 3];
           const faceType = meshData.vertex_colors[vertexIdx] || 'default';
-          
-          // Count face types for debugging
-          typeCount[faceType] = (typeCount[faceType] || 0) + 1;
           
           // Get color for this face type
           const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
@@ -119,17 +112,11 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
           }
         }
         
-        console.log('Face type distribution:', typeCount);
-        
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geometry.attributes.color.needsUpdate = true;
         
-        console.log('✅ Direct face colors applied (backend prevents bleeding)');
-        
       } else {
         // ⚠️ FALLBACK: No vertex_colors from backend - apply uniform silver color
-        console.warn('⚠️ No vertex_colors from backend, falling back to uniform silver color');
-        
         const triangleCount = meshData.indices.length / 3;
         const colors = new Float32Array(triangleCount * 9);
         const silverColor = new THREE.Color('#CCCCCC');
@@ -142,13 +129,10 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geometry.attributes.color.needsUpdate = true;
-        
-        console.log('✅ Applied fallback silver color for all vertices');
       }
     } else {
       // Remove color attribute when topology colors are disabled
       if (geometry.attributes.color) {
-        console.log('🧹 Removing face colors from geometry');
         geometry.deleteAttribute('color');
       }
     }
@@ -317,13 +301,6 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     }
   });
   
-  // Create feature edges from BREP data (true CAD edges, not mesh tessellation)
-  const featureEdges = useMemo(() => {
-    // Disable BREP edges completely - using dynamic edges instead
-    return null;
-  }, []);
-
-  
   // Section cut plane
   const clippingPlane = useMemo(() => {
     if (sectionPlane === 'none') return undefined;
@@ -389,7 +366,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       </mesh>
       
       {/* NEW: Dynamic silhouette edges - ONLY in solid mode with edges */}
-      {displayStyle !== 'wireframe' && <group ref={dynamicEdgesRef} />}
+      {displayStyle !== 'wireframe' && showEdges && <group ref={dynamicEdgesRef} />}
     </group>
   );
 }
