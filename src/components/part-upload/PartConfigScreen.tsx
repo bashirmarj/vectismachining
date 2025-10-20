@@ -7,9 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { ChevronLeft, ChevronDown, ChevronUp, Mail, Phone, Building2, MapPin, User } from 'lucide-react';
-import CADViewer from '@/components/CADViewer';
+import { CADViewer } from '@/components/CADViewer';
 import FeatureTree from '@/components/FeatureTree';
-import RoutingEditor from './RoutingEditor';
+import { RoutingEditor } from './RoutingEditor';
 
 interface FileWithData {
   file: File;
@@ -55,7 +55,7 @@ interface PartConfigScreenProps {
   isSubmitting: boolean;
 }
 
-const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
+export const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
   files,
   materials,
   processes,
@@ -185,14 +185,14 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                 <div className="space-y-2">
                   <Label htmlFor="process">Preferred Process (Optional)</Label>
                   <Select
-                    value={selectedFile.process || ''}
-                    onValueChange={(value) => onUpdateFile(selectedFileIndex, { process: value })}
+                    value={selectedFile.process || 'auto'}
+                    onValueChange={(value) => onUpdateFile(selectedFileIndex, { process: value === 'auto' ? undefined : value })}
                   >
                     <SelectTrigger id="process">
                       <SelectValue placeholder="Auto-select (recommended)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Auto-select (recommended)</SelectItem>
+                      <SelectItem value="auto">Auto-select (recommended)</SelectItem>
                       {processes.map((process) => (
                         <SelectItem key={process} value={process}>
                           {process}
@@ -207,9 +207,21 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
             {/* Routing Editor */}
             {selectedFile.analysis?.recommended_processes && (
               <RoutingEditor
-                recommendedRoutings={selectedFile.analysis.recommended_processes}
-                routingReasoning={selectedFile.analysis.routing_reasoning || []}
-                machiningOperations={selectedFile.analysis.machining_summary || []}
+                routings={selectedFile.analysis.recommended_processes}
+                onRoutingsChange={(updatedRoutings) => {
+                  // Update the routing for this file
+                  onUpdateFile(selectedFileIndex, { 
+                    analysis: {
+                      ...selectedFile.analysis!,
+                      recommended_processes: updatedRoutings
+                    }
+                  });
+                }}
+                analysisReasoning={
+                  selectedFile.analysis.routing_reasoning
+                    ? selectedFile.analysis.routing_reasoning.join(' • ')
+                    : undefined
+                }
               />
             )}
 
@@ -388,6 +400,34 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
 
               {/* Features Tab - UPDATED TO USE NEW PROPS */}
               <TabsContent value="features" className="m-0 p-6">
+                {/* Visible Debug Panel */}
+                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded text-xs space-y-2">
+                  <div className="font-bold">🔍 Debug Info:</div>
+                  <div>Has analysis: {selectedFile.analysis ? '✅ YES' : '❌ NO'}</div>
+                  <div>Has manufacturing_features: {selectedFile.analysis?.manufacturing_features ? '✅ YES' : '❌ NO'}</div>
+                  <div>Has feature_summary: {selectedFile.analysis?.feature_summary ? '✅ YES' : '❌ NO'}</div>
+                  
+                  {/* Show ALL keys in analysis object */}
+                  {selectedFile.analysis && (
+                    <div className="mt-2 p-2 bg-white rounded">
+                      <div className="font-semibold">Available keys in analysis:</div>
+                      <div className="text-blue-600 mt-1">
+                        {Object.keys(selectedFile.analysis).join(', ')}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Show FULL analysis object */}
+                  {selectedFile.analysis && (
+                    <div className="mt-2 p-2 bg-white rounded max-h-96 overflow-auto">
+                      <div className="font-semibold">Complete Analysis Object:</div>
+                      <pre className="text-xs mt-1">
+                        {JSON.stringify(selectedFile.analysis, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+                
                 <FeatureTree
                   features={selectedFile.analysis?.manufacturing_features}
                   featureSummary={selectedFile.analysis?.feature_summary}
@@ -400,5 +440,3 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
     </div>
   );
 };
-
-export default PartConfigScreen;

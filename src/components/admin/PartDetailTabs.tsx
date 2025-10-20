@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import CADViewer from '@/components/CADViewer';
+import { CADViewer } from '@/components/CADViewer';
 import FeatureTree from '@/components/FeatureTree';
 import { Box, Ruler, Gauge } from 'lucide-react';
 
@@ -49,7 +49,7 @@ interface PartDetailTabsProps {
   onUpdateLineItem: (id: string, field: string, value: any) => void;
 }
 
-const PartDetailTabs: React.FC<PartDetailTabsProps> = ({
+export const PartDetailTabs: React.FC<PartDetailTabsProps> = ({
   lineItem,
   featureTree,
   onUpdateLineItem,
@@ -388,5 +388,3 @@ const PartDetailTabs: React.FC<PartDetailTabsProps> = ({
     </Card>
   );
 };
-
-export default PartDetailTabs;
