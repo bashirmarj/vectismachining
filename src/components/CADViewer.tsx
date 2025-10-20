@@ -138,6 +138,20 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     return { width, height, depth, center };
   }, [activeMeshData]);
   
+  // FIXED: Calculate dynamic camera and fog distances based on part size
+  const viewportSettings = useMemo(() => {
+    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+    
+    return {
+      cameraDistance: maxDim * 2.5,
+      minDistance: maxDim * 0.5,
+      maxDistance: maxDim * 10,
+      fogNear: maxDim * 5,
+      fogFar: maxDim * 20,
+      farPlane: maxDim * 25,
+    };
+  }, [boundingBox]);
+  
   // Determine if we have valid 3D data to display
   const hasValidModel = activeMeshData && activeMeshData.vertices && activeMeshData.vertices.length > 0;
   
@@ -466,7 +480,12 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
             </div>
             
             <Canvas
-              camera={{ position: [150, 150, 150], fov: 45 }}
+              camera={{ 
+                position: [150, 150, 150], 
+                fov: 45,
+                near: 0.1,
+                far: viewportSettings.farPlane
+              }}
               gl={{
                 antialias: true,
                 alpha: false,
@@ -481,7 +500,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
               <Suspense fallback={null}>
                 {/* Clean white background */}
                 <color attach="background" args={['#f8f9fa']} />
-                <fog attach="fog" args={['#f8f9fa', 300, 1000]} />
+                
+                {/* FIXED: Dynamic fog based on part size */}
+                <fog attach="fog" args={['#f8f9fa', viewportSettings.fogNear, viewportSettings.fogFar]} />
                 
                 {/* Professional CAD lighting - subtle depth without color variation */}
                 <ambientLight intensity={0.5} />
@@ -496,11 +517,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   color="#ffffff"
                 />
                 
-                {/* Subtle grid (light gray) */}
-...
-                
-                
-                {/* Auto-framed camera */}
+                {/* Auto-framed camera with DYNAMIC far plane */}
                 <PerspectiveCamera
                   ref={cameraRef}
                   makeDefault
@@ -510,6 +527,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                     boundingBox.center[2] + boundingBox.depth * 1.5,
                   ]}
                   fov={45}
+                  near={0.1}
+                  far={viewportSettings.farPlane}
                 />
                 
                 {/* 3D Model */}
@@ -547,15 +566,15 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   mode={measurementMode}
                 />
                 
-                {/* Camera controls with damping and inertia */}
+                {/* Camera controls with DYNAMIC distances */}
                 <OrbitControls
                   ref={controlsRef}
                   makeDefault
                   target={boundingBox.center}
                   enableDamping
                   dampingFactor={0.08}
-                  minDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.5}
-                  maxDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 5}
+                  minDistance={viewportSettings.minDistance}
+                  maxDistance={viewportSettings.maxDistance}
                   rotateSpeed={0.6}
                   panSpeed={0.8}
                   zoomSpeed={1.2}
