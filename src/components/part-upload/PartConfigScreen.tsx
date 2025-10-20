@@ -406,19 +406,23 @@ export const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                   <div>Has analysis: {selectedFile.analysis ? '✅ YES' : '❌ NO'}</div>
                   <div>Has manufacturing_features: {selectedFile.analysis?.manufacturing_features ? '✅ YES' : '❌ NO'}</div>
                   <div>Has feature_summary: {selectedFile.analysis?.feature_summary ? '✅ YES' : '❌ NO'}</div>
-                  {selectedFile.analysis?.feature_summary && (
+                  
+                  {/* Show ALL keys in analysis object */}
+                  {selectedFile.analysis && (
                     <div className="mt-2 p-2 bg-white rounded">
-                      <div className="font-semibold">Feature Summary:</div>
-                      <pre className="text-xs mt-1">
-                        {JSON.stringify(selectedFile.analysis.feature_summary, null, 2)}
-                      </pre>
+                      <div className="font-semibold">Available keys in analysis:</div>
+                      <div className="text-blue-600 mt-1">
+                        {Object.keys(selectedFile.analysis).join(', ')}
+                      </div>
                     </div>
                   )}
-                  {selectedFile.analysis?.manufacturing_features && (
-                    <div className="mt-2 p-2 bg-white rounded">
-                      <div className="font-semibold">Manufacturing Features:</div>
+                  
+                  {/* Show FULL analysis object */}
+                  {selectedFile.analysis && (
+                    <div className="mt-2 p-2 bg-white rounded max-h-96 overflow-auto">
+                      <div className="font-semibold">Complete Analysis Object:</div>
                       <pre className="text-xs mt-1">
-                        {JSON.stringify(selectedFile.analysis.manufacturing_features, null, 2)}
+                        {JSON.stringify(selectedFile.analysis, null, 2)}
                       </pre>
                     </div>
                   )}
