@@ -400,14 +400,30 @@ export const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
 
               {/* Features Tab - UPDATED TO USE NEW PROPS */}
               <TabsContent value="features" className="m-0 p-6">
-                {/* Debug info */}
-                {console.log('🔍 FeatureTree Debug:', {
-                  hasAnalysis: !!selectedFile.analysis,
-                  hasFeatures: !!selectedFile.analysis?.manufacturing_features,
-                  hasSummary: !!selectedFile.analysis?.feature_summary,
-                  features: selectedFile.analysis?.manufacturing_features,
-                  summary: selectedFile.analysis?.feature_summary
-                })}
+                {/* Visible Debug Panel */}
+                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded text-xs space-y-2">
+                  <div className="font-bold">🔍 Debug Info:</div>
+                  <div>Has analysis: {selectedFile.analysis ? '✅ YES' : '❌ NO'}</div>
+                  <div>Has manufacturing_features: {selectedFile.analysis?.manufacturing_features ? '✅ YES' : '❌ NO'}</div>
+                  <div>Has feature_summary: {selectedFile.analysis?.feature_summary ? '✅ YES' : '❌ NO'}</div>
+                  {selectedFile.analysis?.feature_summary && (
+                    <div className="mt-2 p-2 bg-white rounded">
+                      <div className="font-semibold">Feature Summary:</div>
+                      <pre className="text-xs mt-1">
+                        {JSON.stringify(selectedFile.analysis.feature_summary, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  {selectedFile.analysis?.manufacturing_features && (
+                    <div className="mt-2 p-2 bg-white rounded">
+                      <div className="font-semibold">Manufacturing Features:</div>
+                      <pre className="text-xs mt-1">
+                        {JSON.stringify(selectedFile.analysis.manufacturing_features, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+                
                 <FeatureTree
                   features={selectedFile.analysis?.manufacturing_features}
                   featureSummary={selectedFile.analysis?.feature_summary}
