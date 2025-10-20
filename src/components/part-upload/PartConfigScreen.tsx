@@ -383,6 +383,14 @@ export const PartConfigScreen = ({
 
       {/* Right Panel - 3D Viewer & Features (70% width) */}
       <div className="flex-1 bg-gradient-to-br from-slate-50 to-white">
+        {/* 🔴 TOP LEVEL DEBUG - SHOULD ALWAYS BE VISIBLE */}
+        <div className="p-4 bg-red-200 border-4 border-red-600">
+          <p className="font-bold text-red-900">🚨 DEBUG: Component is rendering!</p>
+          <p className="text-sm text-red-900">Selected file: {selectedFile.file.name}</p>
+          <p className="text-sm text-red-900">Has analysis: {selectedFile.analysis ? 'YES' : 'NO'}</p>
+        </div>
+        {/* 🔴 END TOP DEBUG */}
+        
         <Tabs defaultValue="model" className="h-full flex flex-col">
           <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <TabsList className="w-full justify-start rounded-none border-0 bg-transparent p-0 h-auto">
