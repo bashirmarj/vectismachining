@@ -22,48 +22,47 @@ interface MeshModelProps {
 }
 
 // Professional solid color for CAD rendering
-const SOLID_COLOR = '#CCCCCC';
+const SOLID_COLOR = '#CCCCCC'; // Light gray
 
 // Fusion 360 Analysis colors
 const TOPOLOGY_COLORS = {
-  internal: '#FF6B6B',
-  cylindrical: '#CCCCCC',
-  planar: '#DDDDDD',
-  external: '#CCCCCC',
-  through: '#FFD700',
-  default: '#CCCCCC'
+  internal: '#FF6B6B',      // Coral Red for internal surfaces/pockets
+  cylindrical: '#CCCCCC',   // Silver for outer cylindrical surfaces
+  planar: '#DDDDDD',        // Light Grey for flat faces
+  external: '#CCCCCC',      // Silver for other outer surfaces
+  through: '#FFD700',       // Gold/Yellow for through holes
+  default: '#CCCCCC'        // Default silver
 };
+
 
 export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid', topologyColors = true }: MeshModelProps) {
   
   const { camera } = useThree();
   const meshRef = useRef<THREE.Mesh>(null);
-  const edgesGroupRef = useRef<THREE.Group>(null);
-  
-  // Debug logging
-  useEffect(() => {
-    console.log('🔍 MeshModel props:', { showEdges, displayStyle, hasEdgesGroupRef: !!edgesGroupRef.current, hasMeshRef: !!meshRef.current });
-  }, [showEdges, displayStyle]);
+  const dynamicEdgesRef = useRef<THREE.Group>(null);
   
   // Create single unified geometry for professional solid rendering
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     
     if (!topologyColors) {
+      // Standard indexed geometry with smooth normals
       geo.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
       geo.setIndex(meshData.indices);
       geo.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
       geo.computeVertexNormals();
       geo.normalizeNormals();
     } else {
+      // Non-indexed geometry for face colors - duplicate vertices per triangle
       const triangleCount = meshData.indices.length / 3;
-      const positions = new Float32Array(triangleCount * 9);
+      const positions = new Float32Array(triangleCount * 9); // 3 vertices * 3 coords
       
       for (let i = 0; i < triangleCount; i++) {
         const idx0 = meshData.indices[i * 3];
         const idx1 = meshData.indices[i * 3 + 1];
         const idx2 = meshData.indices[i * 3 + 2];
         
+        // Copy vertex positions for this triangle
         positions[i * 9 + 0] = meshData.vertices[idx0 * 3];
         positions[i * 9 + 1] = meshData.vertices[idx0 * 3 + 1];
         positions[i * 9 + 2] = meshData.vertices[idx0 * 3 + 2];
@@ -78,31 +77,41 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       }
       
       geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      // No setIndex() - non-indexed geometry
+      // No normals - Three.js will compute flat normals automatically
     }
     
     geo.computeBoundingSphere();
+    
     return geo;
   }, [meshData, topologyColors]);
   
-  // Apply vertex colors
+  // Apply direct per-triangle face colors (backend handles anti-bleeding)
   useEffect(() => {
     if (!geometry) return;
     
     if (topologyColors) {
       if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
+        console.log('🎨 Applying direct per-triangle face colors (no bleeding)');
+        
         const triangleCount = meshData.indices.length / 3;
-        const colors = new Float32Array(triangleCount * 9);
+        const colors = new Float32Array(triangleCount * 9); // 3 vertices * 3 RGB
         const typeCount: { [key: string]: number } = {};
         
+        // SIMPLIFIED APPROACH: Direct triangle coloring (backend already prevents bleeding)
         for (let triIdx = 0; triIdx < triangleCount; triIdx++) {
+          // Get the face type from the first vertex of this triangle
           const vertexIdx = meshData.indices[triIdx * 3];
           const faceType = meshData.vertex_colors[vertexIdx] || 'default';
           
+          // Count face types for debugging
           typeCount[faceType] = (typeCount[faceType] || 0) + 1;
           
+          // Get color for this face type
           const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
           const color = new THREE.Color(colorHex);
           
+          // Apply same solid color to all 3 vertices of this triangle
           for (let v = 0; v < 3; v++) {
             colors[triIdx * 9 + v * 3 + 0] = color.r;
             colors[triIdx * 9 + v * 3 + 1] = color.g;
@@ -110,9 +119,17 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
           }
         }
         
+        console.log('Face type distribution:', typeCount);
+        
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geometry.attributes.color.needsUpdate = true;
+        
+        console.log('✅ Direct face colors applied (backend prevents bleeding)');
+        
       } else {
+        // ⚠️ FALLBACK: No vertex_colors from backend - apply uniform silver color
+        console.warn('⚠️ No vertex_colors from backend, falling back to uniform silver color');
+        
         const triangleCount = meshData.indices.length / 3;
         const colors = new Float32Array(triangleCount * 9);
         const silverColor = new THREE.Color('#CCCCCC');
@@ -125,17 +142,22 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geometry.attributes.color.needsUpdate = true;
+        
+        console.log('✅ Applied fallback silver color for all vertices');
       }
     } else {
+      // Remove color attribute when topology colors are disabled
       if (geometry.attributes.color) {
+        console.log('🧹 Removing face colors from geometry');
         geometry.deleteAttribute('color');
       }
     }
   }, [geometry, topologyColors, meshData]);
   
-  // Pre-compute edge connectivity map
+  // ===== NEW: Pre-compute edge connectivity for dynamic silhouettes =====
   const edgeMap = useMemo(() => {
-    console.log('🔧 Computing edge map...');
+    if (!showEdges) return null;
+    
     const map = new Map<string, {
       v1: THREE.Vector3;
       v2: THREE.Vector3;
@@ -165,12 +187,14 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         meshData.vertices[i2 * 3 + 2]
       );
       
+      // Calculate triangle normal
       const e1 = new THREE.Vector3().subVectors(v1, v0);
       const e2 = new THREE.Vector3().subVectors(v2, v0);
       const normal = new THREE.Vector3().crossVectors(e1, e2).normalize();
       
       const getKey = (a: number, b: number) => a < b ? `${a}_${b}` : `${b}_${a}`;
       
+      // Store all three edges of this triangle
       const edges = [
         { v1: v0, v2: v1, key: getKey(i0, i1) },
         { v1: v1, v2: v2, key: getKey(i1, i2) },
@@ -190,34 +214,18 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       });
     }
     
-    console.log(`✅ Edge map computed: ${map.size} unique edges`);
     return map;
-  }, [meshData.vertices, meshData.indices]);
+  }, [meshData.vertices, meshData.indices, showEdges]);
   
-  // Frame counter for debugging
-  const frameCount = useRef(0);
-  
-  // Update edges every frame
+  // ===== NEW: Dynamic silhouette edge rendering =====
   useFrame(() => {
-    frameCount.current++;
-    
-    // Log every 60 frames (once per second at 60fps)
-    if (frameCount.current % 60 === 0) {
-      console.log('🎬 useFrame running:', {
-        frame: frameCount.current,
-        showEdges,
-        displayStyle,
-        hasMesh: !!meshRef.current,
-        hasEdgesGroup: !!edgesGroupRef.current
-      });
-    }
-    
-    if (!showEdges || displayStyle === 'wireframe') {
-      // Clear edges when disabled
-      if (edgesGroupRef.current && edgesGroupRef.current.children.length > 0) {
-        while (edgesGroupRef.current.children.length > 0) {
-          const child = edgesGroupRef.current.children[0];
-          edgesGroupRef.current.remove(child);
+    // Only run if edges enabled and not in wireframe
+    if (!showEdges || displayStyle === 'wireframe' || !edgeMap || !meshRef.current || !dynamicEdgesRef.current) {
+      // Clear edges if disabled
+      if (dynamicEdgesRef.current && dynamicEdgesRef.current.children.length > 0) {
+        while (dynamicEdgesRef.current.children.length > 0) {
+          const child = dynamicEdgesRef.current.children[0];
+          dynamicEdgesRef.current.remove(child);
           if (child instanceof THREE.LineSegments) {
             child.geometry.dispose();
             (child.material as THREE.Material).dispose();
@@ -227,18 +235,14 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       return;
     }
     
-    if (!meshRef.current || !edgesGroupRef.current) {
-      return;
-    }
-    
     const mesh = meshRef.current;
-    const edgesGroup = edgesGroupRef.current;
+    const edgesGroup = dynamicEdgesRef.current;
     
     // Get camera position
     const cameraWorldPos = new THREE.Vector3();
     camera.getWorldPosition(cameraWorldPos);
     
-    // Transform to local space
+    // Transform to mesh local space for faster calculations
     const worldToLocal = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
     const cameraLocalPos = cameraWorldPos.clone().applyMatrix4(worldToLocal);
     
@@ -257,7 +261,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         return;
       }
       
-      // Shared edges - check if front/back facing
+      // Shared edges - check if normals face opposite directions
       if (edgeData.normals.length === 2) {
         const n1 = edgeData.normals[0];
         const n2 = edgeData.normals[1];
@@ -273,7 +277,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         const dot1 = n1.dot(viewDir);
         const dot2 = n2.dot(viewDir);
         
-        // Silhouette if one face front, one face back
+        // Silhouette if one face front-facing, one back-facing
         if ((dot1 > 0.01 && dot2 < -0.01) || (dot1 < -0.01 && dot2 > 0.01)) {
           const v1World = edgeData.v1.clone().applyMatrix4(mesh.matrixWorld);
           const v2World = edgeData.v2.clone().applyMatrix4(mesh.matrixWorld);
@@ -302,26 +306,31 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
       geo.setAttribute('position', new THREE.Float32BufferAttribute(silhouettePositions, 3));
       const mat = new THREE.LineBasicMaterial({ 
         color: '#000000', 
-        linewidth: 2,
+        linewidth: 1.5,
         toneMapped: false 
       });
       const lines = new THREE.LineSegments(geo, mat);
       edgesGroup.add(lines);
-      
-      if (frameCount.current % 60 === 0) {
-        console.log(`✅ Drew ${silhouettePositions.length / 6} edge segments`);
-      }
     }
   });
   
-  // Create feature edges from BREP data
+  // Create feature edges from BREP data (true CAD edges, not mesh tessellation)
   const featureEdges = useMemo(() => {
     if (!showEdges && displayStyle !== 'wireframe') return null;
-    if (!meshData.feature_edges || meshData.feature_edges.length === 0) return null;
     
+    // Check if backend provided BREP feature edges
+    if (!meshData.feature_edges || meshData.feature_edges.length === 0) {
+      console.warn('No BREP feature edges available from backend');
+      return null;
+    }
+    
+    // Convert BREP edge polylines to Three.js line segments
     const positions: number[] = [];
+    
     meshData.feature_edges.forEach((edge: number[][]) => {
+      // Each edge is an array of [x, y, z] points representing a polyline
       for (let i = 0; i < edge.length - 1; i++) {
+        // Add line segment from point i to point i+1
         positions.push(...edge[i], ...edge[i + 1]);
       }
     });
@@ -330,22 +339,24 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    
     return geometry;
   }, [meshData.feature_edges, showEdges, displayStyle]);
+
   
-  // Section plane
+  // Section cut plane
   const clippingPlane = useMemo(() => {
     if (sectionPlane === 'none') return undefined;
     
     let normal: THREE.Vector3;
     switch (sectionPlane) {
-      case 'xy':
+      case 'xy': // Cut along Z-axis (shows XY plane)
         normal = new THREE.Vector3(0, 0, 1);
         break;
-      case 'xz':
+      case 'xz': // Cut along Y-axis (shows XZ plane)
         normal = new THREE.Vector3(0, 1, 0);
         break;
-      case 'yz':
+      case 'yz': // Cut along X-axis (shows YZ plane)
         normal = new THREE.Vector3(1, 0, 0);
         break;
       default:
@@ -355,6 +366,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     return [new THREE.Plane(normal, -sectionPosition)];
   }, [sectionPlane, sectionPosition]);
   
+  // Update Three.js renderer clipping settings when section plane changes
   const { gl } = useThree();
   
   useEffect(() => {
@@ -362,6 +374,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     gl.clippingPlanes = [];
   }, [sectionPlane, gl]);
   
+  // Calculate material properties based on display style
   const materialProps = useMemo(() => {
     const base = {
       color: '#5b9bd5',
@@ -384,27 +397,25 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
   
   return (
     <group>
-      {/* Main mesh */}
-      {displayStyle !== 'wireframe' && (
-        <mesh ref={meshRef} geometry={geometry}>
-          <meshStandardMaterial
-            {...materialProps}
-            color={topologyColors ? '#ffffff' : SOLID_COLOR}
-            vertexColors={topologyColors}
-            flatShading={topologyColors}
-            toneMapped={false}
-          />
-        </mesh>
-      )}
+      {/* Render solid mesh (ALWAYS RENDERED - just changes style) */}
+      <mesh ref={meshRef} geometry={geometry}>
+        <meshStandardMaterial
+          {...materialProps}
+          color={topologyColors ? '#ffffff' : SOLID_COLOR}
+          vertexColors={topologyColors}
+          flatShading={topologyColors}
+          toneMapped={false}
+        />
+      </mesh>
       
-      {/* Dynamic silhouette edges - updated every frame */}
-      <group ref={edgesGroupRef} />
+      {/* NEW: Dynamic silhouette edges - updated every frame */}
+      <group ref={dynamicEdgesRef} />
       
-      {/* Static BREP edges - disabled */}
+      {/* Render BREP feature edges (true CAD edges from backend) - OPTIONAL */}
       {featureEdges && false && (
         <lineSegments geometry={featureEdges}>
           <lineBasicMaterial 
-            color="#FF0000" 
+            color="#000000" 
             linewidth={1}
             clippingPlanes={clippingPlane}
             clipIntersection={false}
