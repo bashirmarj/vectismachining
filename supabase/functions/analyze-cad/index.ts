@@ -601,6 +601,14 @@ async function analyzeSTEPViaService(
       }
     });
     
+    // 🔍 DEBUG: Log what Python backend actually returned
+    console.log(`🔍 DEBUG - Python Backend Response:`);
+    console.log(`   - manufacturing_features exists: ${!!data.manufacturing_features}`);
+    console.log(`   - manufacturing_features value:`, JSON.stringify(data.manufacturing_features, null, 2));
+    console.log(`   - feature_summary exists: ${!!data.feature_summary}`);
+    console.log(`   - feature_summary value:`, JSON.stringify(data.feature_summary, null, 2));
+    console.log(`   - Full response keys:`, Object.keys(data));
+    
     // Map service response to our result format with BREP data
     const detected_features: DetectedFeatures = {
       is_cylindrical: (data.manufacturing_features?.holes?.length > 0 || 
