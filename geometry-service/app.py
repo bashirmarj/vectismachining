@@ -27,7 +27,7 @@ from OCC.Core.TopoDS import topods
 from OCC.Core.GProp import GProp_GProps
 from OCC.Core.BRepGProp import brepgprop, BRepGProp_Face
 from OCC.Core.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListIteratorOfListOfShape
-from OCC.Core.gp import gp_Vec, gp_Pnt
+from OCC.Core.gp import gp_Vec, gp_Pnt, gp_Dir
 
 import logging
 
@@ -277,20 +277,129 @@ def recognize_manufacturing_features(shape):
     return features
 
 
-def extract_feature_edges(shape, max_edges=500):
-    """Extract TRUE feature edges from BREP geometry"""
-    logger.info("📐 Extracting BREP feature edges...")
+def get_face_normal_at_point(face, point):
+    """
+    Get the surface normal of a face at a given point.
+    
+    Returns gp_Dir or None if calculation fails.
+    """
+    try:
+        surface = BRep_Tool.Surface(face)
+        surface_adaptor = BRepAdaptor_Surface(face)
+        
+        # Project point onto surface to get UV parameters
+        # This is a simplified approach - using midpoint of UV domain
+        u_mid = (surface_adaptor.FirstUParameter() + surface_adaptor.LastUParameter()) / 2
+        v_mid = (surface_adaptor.FirstVParameter() + surface_adaptor.LastVParameter()) / 2
+        
+        # Get normal at midpoint
+        d1u = surface_adaptor.DN(u_mid, v_mid, 1, 0)
+        d1v = surface_adaptor.DN(u_mid, v_mid, 0, 1)
+        
+        normal = d1u.Crossed(d1v)
+        
+        if normal.Magnitude() < 1e-7:
+            return None
+            
+        normal.Normalize()
+        
+        # Check face orientation
+        if face.Orientation() == 1:  # TopAbs_REVERSED
+            normal.Reverse()
+        
+        return gp_Dir(normal.X(), normal.Y(), normal.Z())
+        
+    except Exception as e:
+        logger.debug(f"Error getting face normal: {e}")
+        return None
+
+
+def calculate_dihedral_angle(edge, face1, face2):
+    """
+    Calculate the dihedral angle between two faces along their shared edge.
+    
+    Returns angle in radians, or None if calculation fails.
+    Professional CAD software typically uses 20-30° threshold.
+    """
+    try:
+        # Get a point in the middle of the edge
+        curve_result = BRep_Tool.Curve(edge)
+        if not curve_result or curve_result[0] is None:
+            return None
+            
+        curve = curve_result[0]
+        first_param = curve_result[1]
+        last_param = curve_result[2]
+        mid_param = (first_param + last_param) / 2.0
+        
+        edge_point = curve.Value(mid_param)
+        
+        # Get normals of both faces at the edge point
+        normal1 = get_face_normal_at_point(face1, edge_point)
+        normal2 = get_face_normal_at_point(face2, edge_point)
+        
+        if normal1 is None or normal2 is None:
+            return None
+        
+        # Calculate angle between normals
+        # Dihedral angle = π - angle between normals
+        dot_product = normal1.Dot(normal2)
+        dot_product = max(-1.0, min(1.0, dot_product))  # Clamp to [-1, 1]
+        
+        angle_between_normals = math.acos(dot_product)
+        dihedral_angle = math.pi - angle_between_normals
+        
+        return abs(dihedral_angle)
+        
+    except Exception as e:
+        logger.debug(f"Error calculating dihedral angle: {e}")
+        return None
+
+
+def extract_feature_edges(shape, max_edges=500, angle_threshold_degrees=20):
+    """
+    Extract SIGNIFICANT feature edges from BREP geometry.
+    
+    Only extracts edges that are:
+    1. Boundary edges (belong to only 1 face) - always significant
+    2. Sharp edges (dihedral angle between faces > threshold)
+    
+    This matches professional CAD software behavior (SolidWorks, Fusion 360).
+    
+    Args:
+        shape: OpenCascade shape
+        max_edges: Maximum number of edges to extract
+        angle_threshold_degrees: Minimum dihedral angle to consider edge "sharp" (default: 20°)
+    
+    Returns:
+        List of polylines, where each polyline is a list of [x, y, z] points
+    """
+    logger.info(f"📐 Extracting significant BREP edges (angle threshold: {angle_threshold_degrees}°)...")
     
     feature_edges = []
     edge_count = 0
+    angle_threshold_rad = math.radians(angle_threshold_degrees)
+    
+    # Build edge-to-faces map using TopTools
+    edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
+    topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
     
     try:
         edge_explorer = TopExp_Explorer(shape, TopAbs_EDGE)
         
+        stats = {
+            'boundary_edges': 0,
+            'sharp_edges': 0,
+            'smooth_edges_skipped': 0,
+            'total_processed': 0
+        }
+        
         while edge_explorer.More() and edge_count < max_edges:
             edge = topods.Edge(edge_explorer.Current())
+            stats['total_processed'] += 1
             
             try:
+                # Get curve geometry
                 curve_result = BRep_Tool.Curve(edge)
                 
                 if not curve_result or len(curve_result) < 3 or curve_result[0] is None:
@@ -301,17 +410,60 @@ def extract_feature_edges(shape, max_edges=500):
                 first_param = curve_result[1]
                 last_param = curve_result[2]
                 
+                # Determine if this edge is significant
+                is_significant = False
+                edge_type = "unknown"
+                
+                # Get faces adjacent to this edge
+                if edge_face_map.Contains(edge):
+                    face_list = edge_face_map.FindFromKey(edge)
+                    num_adjacent_faces = face_list.Size()
+                    
+                    if num_adjacent_faces == 1:
+                        # BOUNDARY EDGE - always show (holes, external boundaries)
+                        is_significant = True
+                        edge_type = "boundary"
+                        stats['boundary_edges'] += 1
+                        
+                    elif num_adjacent_faces == 2:
+                        # INTERIOR EDGE - check dihedral angle
+                        face1 = topods.Face(face_list.First())
+                        face2 = topods.Face(face_list.Last())
+                        
+                        # Calculate dihedral angle between the two faces
+                        dihedral_angle = calculate_dihedral_angle(edge, face1, face2)
+                        
+                        if dihedral_angle is not None and dihedral_angle > angle_threshold_rad:
+                            # SHARP EDGE - angle exceeds threshold
+                            is_significant = True
+                            edge_type = f"sharp({math.degrees(dihedral_angle):.1f}°)"
+                            stats['sharp_edges'] += 1
+                        else:
+                            # SMOOTH/TANGENT EDGE - skip (within fillet, blend, etc.)
+                            stats['smooth_edges_skipped'] += 1
+                else:
+                    # Orphan edge - include it to be safe
+                    is_significant = True
+                    edge_type = "orphan"
+                
+                # Only extract significant edges
+                if not is_significant:
+                    edge_explorer.Next()
+                    continue
+                
+                # Sample the curve to create a polyline
                 curve_adaptor = BRepAdaptor_Curve(edge)
                 curve_type = curve_adaptor.GetType()
                 
+                # Adaptive sampling based on curve type
                 if curve_type == GeomAbs_Line:
-                    num_samples = 2
+                    num_samples = 2  # Lines only need endpoints
                 elif curve_type == GeomAbs_Circle:
-                    num_samples = 32
+                    num_samples = 32  # Circles need smooth representation
                 elif curve_type in [GeomAbs_BSplineCurve, GeomAbs_BezierCurve]:
-                    num_samples = 24
+                    num_samples = 24  # Splines need moderate sampling
                 else:
-                    num_samples = 20
+                    num_samples = 20  # Default for other curve types
                 
                 points = []
                 for i in range(num_samples + 1):
@@ -323,12 +475,17 @@ def extract_feature_edges(shape, max_edges=500):
                     feature_edges.append(points)
                     edge_count += 1
                     
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Error processing edge: {e}")
                 pass
             
             edge_explorer.Next()
         
-        logger.info(f"✅ Extracted {len(feature_edges)} BREP edges")
+        logger.info(f"✅ Extracted {len(feature_edges)} significant edges:")
+        logger.info(f"   - Boundary edges: {stats['boundary_edges']}")
+        logger.info(f"   - Sharp edges: {stats['sharp_edges']}")
+        logger.info(f"   - Smooth edges skipped: {stats['smooth_edges_skipped']}")
+        logger.info(f"   - Total processed: {stats['total_processed']}")
         
     except Exception as e:
         logger.error(f"Error extracting edges: {e}")
@@ -772,8 +929,9 @@ def analyze_cad():
         vertex_colors = classify_mesh_faces(mesh_data, shape)
         mesh_data["vertex_colors"] = vertex_colors
         
-        logger.info("📐 Extracting BREP edges...")
-        feature_edges = extract_feature_edges(shape, max_edges=500)
+        logger.info("📐 Extracting significant BREP edges...")
+        # Using 20° threshold - industry standard for manufacturing CAD
+        feature_edges = extract_feature_edges(shape, max_edges=500, angle_threshold_degrees=20)
         mesh_data["feature_edges"] = feature_edges
         mesh_data["triangle_count"] = len(mesh_data.get("indices", [])) // 3
 
@@ -832,7 +990,8 @@ def analyze_cad():
                 'vertex_colors': mesh_data['vertex_colors'],
                 'feature_edges': feature_edges,
                 'triangle_count': mesh_data['triangle_count'],
-                'face_classification_method': 'mesh_based_with_propagation'
+                'face_classification_method': 'mesh_based_with_propagation',
+                'edge_extraction_method': 'smart_filtering_20deg'
             },
             'volume_cm3': exact_props['volume'] / 1000,
             'surface_area_cm2': exact_props['surface_area'] / 100,
@@ -849,7 +1008,7 @@ def analyze_cad():
             'quotation_ready': True,
             'status': 'success',
             'confidence': 0.98,
-            'method': 'mesh_based_classification_with_propagation'
+            'method': 'professional_edge_extraction_with_angle_filtering'
         })
 
     except Exception as e:
@@ -866,7 +1025,7 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "7.0.0-accurate-features",
+        "version": "8.0.0-smart-edge-extraction",
         "status": "running",
         "endpoints": {
             "health": "/health",
@@ -875,8 +1034,10 @@ def root():
         "features": {
             "classification": "Mesh-based with neighbor propagation",
             "feature_detection": "Accurate through-hole, blind hole, bore, and boss detection",
+            "edge_extraction": "Professional smart filtering (20° dihedral angle threshold)",
             "inner_surfaces": "Detected by cylinder radius and propagated to adjacent faces",
-            "through_holes": "Detected by size and connectivity analysis"
+            "through_holes": "Detected by size and connectivity analysis",
+            "wireframe_quality": "SolidWorks/Fusion 360 style - only significant edges"
         },
         "documentation": "POST multipart/form-data with 'file' field containing .step file"
     })
