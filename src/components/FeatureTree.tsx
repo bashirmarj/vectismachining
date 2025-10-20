@@ -10,7 +10,7 @@ interface FeatureTreeProps {
 
 export default function FeatureTree({ features, featureSummary }: FeatureTreeProps) {
   const [expandedSections, setExpandedSections] = React.useState<Set<string>>(
-    new Set(['manufacturing', 'surfaces', 'features', 'through-holes', 'blind-holes', 'bores', 'bosses'])
+    new Set(['manufacturing', 'surfaces'])
   );
 
   const toggleSection = (section: string) => {
@@ -21,18 +21,6 @@ export default function FeatureTree({ features, featureSummary }: FeatureTreePro
       newExpanded.add(section);
     }
     setExpandedSections(newExpanded);
-  };
-
-  const expandAll = () => {
-    setExpandedSections(new Set([
-      'manufacturing', 'surfaces', 'features',
-      'through-holes', 'blind-holes', 'bores', 'bosses',
-      'planar-faces', 'fillets', 'complex-surfaces'
-    ]));
-  };
-
-  const collapseAll = () => {
-    setExpandedSections(new Set());
   };
 
   // ============================================================
@@ -120,7 +108,7 @@ export default function FeatureTree({ features, featureSummary }: FeatureTreePro
                               <div className="text-muted-foreground mt-1">
                                 {Object.entries(feature.dimensions).map(([key, val]) => (
                                   <div key={key}>
-                                    {key}: {typeof val === 'number' ? val.toFixed(2) : String(val)}
+                                    {key}: {typeof val === 'number' ? val.toFixed(2) : val}
                                   </div>
                                 ))}
                               </div>
@@ -171,54 +159,16 @@ export default function FeatureTree({ features, featureSummary }: FeatureTreePro
     return `${value.toFixed(1)}mm²`;
   };
 
-  const hasFeatures = throughHoleCount > 0 || blindHoleCount > 0 || boreCount > 0 || 
-                     bossCount > 0 || planarCount > 0 || filletCount > 0 || complexSurfaces.length > 0;
-
-  if (!hasFeatures && !featureSummary) {
-    return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold">Feature Analysis</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <Wrench className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No features detected yet</p>
-            <p className="text-xs mt-1">Features will appear here once analysis is complete</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <Card className="w-full">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-semibold">Feature Analysis</CardTitle>
-          <div className="flex items-center gap-2">
-            {complexityScore !== undefined && (
-              <Badge variant="outline">
-                Complexity: {complexityScore}/10
-              </Badge>
-            )}
-            <div className="flex gap-1">
-              <button
-                onClick={expandAll}
-                className="px-2 py-1 text-xs rounded hover:bg-accent transition-colors"
-                title="Expand all sections"
-              >
-                Expand All
-              </button>
-              <button
-                onClick={collapseAll}
-                className="px-2 py-1 text-xs rounded hover:bg-accent transition-colors"
-                title="Collapse all sections"
-              >
-                Collapse All
-              </button>
-            </div>
-          </div>
+          {complexityScore !== undefined && (
+            <Badge variant="outline" className="ml-2">
+              Complexity: {complexityScore}/10
+            </Badge>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -226,19 +176,18 @@ export default function FeatureTree({ features, featureSummary }: FeatureTreePro
         <div className="border rounded-lg">
           <button
             onClick={() => toggleSection('manufacturing')}
-            className="w-full flex items-center justify-between p-3 hover:bg-accent transition-colors rounded-lg group"
+            className="w-full flex items-center justify-between p-3 hover:bg-accent transition-colors"
           >
             <div className="flex items-center gap-2">
               {expandedSections.has('manufacturing') ? (
-                <ChevronDown className="h-4 w-4 transition-transform" />
+                <ChevronDown className="h-4 w-4" />
               ) : (
-                <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                <ChevronRight className="h-4 w-4" />
               )}
               <Wrench className="h-4 w-4 text-blue-500" />
               <span className="font-medium">Manufacturing Features</span>
-              <span className="text-xs text-muted-foreground ml-1">(Click to {expandedSections.has('manufacturing') ? 'collapse' : 'expand'})</span>
             </div>
-            <Badge variant="secondary" className="animate-fade-in">
+            <Badge variant="secondary">
               {throughHoleCount + blindHoleCount + boreCount + bossCount}
             </Badge>
           </button>
@@ -420,19 +369,18 @@ export default function FeatureTree({ features, featureSummary }: FeatureTreePro
         <div className="border rounded-lg">
           <button
             onClick={() => toggleSection('surfaces')}
-            className="w-full flex items-center justify-between p-3 hover:bg-accent transition-colors rounded-lg group"
+            className="w-full flex items-center justify-between p-3 hover:bg-accent transition-colors"
           >
             <div className="flex items-center gap-2">
               {expandedSections.has('surfaces') ? (
-                <ChevronDown className="h-4 w-4 transition-transform" />
+                <ChevronDown className="h-4 w-4" />
               ) : (
-                <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                <ChevronRight className="h-4 w-4" />
               )}
               <Box className="h-4 w-4 text-purple-500" />
               <span className="font-medium">Surface Features</span>
-              <span className="text-xs text-muted-foreground ml-1">(Click to {expandedSections.has('surfaces') ? 'collapse' : 'expand'})</span>
             </div>
-            <Badge variant="secondary" className="animate-fade-in">
+            <Badge variant="secondary">
               {planarCount + filletCount + complexSurfaces.length}
             </Badge>
           </button>
