@@ -112,7 +112,7 @@ interface AnalysisResult {
   detailed_features?: DetailedFeatures;
   feature_tree?: FeatureTree;
   mesh_id?: string;
-  mesh_data?: MeshData; // ✅ Add mesh_data to interface
+  mesh_data?: MeshData;
   // Industrial routing enhancements
   recommended_routings?: string[];
   routing_reasoning?: string[];
@@ -691,7 +691,7 @@ async function calculateFileHash(fileData: ArrayBuffer): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Store mesh data in database with caching
+// ✅ FIXED: Store mesh data in database with proper vertex_colors validation
 async function storeMeshData(
   meshData: MeshData,
   fileName: string,
@@ -716,14 +716,37 @@ async function storeMeshData(
         .maybeSingle();
       
       if (existingMesh) {
-        console.log(`Mesh already cached for ${fileName} (hash: ${fileHash})`);
+        console.log(`✅ Mesh already cached for ${fileName} (hash: ${fileHash})`);
         return existingMesh.id;
       }
     } else {
       console.log(`🔄 Force reanalyze enabled - bypassing cache for ${fileName}`);
     }
     
-    // Store new mesh
+    // ✅ FIX: Properly validate and store vertex_colors
+    let vertexColors: string[] = [];
+    
+    if (meshData.vertex_colors && Array.isArray(meshData.vertex_colors)) {
+      // Validate that vertex_colors is a proper array of hex color strings
+      const isValidColorArray = meshData.vertex_colors.every(
+        color => typeof color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(color)
+      );
+      
+      if (isValidColorArray) {
+        vertexColors = meshData.vertex_colors;
+        console.log(`✅ Storing ${vertexColors.length} vertex colors`);
+      } else {
+        console.warn(`⚠️ Invalid vertex_colors format, storing empty array`);
+      }
+    } else {
+      console.warn(`⚠️ No vertex_colors in mesh data, CAD viewer will use default colors`);
+    }
+    
+    // Validate feature_edges format
+    const featureEdges = Array.isArray(meshData.feature_edges) ? meshData.feature_edges : [];
+    console.log(`📐 Storing ${featureEdges.length} feature edges`);
+    
+    // Store new mesh with proper vertex_colors
     const { data: newMesh, error } = await supabase
       .from('cad_meshes')
       .insert({
@@ -732,23 +755,29 @@ async function storeMeshData(
         vertices: meshData.vertices,
         indices: meshData.indices,
         normals: meshData.normals,
-        vertex_colors: meshData.vertex_colors || [],
+        vertex_colors: vertexColors,  // ✅ Now properly validated
         triangle_count: meshData.triangle_count,
-        feature_edges: Array.isArray(meshData.feature_edges) ? meshData.feature_edges : []
+        feature_edges: featureEdges
       })
       .select('id')
       .single();
     
     if (error) {
-      console.error('Error storing mesh data:', error);
+      console.error('❌ Error storing mesh data:', error);
       return undefined;
     }
     
-    console.log(`Stored mesh data for ${fileName}: ${meshData.triangle_count} triangles, mesh_id: ${newMesh.id}`);
+    console.log(`✅ Stored mesh data for ${fileName}:`);
+    console.log(`   - Triangles: ${meshData.triangle_count}`);
+    console.log(`   - Vertices: ${meshData.vertices.length / 3}`);
+    console.log(`   - Colors: ${vertexColors.length}`);
+    console.log(`   - Feature Edges: ${featureEdges.length}`);
+    console.log(`   - Mesh ID: ${newMesh.id}`);
+    
     return newMesh.id;
     
   } catch (error) {
-    console.error('Error in storeMeshData:', error);
+    console.error('❌ Error in storeMeshData:', error);
     return undefined;
   }
 }
@@ -817,119 +846,6 @@ function buildFeatureTree(features: DetailedFeatures): FeatureTree {
     common_dimensions,
     oriented_sections
   };
-}
-
-// Deprecated: STEP/IGES file parsing using occt-import-js (doesn't work in Deno)
-async function analyzeSTEP(fileData: ArrayBuffer, fileName: string): Promise<AnalysisResult> {
-  console.log('Parsing STEP/IGES geometry with OpenCascade...');
-  
-  try {
-    // Dynamically import occt-import-js
-    const { default: initOpenCascade } = await import('npm:occt-import-js@0.0.12');
-    const occt: any = await initOpenCascade();
-    
-    // Read the file based on extension
-    const lowerName = fileName.toLowerCase();
-    const isSTEP = lowerName.endsWith('.step') || lowerName.endsWith('.stp');
-    
-    const fileBuffer = new Uint8Array(fileData);
-    let result;
-    
-    if (isSTEP) {
-      result = occt.ReadStepFile(fileBuffer, null);
-    } else {
-      result = occt.ReadIgesFile(fileBuffer, null);
-    }
-    
-    if (!result.success) {
-      throw new Error('Failed to parse STEP/IGES file');
-    }
-    
-    // Get bounding box
-    const shapes = result.shapes;
-    if (!shapes || shapes.length === 0) {
-      throw new Error('No shapes found in file');
-    }
-    
-    // Combine all shapes to get overall bounding box
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-    let totalVolume = 0;
-    let totalSurfaceArea = 0;
-    
-    for (const shape of shapes) {
-      const bbox = shape.BoundingBox;
-      minX = Math.min(minX, bbox.xmin);
-      minY = Math.min(minY, bbox.ymin);
-      minZ = Math.min(minZ, bbox.zmin);
-      maxX = Math.max(maxX, bbox.xmax);
-      maxY = Math.max(maxY, bbox.ymax);
-      maxZ = Math.max(maxZ, bbox.zmax);
-      
-      // Get mesh for volume/surface calculations
-      if (shape.mesh) {
-        totalVolume += shape.mesh.attributes.volume || 0;
-        totalSurfaceArea += shape.mesh.attributes.surfaceArea || 0;
-      }
-    }
-    
-    // Convert from mm to cm
-    const part_width_cm = Number(((maxX - minX) / 10).toFixed(2));
-    const part_height_cm = Number(((maxY - minY) / 10).toFixed(2));
-    const part_depth_cm = Number(((maxZ - minZ) / 10).toFixed(2));
-    const volume_cm3 = Number((totalVolume / 1000).toFixed(2)); // mm³ to cm³
-    const surface_area_cm2 = Number((totalSurfaceArea / 100).toFixed(2)); // mm² to cm²
-    
-    // Detect features from geometry
-    const dimensions = [part_width_cm, part_height_cm, part_depth_cm].sort((a, b) => a - b);
-    const aspectRatios = [
-      dimensions[1] / dimensions[0],
-      dimensions[2] / dimensions[0],
-      dimensions[2] / dimensions[1]
-    ];
-    
-    // Cylindrical detection: two similar dimensions, one elongated
-    const crossSectionRatio = aspectRatios[0]; // Should be ~1.0 for circular cross-section
-    const lengthRatio = aspectRatios[1]; // Should be >1.5 for elongated shape
-    const is_cylindrical_by_geometry = crossSectionRatio < 1.3 && lengthRatio > 1.5;
-    const is_cylindrical_by_filename = lowerName.match(/shaft|pulley|cylinder|rod|tube|bearing|bushing|sleeve|piston/i) !== null;
-    const is_cylindrical = is_cylindrical_by_geometry || is_cylindrical_by_filename;
-    
-    const detected_features: DetectedFeatures = {
-      is_cylindrical,
-      has_keyway: lowerName.match(/keyway|key|slot|groove/i) !== null,
-      has_flat_surfaces: !is_cylindrical,
-      has_internal_holes: lowerName.match(/housing|bearing|bushing/i) !== null,
-      requires_precision_boring: false,
-      cylindricity_score: is_cylindrical ? 0.9 : 0,
-      flat_surface_percentage: is_cylindrical ? 0.1 : 0.5,
-      internal_surface_percentage: 0
-    };
-    
-    const complexity = Math.min(Math.round(5 + (shapes.length - 1) * 0.5), 10);
-    const recommended_processes = detectRequiredProcesses(detected_features, complexity);
-    
-    console.log(`STEP/IGES Analysis - Volume: ${volume_cm3}cm³, Surface: ${surface_area_cm2}cm², Complexity: ${complexity}/10`);
-    console.log(`Dimensions: ${part_width_cm} × ${part_height_cm} × ${part_depth_cm} cm`);
-    console.log(`Features:`, detected_features);
-    console.log(`Recommended processes:`, recommended_processes);
-    
-    return {
-      volume_cm3,
-      surface_area_cm2,
-      complexity_score: complexity,
-      confidence: 0.95,
-      method: 'occt_geometry_parsing',
-      part_width_cm,
-      part_height_cm,
-      part_depth_cm,
-      detected_features,
-      recommended_processes
-    };
-  } catch (error) {
-    console.error('STEP/IGES parsing error:', error);
-    throw error;
-  }
 }
 
 // Analyze STL file
