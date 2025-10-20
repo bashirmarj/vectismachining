@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { useThree, useFrame } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
 
 interface MeshData {
   vertices: number[];
@@ -34,13 +34,18 @@ const TOPOLOGY_COLORS = {
   default: '#CCCCCC'
 };
 
-
-export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid', topologyColors = true }: MeshModelProps) {
+export function MeshModel({ 
+  meshData, 
+  sectionPlane, 
+  sectionPosition, 
+  showEdges, 
+  showHiddenEdges = false, 
+  displayStyle = 'solid', 
+  topologyColors = true 
+}: MeshModelProps) {
   
-  const { camera } = useThree();
+  const { gl } = useThree();
   const meshRef = useRef<THREE.Mesh>(null);
-  const dynamicEdgesRef = useRef<THREE.Group>(null);
-  const wireframeEdgesRef = useRef<THREE.Group>(null);
   
   // Create single unified geometry for professional solid rendering
   const geometry = useMemo(() => {
@@ -126,191 +131,43 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     }
   }, [geometry, topologyColors, meshData]);
   
-  // Pre-compute edge connectivity for ALL edges (used by both modes)
-  const edgeMap = useMemo(() => {
-    const map = new Map<string, {
-      v1: THREE.Vector3;
-      v2: THREE.Vector3;
-      normals: THREE.Vector3[];
-    }>();
+  // STABLE: Pre-computed BREP edges from backend (never flicker!)
+  const brepEdgesGeometry = useMemo(() => {
+    if (!meshData.feature_edges || meshData.feature_edges.length === 0) {
+      return null;
+    }
     
-    const triangleCount = meshData.indices.length / 3;
-    
-    for (let i = 0; i < triangleCount; i++) {
-      const i0 = meshData.indices[i * 3];
-      const i1 = meshData.indices[i * 3 + 1];
-      const i2 = meshData.indices[i * 3 + 2];
+    try {
+      const positions: number[] = [];
       
-      const v0 = new THREE.Vector3(
-        meshData.vertices[i0 * 3],
-        meshData.vertices[i0 * 3 + 1],
-        meshData.vertices[i0 * 3 + 2]
-      );
-      const v1 = new THREE.Vector3(
-        meshData.vertices[i1 * 3],
-        meshData.vertices[i1 * 3 + 1],
-        meshData.vertices[i1 * 3 + 2]
-      );
-      const v2 = new THREE.Vector3(
-        meshData.vertices[i2 * 3],
-        meshData.vertices[i2 * 3 + 1],
-        meshData.vertices[i2 * 3 + 2]
-      );
-      
-      const e1 = new THREE.Vector3().subVectors(v1, v0);
-      const e2 = new THREE.Vector3().subVectors(v2, v0);
-      const normal = new THREE.Vector3().crossVectors(e1, e2).normalize();
-      
-      const getKey = (a: number, b: number) => a < b ? `${a}_${b}` : `${b}_${a}`;
-      
-      const edges = [
-        { v1: v0, v2: v1, key: getKey(i0, i1) },
-        { v1: v1, v2: v2, key: getKey(i1, i2) },
-        { v1: v2, v2: v0, key: getKey(i2, i0) }
-      ];
-      
-      edges.forEach(edge => {
-        if (!map.has(edge.key)) {
-          map.set(edge.key, {
-            v1: edge.v1.clone(),
-            v2: edge.v2.clone(),
-            normals: [normal.clone()]
-          });
-        } else {
-          map.get(edge.key)!.normals.push(normal.clone());
+      // Each feature_edge is a polyline: array of [x, y, z] points
+      // These are the exact CAD edges from the STEP file, pre-filtered by backend
+      meshData.feature_edges.forEach((polyline) => {
+        if (!Array.isArray(polyline) || polyline.length < 2) return;
+        
+        // Convert polyline to line segments
+        for (let i = 0; i < polyline.length - 1; i++) {
+          const p1 = polyline[i];
+          const p2 = polyline[i + 1];
+          
+          if (Array.isArray(p1) && p1.length === 3 && Array.isArray(p2) && p2.length === 3) {
+            positions.push(p1[0], p1[1], p1[2]);
+            positions.push(p2[0], p2[1], p2[2]);
+          }
         }
       });
+      
+      if (positions.length === 0) return null;
+      
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      return geo;
+      
+    } catch (error) {
+      console.error('Error processing BREP edges:', error);
+      return null;
     }
-    
-    return map;
-  }, [meshData.vertices, meshData.indices]);
-  
-  // Dynamic edge rendering for BOTH solid and wireframe modes
-  useFrame(() => {
-    if (!edgeMap || !meshRef.current) return;
-    
-    const mesh = meshRef.current;
-    const cameraWorldPos = new THREE.Vector3();
-    camera.getWorldPosition(cameraWorldPos);
-    
-    const worldToLocal = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
-    const cameraLocalPos = cameraWorldPos.clone().applyMatrix4(worldToLocal);
-    
-    const visibleEdges: number[] = [];
-    const hiddenEdges: number[] = [];
-    
-    // Check each edge for visibility
-    edgeMap.forEach((edgeData) => {
-      const v1World = edgeData.v1.clone().applyMatrix4(mesh.matrixWorld);
-      const v2World = edgeData.v2.clone().applyMatrix4(mesh.matrixWorld);
-      
-      // Boundary edges (only 1 face) - always important
-      if (edgeData.normals.length === 1) {
-        const n = edgeData.normals[0];
-        const edgeMidpoint = new THREE.Vector3()
-          .addVectors(edgeData.v1, edgeData.v2)
-          .multiplyScalar(0.5);
-        const viewDir = new THREE.Vector3()
-          .subVectors(cameraLocalPos, edgeMidpoint)
-          .normalize();
-        
-        if (n.dot(viewDir) > 0) {
-          visibleEdges.push(v1World.x, v1World.y, v1World.z, v2World.x, v2World.y, v2World.z);
-        } else if (showHiddenEdges) {
-          hiddenEdges.push(v1World.x, v1World.y, v1World.z, v2World.x, v2World.y, v2World.z);
-        }
-        return;
-      }
-      
-      // Silhouette edges (2 adjacent faces with opposite facing)
-      if (edgeData.normals.length === 2) {
-        const n1 = edgeData.normals[0];
-        const n2 = edgeData.normals[1];
-        
-        const edgeMidpoint = new THREE.Vector3()
-          .addVectors(edgeData.v1, edgeData.v2)
-          .multiplyScalar(0.5);
-        const viewDir = new THREE.Vector3()
-          .subVectors(cameraLocalPos, edgeMidpoint)
-          .normalize();
-        
-        const dot1 = n1.dot(viewDir);
-        const dot2 = n2.dot(viewDir);
-        
-        // Silhouette: one face visible, one hidden
-        if ((dot1 > 0.01 && dot2 < -0.01) || (dot1 < -0.01 && dot2 > 0.01)) {
-          visibleEdges.push(v1World.x, v1World.y, v1World.z, v2World.x, v2World.y, v2World.z);
-        }
-      }
-    });
-    
-    // Update visible edges (solid lines)
-    if (displayStyle === 'solid' && showEdges && dynamicEdgesRef.current) {
-      // Clear existing
-      while (dynamicEdgesRef.current.children.length > 0) {
-        const child = dynamicEdgesRef.current.children[0];
-        dynamicEdgesRef.current.remove(child);
-        if (child instanceof THREE.LineSegments) {
-          child.geometry.dispose();
-          (child.material as THREE.Material).dispose();
-        }
-      }
-      
-      if (visibleEdges.length > 0) {
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.Float32BufferAttribute(visibleEdges, 3));
-        const mat = new THREE.LineBasicMaterial({ 
-          color: '#000000', 
-          linewidth: 1.5,
-          toneMapped: false,
-          depthTest: true,
-          depthWrite: false
-        });
-        dynamicEdgesRef.current.add(new THREE.LineSegments(geo, mat));
-      }
-    }
-    
-    // Update wireframe edges (visible + hidden)
-    if (displayStyle === 'wireframe' && wireframeEdgesRef.current) {
-      // Clear existing
-      while (wireframeEdgesRef.current.children.length > 0) {
-        const child = wireframeEdgesRef.current.children[0];
-        wireframeEdgesRef.current.remove(child);
-        if (child instanceof THREE.LineSegments) {
-          child.geometry.dispose();
-          (child.material as THREE.Material).dispose();
-        }
-      }
-      
-      // Visible edges - solid lines
-      if (visibleEdges.length > 0) {
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.Float32BufferAttribute(visibleEdges, 3));
-        const mat = new THREE.LineBasicMaterial({ 
-          color: '#000000', 
-          linewidth: 1.5,
-          toneMapped: false
-        });
-        wireframeEdgesRef.current.add(new THREE.LineSegments(geo, mat));
-      }
-      
-      // Hidden edges - dashed lines
-      if (showHiddenEdges && hiddenEdges.length > 0) {
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.Float32BufferAttribute(hiddenEdges, 3));
-        const mat = new THREE.LineDashedMaterial({ 
-          color: '#666666',
-          linewidth: 1,
-          dashSize: 3,
-          gapSize: 2,
-          toneMapped: false
-        });
-        const lines = new THREE.LineSegments(geo, mat);
-        lines.computeLineDistances(); // Required for dashed lines
-        wireframeEdgesRef.current.add(lines);
-      }
-    }
-  });
+  }, [meshData.feature_edges]);
   
   // Section plane
   const clippingPlane = useMemo(() => {
@@ -333,8 +190,6 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     
     return [new THREE.Plane(normal, -sectionPosition)];
   }, [sectionPlane, sectionPosition]);
-  
-  const { gl } = useThree();
   
   useEffect(() => {
     gl.localClippingEnabled = sectionPlane !== 'none';
@@ -375,11 +230,22 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         />
       </mesh>
       
-      {/* Dynamic edges for solid mode */}
-      {displayStyle !== 'wireframe' && <group ref={dynamicEdgesRef} />}
-      
-      {/* Clean wireframe edges (visible + hidden dashed) */}
-      {displayStyle === 'wireframe' && <group ref={wireframeEdgesRef} />}
+      {/* STABLE BREP edges from backend - no flickering, no runtime calculation */}
+      {showEdges && brepEdgesGeometry && (
+        <lineSegments geometry={brepEdgesGeometry}>
+          <lineBasicMaterial 
+            color="#000000"
+            linewidth={1.5}
+            toneMapped={false}
+            depthTest={true}
+            depthWrite={false}
+            // Slight polygon offset to prevent z-fighting with mesh surface
+            polygonOffset={true}
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
+        </lineSegments>
+      )}
     </group>
   );
 }
