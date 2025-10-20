@@ -23,7 +23,115 @@ export default function FeatureTree({ features, featureSummary }: FeatureTreePro
     setExpandedSections(newExpanded);
   };
 
-  // Handle both old and new API response formats
+  // ============================================================
+  // DATA ADAPTER - Handle multiple data structures
+  // ============================================================
+  
+  // Check if using OLD structure (oriented_sections from frontend)
+  const isOldStructure = featureSummary?.oriented_sections;
+  
+  if (isOldStructure) {
+    // OLD STRUCTURE - Render original tree
+    const featureCount = featureSummary.oriented_sections.reduce(
+      (sum: number, s: any) => sum + s.features.length, 
+      0
+    );
+    
+    return (
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Feature Analysis</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {featureSummary.common_dimensions && featureSummary.common_dimensions.length > 0 && (
+            <div className="border rounded-lg p-3 mb-4">
+              <h4 className="text-sm font-semibold mb-2">Common Dimensions</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {featureSummary.common_dimensions.map((dim: any, idx: number) => (
+                  <div key={idx} className="text-xs">
+                    <span className="text-muted-foreground">{dim.label}: </span>
+                    <span className="font-medium">{dim.value.toFixed(2)} {dim.unit}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="border rounded-lg">
+            <button
+              onClick={() => toggleSection('features')}
+              className="w-full flex items-center justify-between p-3 hover:bg-accent transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                {expandedSections.has('features') ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+                <Wrench className="h-4 w-4 text-blue-500" />
+                <span className="font-medium">Detected Features</span>
+              </div>
+              <Badge variant="secondary">{featureCount}</Badge>
+            </button>
+
+            {expandedSections.has('features') && (
+              <div className="px-3 pb-3 space-y-2">
+                {featureSummary.oriented_sections.map((section: any, idx: number) => (
+                  <div key={idx} className="ml-6 space-y-1">
+                    <button
+                      onClick={() => toggleSection(`section-${idx}`)}
+                      className="w-full flex items-center justify-between p-2 hover:bg-accent/50 rounded transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        {expandedSections.has(`section-${idx}`) ? (
+                          <ChevronDown className="h-3 w-3" />
+                        ) : (
+                          <ChevronRight className="h-3 w-3" />
+                        )}
+                        <Box className="h-3 w-3 text-purple-500" />
+                        <span className="text-sm">{section.orientation}</span>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {section.features.length}
+                      </Badge>
+                    </button>
+
+                    {expandedSections.has(`section-${idx}`) && (
+                      <div className="ml-8 space-y-1">
+                        {section.features.map((feature: any, fIdx: number) => (
+                          <div
+                            key={fIdx}
+                            className="p-2 text-xs bg-muted/30 rounded border"
+                          >
+                            <div className="font-medium">{feature.type || 'Feature'}</div>
+                            {feature.dimensions && (
+                              <div className="text-muted-foreground mt-1">
+                                {Object.entries(feature.dimensions).map(([key, val]) => (
+                                  <div key={key}>
+                                    {key}: {typeof val === 'number' ? val.toFixed(2) : val}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ============================================================
+  // NEW STRUCTURE - Enhanced backend data
+  // ============================================================
+  
+  // Extract data from NEW backend structure
   const throughHoles = features?.through_holes || [];
   const blindHoles = features?.blind_holes || [];
   const bores = features?.bores || [];
@@ -32,7 +140,7 @@ export default function FeatureTree({ features, featureSummary }: FeatureTreePro
   const fillets = features?.fillets || [];
   const complexSurfaces = features?.complex_surfaces || [];
 
-  // Get counts from feature_summary if available, otherwise calculate
+  // Get counts from feature_summary if available
   const throughHoleCount = featureSummary?.through_holes ?? throughHoles.length;
   const blindHoleCount = featureSummary?.blind_holes ?? blindHoles.length;
   const boreCount = featureSummary?.bores ?? bores.length;
