@@ -28,7 +28,11 @@ interface FileWithQuantity {
     method?: string;
     triangle_count?: number;
     detected_features?: Record<string, boolean>;
+    manufacturing_features?: any;  // ← ADDED
+    feature_summary?: any;          // ← ADDED
     recommended_processes?: string[];
+    routing_reasoning?: string[];   // ← ADDED
+    machining_summary?: any[];      // ← ADDED
   };
   quote?: any;
   isAnalyzing?: boolean;
@@ -122,20 +126,45 @@ export const PartUploadForm = () => {
       }
 
       console.log("✅ Edge function response:", result);
+      console.log("📊 Available keys in response:", Object.keys(result));
 
+      // ✅ FIXED: Extract ALL analysis data, not just meshData
       const meshData = result.mesh_data || result.meshData || {};
+      
+      const analysis = {
+        volume_cm3: result.volume_cm3,
+        surface_area_cm2: result.surface_area_cm2,
+        complexity_score: result.complexity_score,
+        confidence: result.confidence,
+        method: result.method,
+        triangle_count: result.triangle_count,
+        detected_features: result.detected_features,
+        manufacturing_features: result.manufacturing_features,  // ← NEW: Backend feature data
+        feature_summary: result.feature_summary,                // ← NEW: Feature counts
+        recommended_processes: result.recommended_processes,
+        routing_reasoning: result.routing_reasoning,            // ← NEW: AI reasoning
+        machining_summary: result.machining_summary            // ← NEW: Machining operations
+      };
 
+      console.log("💾 Storing analysis data:", analysis);
+
+      // ✅ FIXED: Save BOTH meshData AND analysis
       setFiles((prev) =>
         prev.map((f, i) =>
           i === index
-            ? { ...f, meshData, isAnalyzing: false }
+            ? { 
+                ...f, 
+                meshData,      // For 3D viewer
+                analysis,      // For FeatureTree and analysis display
+                isAnalyzing: false 
+              }
             : f
         )
       );
 
       toast({
-        title: "CAD Analysis Complete",
-        description: `Mesh generated for ${fileWithQty.file.name}`,
+        title: "✅ CAD Analysis Complete",
+        description: `${fileWithQty.file.name} analyzed successfully`,
       });
     } catch (error: any) {
       console.error("❌ Error analyzing file:", error);
@@ -208,7 +237,7 @@ export const PartUploadForm = () => {
         showDevTools={showDevTools}
         onTestConnection={testFlaskConnection}
         isTestingConnection={isTestingConnection}
-        onLogMeshData={() => console.log(files)}
+        onLogMeshData={() => console.log("📊 Current files state:", files)}
       />
     );
   }
