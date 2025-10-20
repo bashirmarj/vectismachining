@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment, Grid } from '@react-three/drei';
-import MeshModel from './MeshModel';
+import MeshModel from './cad-viewer/MeshModel';  // ⭐ FIXED: Correct path
 import FeatureTree from './FeatureTree';
-import { useCameraAnimation } from './useCameraAnimation';
+import { useCameraAnimation } from '../hooks/useCameraAnimation';  // ⭐ FIXED: Correct path
 
 interface SelectedFeature {
   type: 'through_hole' | 'blind_hole' | 'bore' | 'boss' | 'fillet';
