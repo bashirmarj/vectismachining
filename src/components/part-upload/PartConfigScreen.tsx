@@ -414,6 +414,15 @@ export const PartConfigScreen = ({
           </TabsContent>
           
           <TabsContent value="features" className="flex-1 m-0 p-6 overflow-auto">
+            {/* 🔴 TEMPORARY DEBUG - Remove after testing */}
+            <div className="mb-4 p-4 bg-gray-100 dark:bg-gray-800 rounded text-xs overflow-auto max-h-60">
+              <p className="font-bold mb-2">🔍 DEBUG - Analysis Data Structure:</p>
+              <pre className="whitespace-pre-wrap break-words">
+                {JSON.stringify(selectedFile.analysis, null, 2)}
+              </pre>
+            </div>
+            {/* 🔴 END DEBUG */}
+            
             {selectedFile.analysis?.manufacturing_features || selectedFile.analysis?.detected_features || selectedFile.analysis?.feature_tree ? (
               <FeatureTree 
                 features={selectedFile.analysis?.manufacturing_features || selectedFile.analysis?.detected_features}
