@@ -400,6 +400,14 @@ export const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
 
               {/* Features Tab - UPDATED TO USE NEW PROPS */}
               <TabsContent value="features" className="m-0 p-6">
+                {/* Debug info */}
+                {console.log('🔍 FeatureTree Debug:', {
+                  hasAnalysis: !!selectedFile.analysis,
+                  hasFeatures: !!selectedFile.analysis?.manufacturing_features,
+                  hasSummary: !!selectedFile.analysis?.feature_summary,
+                  features: selectedFile.analysis?.manufacturing_features,
+                  summary: selectedFile.analysis?.feature_summary
+                })}
                 <FeatureTree
                   features={selectedFile.analysis?.manufacturing_features}
                   featureSummary={selectedFile.analysis?.feature_summary}
