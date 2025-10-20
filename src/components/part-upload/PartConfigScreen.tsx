@@ -12,6 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { RoutingEditor } from "./RoutingEditor";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import FeatureTree from "../FeatureTree";
 
 interface FileWithData {
   file: File;
@@ -379,17 +381,55 @@ export const PartConfigScreen = ({
         </ScrollArea>
       </div>
 
-      {/* Right Panel - 3D Viewer (70% width) */}
+      {/* Right Panel - 3D Viewer & Features (70% width) */}
       <div className="flex-1 bg-gradient-to-br from-slate-50 to-white">
-        <div className="h-full">
-          <CADViewer
-            file={selectedFile.file}
-            fileName={selectedFile.file.name}
-            meshId={selectedFile.meshId}
-            meshData={selectedFile.meshData}
-            detectedFeatures={selectedFile.analysis?.detected_features}
-          />
-        </div>
+        <Tabs defaultValue="model" className="h-full flex flex-col">
+          <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <TabsList className="w-full justify-start rounded-none border-0 bg-transparent p-0 h-auto">
+              <TabsTrigger 
+                value="model" 
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6 py-3"
+              >
+                3D Model
+              </TabsTrigger>
+              <TabsTrigger 
+                value="features" 
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6 py-3"
+              >
+                Features
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          
+          <TabsContent value="model" className="flex-1 m-0">
+            <div className="h-full">
+              <CADViewer
+                file={selectedFile.file}
+                fileName={selectedFile.file.name}
+                meshId={selectedFile.meshId}
+                meshData={selectedFile.meshData}
+                detectedFeatures={selectedFile.analysis?.detected_features}
+              />
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="features" className="flex-1 m-0 p-6 overflow-auto">
+            {selectedFile.analysis?.detected_features || selectedFile.analysis?.feature_tree ? (
+              <FeatureTree 
+                features={selectedFile.analysis?.detected_features}
+                featureSummary={selectedFile.analysis?.feature_tree}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center text-muted-foreground">
+                  <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm font-medium">No feature analysis available</p>
+                  <p className="text-xs mt-1">Analysis will be performed after upload</p>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
