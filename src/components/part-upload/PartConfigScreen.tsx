@@ -414,12 +414,17 @@ export const PartConfigScreen = ({
           </TabsContent>
           
           <TabsContent value="features" className="flex-1 m-0 p-6 overflow-auto">
-            {/* 🔴 TEMPORARY DEBUG - Remove after testing */}
-            <div className="mb-4 p-4 bg-gray-100 dark:bg-gray-800 rounded text-xs overflow-auto max-h-60">
-              <p className="font-bold mb-2">🔍 DEBUG - Analysis Data Structure:</p>
-              <pre className="whitespace-pre-wrap break-words">
-                {JSON.stringify(selectedFile.analysis, null, 2)}
-              </pre>
+            {/* 🔴 TEMPORARY DEBUG - ALWAYS VISIBLE - Remove after testing */}
+            <div className="mb-4 p-4 bg-yellow-100 dark:bg-yellow-900/20 border-2 border-yellow-500 rounded">
+              <p className="font-bold mb-2 text-yellow-900 dark:text-yellow-100">🔍 DEBUG - Full Analysis Object:</p>
+              <div className="bg-white dark:bg-gray-800 p-2 rounded text-xs overflow-auto max-h-96">
+                <pre className="whitespace-pre-wrap break-words">
+                  {selectedFile.analysis ? JSON.stringify(selectedFile.analysis, null, 2) : 'NO ANALYSIS DATA - selectedFile.analysis is null/undefined'}
+                </pre>
+              </div>
+              <p className="text-xs mt-2 text-yellow-900 dark:text-yellow-100">
+                Keys available: {selectedFile.analysis ? Object.keys(selectedFile.analysis).join(', ') : 'None'}
+              </p>
             </div>
             {/* 🔴 END DEBUG */}
             
