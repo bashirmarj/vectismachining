@@ -1,16 +1,74 @@
-import React from 'react';
-import { ChevronDown, ChevronRight, Circle, Box, Cylinder, Square, Wrench } from 'lucide-react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  ChevronRight,
+  ChevronDown,
+  Circle,
+  Box,
+  Cylinder,
+  Wrench,
+  Drill,
+  AlertCircle,
+} from 'lucide-react';
 
-interface FeatureTreeProps {
-  features?: any;
-  featureSummary?: any;
+// TypeScript Interfaces
+interface ManufacturingFeature {
+  diameter?: number;
+  radius?: number;
+  depth?: number;
+  area?: number;
+  position?: [number, number, number];
+  axis?: [number, number, number];
 }
 
-export default function FeatureTree({ features, featureSummary }: FeatureTreeProps) {
-  const [expandedSections, setExpandedSections] = React.useState<Set<string>>(
-    new Set(['manufacturing', 'surfaces'])
+interface FeatureSummary {
+  through_holes: number;
+  blind_holes: number;
+  bores: number;
+  bosses: number;
+  total_holes: number;
+  fillets: number;
+  planar_faces: number;
+  complexity_score: number;
+}
+
+interface ManufacturingFeatures {
+  through_holes?: ManufacturingFeature[];
+  blind_holes?: ManufacturingFeature[];
+  bores?: ManufacturingFeature[];
+  bosses?: ManufacturingFeature[];
+  planar_faces?: ManufacturingFeature[];
+  fillets?: ManufacturingFeature[];
+  complex_surfaces?: ManufacturingFeature[];
+}
+
+interface FeatureTreeProps {
+  features?: ManufacturingFeatures;
+  featureSummary?: FeatureSummary;
+  // Support old format for backward compatibility
+  featureTree?: {
+    oriented_sections?: any[];
+    common_dimensions?: any;
+  };
+}
+
+const FeatureTree: React.FC<FeatureTreeProps> = ({ 
+  features, 
+  featureSummary,
+  featureTree 
+}) => {
+  // State for expandable sections
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    new Set([
+      'manufacturing',
+      'surfaces',
+      'through-holes',
+      'blind-holes',
+      'bores',
+      'bosses'
+    ])
   );
 
   const toggleSection = (section: string) => {
@@ -23,418 +81,389 @@ export default function FeatureTree({ features, featureSummary }: FeatureTreePro
     setExpandedSections(newExpanded);
   };
 
-  // ============================================================
-  // DATA ADAPTER - Handle multiple data structures
-  // ============================================================
+  const expandAll = () => {
+    setExpandedSections(new Set([
+      'manufacturing',
+      'surfaces',
+      'through-holes',
+      'blind-holes',
+      'bores',
+      'bosses',
+      'planar-faces',
+      'fillets'
+    ]));
+  };
+
+  const collapseAll = () => {
+    setExpandedSections(new Set());
+  };
+
+  // Helper to format numbers
+  const formatNumber = (num: number | undefined, decimals: number = 2): string => {
+    if (num === undefined || num === null) return 'N/A';
+    return num.toFixed(decimals);
+  };
+
+  // Get complexity color
+  const getComplexityColor = (score: number): string => {
+    if (score <= 3) return 'text-green-600';
+    if (score <= 6) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getComplexityBadge = (score: number): string => {
+    if (score <= 3) return 'bg-green-100 text-green-800';
+    if (score <= 6) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-red-100 text-red-800';
+  };
+
+  // Check if we have new format data
+  const hasNewFormat = features || featureSummary;
   
-  // Check if using OLD structure (oriented_sections from frontend)
-  const isOldStructure = featureSummary?.oriented_sections;
-  
-  if (isOldStructure) {
-    // OLD STRUCTURE - Render original tree
-    const featureCount = featureSummary.oriented_sections.reduce(
-      (sum: number, s: any) => sum + s.features.length, 
-      0
-    );
-    
+  // If no data at all, show empty state
+  if (!hasNewFormat && !featureTree) {
     return (
       <Card className="w-full">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold">Feature Analysis</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            No Feature Data Available
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {featureSummary.common_dimensions && featureSummary.common_dimensions.length > 0 && (
-            <div className="border rounded-lg p-3 mb-4">
-              <h4 className="text-sm font-semibold mb-2">Common Dimensions</h4>
-              <div className="grid grid-cols-2 gap-2">
-                {featureSummary.common_dimensions.map((dim: any, idx: number) => (
-                  <div key={idx} className="text-xs">
-                    <span className="text-muted-foreground">{dim.label}: </span>
-                    <span className="font-medium">{dim.value.toFixed(2)} {dim.unit}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="border rounded-lg">
-            <button
-              onClick={() => toggleSection('features')}
-              className="w-full flex items-center justify-between p-3 hover:bg-accent transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                {expandedSections.has('features') ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-                <Wrench className="h-4 w-4 text-blue-500" />
-                <span className="font-medium">Detected Features</span>
-              </div>
-              <Badge variant="secondary">{featureCount}</Badge>
-            </button>
-
-            {expandedSections.has('features') && (
-              <div className="px-3 pb-3 space-y-2">
-                {featureSummary.oriented_sections.map((section: any, idx: number) => (
-                  <div key={idx} className="ml-6 space-y-1">
-                    <button
-                      onClick={() => toggleSection(`section-${idx}`)}
-                      className="w-full flex items-center justify-between p-2 hover:bg-accent/50 rounded transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        {expandedSections.has(`section-${idx}`) ? (
-                          <ChevronDown className="h-3 w-3" />
-                        ) : (
-                          <ChevronRight className="h-3 w-3" />
-                        )}
-                        <Box className="h-3 w-3 text-purple-500" />
-                        <span className="text-sm">{section.orientation}</span>
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        {section.features.length}
-                      </Badge>
-                    </button>
-
-                    {expandedSections.has(`section-${idx}`) && (
-                      <div className="ml-8 space-y-1">
-                        {section.features.map((feature: any, fIdx: number) => (
-                          <div
-                            key={fIdx}
-                            className="p-2 text-xs bg-muted/30 rounded border"
-                          >
-                            <div className="font-medium">{feature.type || 'Feature'}</div>
-                            {feature.dimensions && (
-                              <div className="text-muted-foreground mt-1">
-                                {Object.entries(feature.dimensions).map(([key, val]) => (
-                                  <div key={key}>
-                                    {key}: {typeof val === 'number' ? val.toFixed(2) : val}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        <CardContent>
+          <p className="text-sm text-gray-500">
+            Upload and analyze a CAD file to see detected manufacturing features.
+          </p>
         </CardContent>
       </Card>
     );
   }
 
-  // ============================================================
-  // NEW STRUCTURE - Enhanced backend data
-  // ============================================================
-  
-  // Extract data from NEW backend structure
-  const throughHoles = features?.through_holes || [];
-  const blindHoles = features?.blind_holes || [];
-  const bores = features?.bores || [];
-  const bosses = features?.bosses || features?.cylindrical_bosses || [];
-  const planarFaces = features?.planar_faces || [];
-  const fillets = features?.fillets || [];
-  const complexSurfaces = features?.complex_surfaces || [];
-
-  // Get counts from feature_summary if available
-  const throughHoleCount = featureSummary?.through_holes ?? throughHoles.length;
-  const blindHoleCount = featureSummary?.blind_holes ?? blindHoles.length;
-  const boreCount = featureSummary?.bores ?? bores.length;
-  const bossCount = featureSummary?.bosses ?? bosses.length;
-  const planarCount = featureSummary?.planar_faces ?? planarFaces.length;
-  const filletCount = featureSummary?.fillets ?? fillets.length;
-  const complexityScore = featureSummary?.complexity_score;
-
-  const formatDimension = (value: number) => {
-    if (!value) return 'N/A';
-    return `${value.toFixed(2)}mm`;
-  };
-
-  const formatArea = (value: number) => {
-    if (!value) return '';
-    return `${value.toFixed(1)}mm²`;
-  };
-
-  return (
-    <Card className="w-full">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold">Feature Analysis</CardTitle>
-          {complexityScore !== undefined && (
-            <Badge variant="outline" className="ml-2">
-              Complexity: {complexityScore}/10
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {/* Manufacturing Features Section */}
-        <div className="border rounded-lg">
-          <button
-            onClick={() => toggleSection('manufacturing')}
-            className="w-full flex items-center justify-between p-3 hover:bg-accent transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              {expandedSections.has('manufacturing') ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-              <Wrench className="h-4 w-4 text-blue-500" />
-              <span className="font-medium">Manufacturing Features</span>
-            </div>
-            <Badge variant="secondary">
-              {throughHoleCount + blindHoleCount + boreCount + bossCount}
-            </Badge>
-          </button>
-
-          {expandedSections.has('manufacturing') && (
-            <div className="px-3 pb-3 space-y-2">
-              {/* Through-Holes */}
-              {throughHoleCount > 0 && (
-                <div className="ml-6 space-y-1">
-                  <button
-                    onClick={() => toggleSection('through-holes')}
-                    className="w-full flex items-center justify-between p-2 hover:bg-accent/50 rounded transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      {expandedSections.has('through-holes') ? (
-                        <ChevronDown className="h-3 w-3" />
-                      ) : (
-                        <ChevronRight className="h-3 w-3" />
-                      )}
-                      <Circle className="h-3 w-3 text-yellow-500" />
-                      <span className="text-sm">Through-Holes</span>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {throughHoleCount}
-                    </Badge>
-                  </button>
-
-                  {expandedSections.has('through-holes') && throughHoles.length > 0 && (
-                    <div className="ml-8 space-y-1">
-                      {throughHoles.map((hole: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="p-2 text-xs bg-yellow-50 dark:bg-yellow-950/20 rounded border border-yellow-200 dark:border-yellow-800"
-                        >
-                          <div className="font-medium text-yellow-700 dark:text-yellow-300">
-                            Hole {idx + 1}
-                          </div>
-                          <div className="text-muted-foreground mt-1 space-y-0.5">
-                            <div>Ø {formatDimension(hole.diameter)}</div>
-                            {hole.area && <div>Area: {formatArea(hole.area)}</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+  // Render new format (manufacturing features)
+  if (hasNewFormat) {
+    return (
+      <div className="space-y-4">
+        {/* Header Card with Summary */}
+        {featureSummary && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle>Manufacturing Features</CardTitle>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={expandAll}>
+                    Expand All
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={collapseAll}>
+                    Collapse All
+                  </Button>
                 </div>
-              )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Complexity Score */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <span className="font-medium">Complexity Score</span>
+                <Badge className={getComplexityBadge(featureSummary.complexity_score)}>
+                  {featureSummary.complexity_score} / 10
+                </Badge>
+              </div>
 
-              {/* Blind Holes */}
-              {blindHoleCount > 0 && (
-                <div className="ml-6 space-y-1">
-                  <button
-                    onClick={() => toggleSection('blind-holes')}
-                    className="w-full flex items-center justify-between p-2 hover:bg-accent/50 rounded transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      {expandedSections.has('blind-holes') ? (
-                        <ChevronDown className="h-3 w-3" />
-                      ) : (
-                        <ChevronRight className="h-3 w-3" />
-                      )}
-                      <Circle className="h-3 w-3 text-orange-500" />
-                      <span className="text-sm">Blind Holes</span>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {blindHoleCount}
-                    </Badge>
-                  </button>
-
-                  {expandedSections.has('blind-holes') && blindHoles.length > 0 && (
-                    <div className="ml-8 space-y-1">
-                      {blindHoles.map((hole: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="p-2 text-xs bg-orange-50 dark:bg-orange-950/20 rounded border border-orange-200 dark:border-orange-800"
-                        >
-                          <div className="font-medium text-orange-700 dark:text-orange-300">
-                            Blind Hole {idx + 1}
-                          </div>
-                          <div className="text-muted-foreground mt-1 space-y-0.5">
-                            <div>Ø {formatDimension(hole.diameter)}</div>
-                            {hole.area && <div>Area: {formatArea(hole.area)}</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Bores */}
-              {boreCount > 0 && (
-                <div className="ml-6 space-y-1">
-                  <button
-                    onClick={() => toggleSection('bores')}
-                    className="w-full flex items-center justify-between p-2 hover:bg-accent/50 rounded transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      {expandedSections.has('bores') ? (
-                        <ChevronDown className="h-3 w-3" />
-                      ) : (
-                        <ChevronRight className="h-3 w-3" />
-                      )}
-                      <Cylinder className="h-3 w-3 text-red-500" />
-                      <span className="text-sm">Bores</span>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {boreCount}
-                    </Badge>
-                  </button>
-
-                  {expandedSections.has('bores') && bores.length > 0 && (
-                    <div className="ml-8 space-y-1">
-                      {bores.map((bore: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="p-2 text-xs bg-red-50 dark:bg-red-950/20 rounded border border-red-200 dark:border-red-800"
-                        >
-                          <div className="font-medium text-red-700 dark:text-red-300">
-                            Bore {idx + 1}
-                          </div>
-                          <div className="text-muted-foreground mt-1 space-y-0.5">
-                            <div>Ø {formatDimension(bore.diameter)}</div>
-                            {bore.area && <div>Area: {formatArea(bore.area)}</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Bosses */}
-              {bossCount > 0 && (
-                <div className="ml-6 space-y-1">
-                  <button
-                    onClick={() => toggleSection('bosses')}
-                    className="w-full flex items-center justify-between p-2 hover:bg-accent/50 rounded transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      {expandedSections.has('bosses') ? (
-                        <ChevronDown className="h-3 w-3" />
-                      ) : (
-                        <ChevronRight className="h-3 w-3" />
-                      )}
-                      <Cylinder className="h-3 w-3 text-blue-500" />
-                      <span className="text-sm">Bosses</span>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {bossCount}
-                    </Badge>
-                  </button>
-
-                  {expandedSections.has('bosses') && bosses.length > 0 && (
-                    <div className="ml-8 space-y-1">
-                      {bosses.map((boss: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="p-2 text-xs bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800"
-                        >
-                          <div className="font-medium text-blue-700 dark:text-blue-300">
-                            Boss {idx + 1}
-                          </div>
-                          <div className="text-muted-foreground mt-1 space-y-0.5">
-                            <div>Ø {formatDimension(boss.diameter)}</div>
-                            {boss.area && <div>Area: {formatArea(boss.area)}</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Surface Features Section */}
-        <div className="border rounded-lg">
-          <button
-            onClick={() => toggleSection('surfaces')}
-            className="w-full flex items-center justify-between p-3 hover:bg-accent transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              {expandedSections.has('surfaces') ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-              <Box className="h-4 w-4 text-purple-500" />
-              <span className="font-medium">Surface Features</span>
-            </div>
-            <Badge variant="secondary">
-              {planarCount + filletCount + complexSurfaces.length}
-            </Badge>
-          </button>
-
-          {expandedSections.has('surfaces') && (
-            <div className="px-3 pb-3 space-y-2">
-              {/* Planar Faces */}
-              {planarCount > 0 && (
-                <div className="ml-6">
-                  <div className="flex items-center justify-between p-2">
-                    <div className="flex items-center gap-2">
-                      <Square className="h-3 w-3 text-gray-500" />
-                      <span className="text-sm">Planar Faces</span>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {planarCount}
-                    </Badge>
+              {/* Quick Stats Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <div className="text-2xl font-bold text-yellow-700">
+                    {featureSummary.through_holes}
                   </div>
+                  <div className="text-sm text-gray-600">Through-Holes</div>
                 </div>
-              )}
-
-              {/* Fillets */}
-              {filletCount > 0 && (
-                <div className="ml-6">
-                  <div className="flex items-center justify-between p-2">
-                    <div className="flex items-center gap-2">
-                      <Circle className="h-3 w-3 text-purple-500" />
-                      <span className="text-sm">Fillets & Rounds</span>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {filletCount}
-                    </Badge>
+                <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                  <div className="text-2xl font-bold text-orange-700">
+                    {featureSummary.blind_holes}
                   </div>
+                  <div className="text-sm text-gray-600">Blind Holes</div>
                 </div>
-              )}
-
-              {/* Complex Surfaces */}
-              {complexSurfaces.length > 0 && (
-                <div className="ml-6">
-                  <div className="flex items-center justify-between p-2">
-                    <div className="flex items-center gap-2">
-                      <Box className="h-3 w-3 text-indigo-500" />
-                      <span className="text-sm">Complex Surfaces</span>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {complexSurfaces.length}
-                    </Badge>
+                <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                  <div className="text-2xl font-bold text-red-700">
+                    {featureSummary.bores}
                   </div>
+                  <div className="text-sm text-gray-600">Bores</div>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="text-2xl font-bold text-blue-700">
+                    {featureSummary.bosses}
+                  </div>
+                  <div className="text-sm text-gray-600">Bosses</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Detailed Features Card */}
+        {features && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Detailed Feature Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {/* Manufacturing Features Section */}
+              <div className="border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleSection('manufacturing')}
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    {expandedSections.has('manufacturing') ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                    <span className="font-medium">Manufacturing Features</span>
+                  </div>
+                  <Badge variant="secondary">
+                    {(features.through_holes?.length || 0) + 
+                     (features.blind_holes?.length || 0) + 
+                     (features.bores?.length || 0) + 
+                     (features.bosses?.length || 0)}
+                  </Badge>
+                </button>
+                
+                {expandedSections.has('manufacturing') && (
+                  <div className="p-3 space-y-3">
+                    {/* Through-Holes */}
+                    {features.through_holes && features.through_holes.length > 0 && (
+                      <div>
+                        <button
+                          onClick={() => toggleSection('through-holes')}
+                          className="w-full flex items-center justify-between p-2 hover:bg-gray-50 rounded transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            {expandedSections.has('through-holes') ? (
+                              <ChevronDown className="w-3 h-3" />
+                            ) : (
+                              <ChevronRight className="w-3 h-3" />
+                            )}
+                            <Drill className="w-4 h-4 text-yellow-600" />
+                            <span className="text-sm font-medium">Through-Holes</span>
+                          </div>
+                          <Badge variant="outline" className="bg-yellow-50">
+                            {features.through_holes.length}
+                          </Badge>
+                        </button>
+                        
+                        {expandedSections.has('through-holes') && (
+                          <div className="ml-6 mt-2 space-y-2">
+                            {features.through_holes.map((hole, idx) => (
+                              <div key={idx} className="p-2 bg-yellow-50 rounded text-sm">
+                                <div className="font-medium">Hole {idx + 1}</div>
+                                <div className="text-gray-600 space-y-1 mt-1">
+                                  <div>Diameter: {formatNumber(hole.diameter)} mm</div>
+                                  {hole.area && <div>Area: {formatNumber(hole.area)} mm²</div>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Blind Holes */}
+                    {features.blind_holes && features.blind_holes.length > 0 && (
+                      <div>
+                        <button
+                          onClick={() => toggleSection('blind-holes')}
+                          className="w-full flex items-center justify-between p-2 hover:bg-gray-50 rounded transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            {expandedSections.has('blind-holes') ? (
+                              <ChevronDown className="w-3 h-3" />
+                            ) : (
+                              <ChevronRight className="w-3 h-3" />
+                            )}
+                            <Drill className="w-4 h-4 text-orange-600" />
+                            <span className="text-sm font-medium">Blind Holes</span>
+                          </div>
+                          <Badge variant="outline" className="bg-orange-50">
+                            {features.blind_holes.length}
+                          </Badge>
+                        </button>
+                        
+                        {expandedSections.has('blind-holes') && (
+                          <div className="ml-6 mt-2 space-y-2">
+                            {features.blind_holes.map((hole, idx) => (
+                              <div key={idx} className="p-2 bg-orange-50 rounded text-sm">
+                                <div className="font-medium">Blind Hole {idx + 1}</div>
+                                <div className="text-gray-600 space-y-1 mt-1">
+                                  <div>Diameter: {formatNumber(hole.diameter)} mm</div>
+                                  {hole.depth && <div>Depth: {formatNumber(hole.depth)} mm</div>}
+                                  {hole.area && <div>Area: {formatNumber(hole.area)} mm²</div>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Bores */}
+                    {features.bores && features.bores.length > 0 && (
+                      <div>
+                        <button
+                          onClick={() => toggleSection('bores')}
+                          className="w-full flex items-center justify-between p-2 hover:bg-gray-50 rounded transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            {expandedSections.has('bores') ? (
+                              <ChevronDown className="w-3 h-3" />
+                            ) : (
+                              <ChevronRight className="w-3 h-3" />
+                            )}
+                            <Cylinder className="w-4 h-4 text-red-600" />
+                            <span className="text-sm font-medium">Bores</span>
+                          </div>
+                          <Badge variant="outline" className="bg-red-50">
+                            {features.bores.length}
+                          </Badge>
+                        </button>
+                        
+                        {expandedSections.has('bores') && (
+                          <div className="ml-6 mt-2 space-y-2">
+                            {features.bores.map((bore, idx) => (
+                              <div key={idx} className="p-2 bg-red-50 rounded text-sm">
+                                <div className="font-medium">Bore {idx + 1}</div>
+                                <div className="text-gray-600 space-y-1 mt-1">
+                                  <div>Diameter: {formatNumber(bore.diameter)} mm</div>
+                                  {bore.area && <div>Area: {formatNumber(bore.area)} mm²</div>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Bosses */}
+                    {features.bosses && features.bosses.length > 0 && (
+                      <div>
+                        <button
+                          onClick={() => toggleSection('bosses')}
+                          className="w-full flex items-center justify-between p-2 hover:bg-gray-50 rounded transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            {expandedSections.has('bosses') ? (
+                              <ChevronDown className="w-3 h-3" />
+                            ) : (
+                              <ChevronRight className="w-3 h-3" />
+                            )}
+                            <Box className="w-4 h-4 text-blue-600" />
+                            <span className="text-sm font-medium">Bosses</span>
+                          </div>
+                          <Badge variant="outline" className="bg-blue-50">
+                            {features.bosses.length}
+                          </Badge>
+                        </button>
+                        
+                        {expandedSections.has('bosses') && (
+                          <div className="ml-6 mt-2 space-y-2">
+                            {features.bosses.map((boss, idx) => (
+                              <div key={idx} className="p-2 bg-blue-50 rounded text-sm">
+                                <div className="font-medium">Boss {idx + 1}</div>
+                                <div className="text-gray-600 space-y-1 mt-1">
+                                  <div>Diameter: {formatNumber(boss.diameter)} mm</div>
+                                  {boss.area && <div>Area: {formatNumber(boss.area)} mm²</div>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Surface Features Section */}
+              <div className="border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleSection('surfaces')}
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    {expandedSections.has('surfaces') ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                    <span className="font-medium">Surface Features</span>
+                  </div>
+                  <Badge variant="secondary">
+                    {(features.planar_faces?.length || 0) + 
+                     (features.fillets?.length || 0)}
+                  </Badge>
+                </button>
+                
+                {expandedSections.has('surfaces') && (
+                  <div className="p-3 space-y-2">
+                    {/* Planar Faces */}
+                    {features.planar_faces && features.planar_faces.length > 0 && (
+                      <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div className="flex items-center gap-2">
+                          <Wrench className="w-4 h-4 text-gray-600" />
+                          <span className="text-sm">Planar Faces</span>
+                        </div>
+                        <Badge variant="outline">{features.planar_faces.length}</Badge>
+                      </div>
+                    )}
+
+                    {/* Fillets */}
+                    {features.fillets && features.fillets.length > 0 && (
+                      <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div className="flex items-center gap-2">
+                          <Circle className="w-4 h-4 text-purple-600" />
+                          <span className="text-sm">Fillets/Rounds</span>
+                        </div>
+                        <Badge variant="outline">{features.fillets.length}</Badge>
+                      </div>
+                    )}
+
+                    {/* Complex Surfaces */}
+                    {features.complex_surfaces && features.complex_surfaces.length > 0 && (
+                      <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-gray-600" />
+                          <span className="text-sm">Complex Surfaces</span>
+                        </div>
+                        <Badge variant="outline">{features.complex_surfaces.length}</Badge>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback: Render old format (for backward compatibility)
+  if (featureTree?.oriented_sections) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Feature Tree (Legacy Format)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-gray-500 mb-4">
+            This part uses an older analysis format. Re-upload for detailed manufacturing features.
+          </p>
+          {/* You can keep your old rendering logic here if needed */}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return null;
+};
+
+export default FeatureTree;
