@@ -83,6 +83,8 @@ def calculate_exact_volume_and_area(shape):
 
 def recognize_manufacturing_features(shape):
     """
+    ⭐ UPDATED: Now stores BREP face references for triangle mapping
+    
     Analyze BREP topology to detect TRUE manufacturing features
     
     Accurate detection of:
@@ -157,7 +159,8 @@ def recognize_manufacturing_features(shape):
                 'radius': radius,
                 'axis': [axis_dir.X(), axis_dir.Y(), axis_dir.Z()],
                 'position': [axis_pos.X(), axis_pos.Y(), axis_pos.Z()],
-                'area': face_area
+                'area': face_area,
+                'brep_face': face  # ⭐ NEW: Store BREP face reference for mapping
             }
             
             # Classification logic
@@ -241,20 +244,23 @@ def recognize_manufacturing_features(shape):
             normal = plane.Axis().Direction()
             features['planar_faces'].append({
                 'normal': [normal.X(), normal.Y(), normal.Z()],
-                'area': face_area
+                'area': face_area,
+                'brep_face': face  # ⭐ NEW: Store for mapping
             })
         
         elif surf_type == GeomAbs_Torus:
             # Fillets and rounds
             features['fillets'].append({
                 'area': face_area,
-                'type': 'torus'
+                'type': 'torus',
+                'brep_face': face  # ⭐ NEW: Store for mapping
             })
         
         else:
             features['complex_surfaces'].append({
                 'type': str(surf_type),
-                'area': face_area
+                'area': face_area,
+                'brep_face': face  # ⭐ NEW: Store for mapping
             })
     
     # Calculate totals for backward compatibility
@@ -274,6 +280,78 @@ def recognize_manufacturing_features(shape):
     features['holes'] = features['through_holes'] + features['blind_holes']
     features['cylindrical_bosses'] = features['bosses']
     
+    return features
+
+
+def map_features_to_triangles(features, face_data):
+    """
+    ⭐ NEW FUNCTION: Map detected manufacturing features to mesh triangle indices
+    
+    This enables frontend to highlight specific features when clicked in the feature tree.
+    
+    Args:
+        features: Dictionary of detected features (from recognize_manufacturing_features)
+        face_data: List of face metadata (from tessellate_shape)
+    
+    Returns:
+        Updated features with triangle_start, triangle_end, center for each feature
+    """
+    logger.info("🔗 Mapping features to mesh triangles...")
+    
+    def map_feature_list(feature_list, feature_type_name):
+        """Helper to map a list of features"""
+        for idx, feature in enumerate(feature_list):
+            if 'brep_face' not in feature:
+                continue
+                
+            brep_face = feature['brep_face']
+            triangle_ranges = []
+            
+            # Find all face_data entries that match this BREP face
+            for face_info in face_data:
+                if face_info['face_object'].IsSame(brep_face):
+                    triangle_ranges.append({
+                        'start': face_info['triangle_start'],
+                        'end': face_info['triangle_end'],
+                        'count': face_info['triangle_count']
+                    })
+                    break
+            
+            # Store triangle mapping
+            if triangle_ranges:
+                feature['triangle_ranges'] = triangle_ranges
+                # For single-face features, also provide flat start/end
+                if len(triangle_ranges) == 1:
+                    feature['triangle_start'] = triangle_ranges[0]['start']
+                    feature['triangle_end'] = triangle_ranges[0]['end']
+                    feature['triangle_count'] = triangle_ranges[0]['count']
+                
+                # Calculate feature center (for camera zoom)
+                if 'position' in feature:
+                    feature['center'] = feature['position']
+                else:
+                    # For planar/complex features, use face center
+                    feature['center'] = face_data[0]['center'] if face_data else [0, 0, 0]
+                
+                logger.info(f"  {feature_type_name} #{idx+1}: Mapped to {feature.get('triangle_count', 0)} triangles")
+            
+            # Remove BREP reference (can't serialize to JSON)
+            del feature['brep_face']
+    
+    # Map each feature type
+    map_feature_list(features['through_holes'], 'Through-hole')
+    map_feature_list(features['blind_holes'], 'Blind hole')
+    map_feature_list(features['bores'], 'Bore')
+    map_feature_list(features['bosses'], 'Boss')
+    map_feature_list(features['planar_faces'], 'Planar face')
+    map_feature_list(features['fillets'], 'Fillet')
+    map_feature_list(features['complex_surfaces'], 'Complex surface')
+    
+    # Update legacy combined lists
+    features['holes'] = features['through_holes'] + features['blind_holes']
+    features['cylindrical_bosses'] = features['bosses']
+    
+    logger.info("✅ Feature-to-triangle mapping complete!")
     return features
 
 
@@ -352,7 +430,9 @@ def calculate_face_center(triangulation, transform):
 
 def tessellate_shape(shape):
     """
-    === SECTION 1: MESH GENERATION ONLY ===
+    ⭐ UPDATED: Now tracks triangle ranges for each face
+    
+    === SECTION 1: MESH GENERATION ===
     Generate display mesh with adaptive quality.
     NO color classification here - purely geometric mesh creation.
     """
@@ -389,10 +469,10 @@ def tessellate_shape(shape):
         xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
         cx, cy, cz = (xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2
 
-        logger.info("📊 Extracting mesh geometry (no classification)...")
+        logger.info("📊 Extracting mesh geometry with triangle tracking...")
         
         vertices, indices, normals = [], [], []
-        face_data = []  # Store face metadata for later classification
+        face_data = []  # Store face metadata for later classification AND mapping
         current_index = 0
         
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
@@ -416,7 +496,7 @@ def tessellate_shape(shape):
             bbox_center = [cx, cy, cz]
             to_surface = [center[0] - bbox_center[0], center[1] - bbox_center[1], center[2] - bbox_center[2]]
             
-            # Store face metadata for classification
+            # Store face metadata for classification AND mapping
             face_start_vertex = current_index
             face_vertices = []
             
@@ -454,7 +534,12 @@ def tessellate_shape(shape):
                 for _ in range(3):
                     normals.extend(n)
             
-            # Store face info for classification
+            # ⭐ NEW: Calculate triangle range for this face
+            triangle_start = face_start_index // 3
+            triangle_end = len(indices) // 3
+            triangle_count = triangle_end - triangle_start
+            
+            # Store face info for classification AND mapping
             face_data.append({
                 'face_idx': face_idx,
                 'surf_type': surf_type,
@@ -462,7 +547,9 @@ def tessellate_shape(shape):
                 'start_vertex': face_start_vertex,
                 'vertex_count': len(face_vertices),
                 'start_index': face_start_index,
-                'triangle_count': (len(indices) - face_start_index) // 3,
+                'triangle_start': triangle_start,      # ⭐ NEW
+                'triangle_end': triangle_end,          # ⭐ NEW
+                'triangle_count': triangle_count,      # ⭐ NEW
                 'face_object': face
             })
 
@@ -643,7 +730,6 @@ def classify_mesh_faces(mesh_data, shape):
     logger.info("🔍 STEP 2: Multi-pass propagation to adjacent faces...")
     
     # STEP 2: Multi-pass propagation until stable
-    # Iterate multiple times to ensure all connected faces get proper classification
     max_iterations = 10
     
     for iteration in range(max_iterations):
@@ -652,7 +738,7 @@ def classify_mesh_faces(mesh_data, shape):
         for face_info in face_data:
             face_idx = face_info['face_idx']
             
-            # Skip locked faces (cylindrical faces from step 1)
+            # Skip locked faces
             if face_idx in locked_faces:
                 continue
             
@@ -661,17 +747,15 @@ def classify_mesh_faces(mesh_data, shape):
             start_vertex = face_info['start_vertex']
             vertex_count_face = face_info['vertex_count']
             
-            # Get current classification
             current_type = face_classifications.get(face_idx)
             
-            # Find adjacent faces via shared edges
+            # Find adjacent faces
             edge_exp = TopExp_Explorer(face_object, TopAbs_EDGE)
             neighbor_types = []
             
             while edge_exp.More():
                 edge = edge_exp.Current()
                 
-                # Find all faces sharing this edge
                 for map_idx in range(1, edge_face_map.Size() + 1):
                     map_edge = edge_face_map.FindKey(map_idx)
                     if edge.IsSame(map_edge):
@@ -681,7 +765,6 @@ def classify_mesh_faces(mesh_data, shape):
                         while face_iter.More():
                             adj_face = topods.Face(face_iter.Value())
                             
-                            # Find this adjacent face in our data
                             for other_info in face_data:
                                 if adj_face.IsSame(other_info['face_object']):
                                     other_idx = other_info['face_idx']
@@ -694,11 +777,10 @@ def classify_mesh_faces(mesh_data, shape):
                 
                 edge_exp.Next()
             
-            # Determine new type based on neighbors
+            # Determine new type
             new_type = None
             
             if neighbor_types:
-                # Priority: internal > through > external
                 if "internal" in neighbor_types:
                     new_type = "internal"
                 elif "through" in neighbor_types:
@@ -706,7 +788,6 @@ def classify_mesh_faces(mesh_data, shape):
                 else:
                     new_type = "external"
             else:
-                # No neighbors - keep current or assign default
                 if current_type is None:
                     new_type = "planar" if surf_type == GeomAbs_Plane else "external"
                 else:
@@ -736,7 +817,7 @@ def classify_mesh_faces(mesh_data, shape):
 
 def convert_colors_to_hex(vertex_colors):
     """
-    ✅ NEW FUNCTION: Convert semantic color labels to hex color codes for frontend display
+    Convert semantic color labels to hex color codes for frontend display
     
     Color scheme:
     - external: Grey #999999
@@ -753,7 +834,7 @@ def convert_colors_to_hex(vertex_colors):
     
     hex_colors = []
     for color_label in vertex_colors:
-        hex_colors.append(color_map.get(color_label, '#999999'))  # Default to grey
+        hex_colors.append(color_map.get(color_label, '#999999'))
     
     logger.info(f"🎨 Converted {len(hex_colors)} vertex colors to hex codes")
     return hex_colors
@@ -788,15 +869,19 @@ def analyze_cad():
 
         logger.info("🔍 Analyzing BREP geometry...")
         exact_props = calculate_exact_volume_and_area(shape)
+        
+        logger.info("🔧 Detecting manufacturing features...")
         manufacturing_features = recognize_manufacturing_features(shape)
         
         logger.info("🎨 Generating display mesh...")
         mesh_data = tessellate_shape(shape)
         
-        logger.info("🎨 Classifying face colors using MESH-BASED approach...")
-        vertex_colors_labels = classify_mesh_faces(mesh_data, shape)
+        # ⭐ NEW: Map features to triangles for frontend highlighting
+        logger.info("🔗 Mapping features to mesh triangles...")
+        manufacturing_features = map_features_to_triangles(manufacturing_features, mesh_data['face_data'])
         
-        # ✅ FIX: Convert semantic labels to hex codes
+        logger.info("🎨 Classifying face colors...")
+        vertex_colors_labels = classify_mesh_faces(mesh_data, shape)
         vertex_colors_hex = convert_colors_to_hex(vertex_colors_labels)
         mesh_data["vertex_colors"] = vertex_colors_hex
         
@@ -808,7 +893,7 @@ def analyze_cad():
         is_cylindrical = len(manufacturing_features['holes']) > 0 or len(manufacturing_features['bosses']) > 0
         has_flat_surfaces = len(manufacturing_features['planar_faces']) > 0
         
-        # Calculate complexity based on actual features
+        # Calculate complexity
         through_holes = len(manufacturing_features.get('through_holes', []))
         blind_holes = len(manufacturing_features.get('blind_holes', []))
         bores = len(manufacturing_features.get('bores', []))
@@ -820,12 +905,12 @@ def analyze_cad():
         cylindrical_faces = len(manufacturing_features['holes']) + len(manufacturing_features['bosses'])
         planar_faces = len(manufacturing_features['planar_faces'])
         complexity_score = min(10, int(
-            (total_features / 5) +  # Each feature adds to complexity
-            (through_holes * 0.5) +  # Through holes are moderately complex
-            (blind_holes * 0.3) +    # Blind holes slightly less
-            (bores * 0.2) +          # Bores are simple
-            (bosses * 0.4) +         # Bosses add complexity
-            (fillets * 0.1)          # Fillets add minor complexity
+            (total_features / 5) +
+            (through_holes * 0.5) +
+            (blind_holes * 0.3) +
+            (bores * 0.2) +
+            (bosses * 0.4) +
+            (fillets * 0.1)
         ))
 
         bbox = Bnd_Box()
@@ -842,7 +927,7 @@ def analyze_cad():
             'exact_volume': exact_props['volume'],
             'exact_surface_area': exact_props['surface_area'],
             'center_of_mass': exact_props['center_of_mass'],
-            'manufacturing_features': manufacturing_features,
+            'manufacturing_features': manufacturing_features,  # ⭐ Now includes triangle mapping!
             'feature_summary': {
                 'through_holes': len(manufacturing_features.get('through_holes', [])),
                 'blind_holes': len(manufacturing_features.get('blind_holes', [])),
@@ -857,7 +942,7 @@ def analyze_cad():
                 'vertices': mesh_data['vertices'],
                 'indices': mesh_data['indices'],
                 'normals': mesh_data['normals'],
-                'vertex_colors': mesh_data['vertex_colors'],  # ✅ Now hex codes!
+                'vertex_colors': mesh_data['vertex_colors'],
                 'feature_edges': feature_edges,
                 'triangle_count': mesh_data['triangle_count'],
                 'face_classification_method': 'mesh_based_with_propagation'
@@ -873,7 +958,7 @@ def analyze_cad():
             'total_faces': total_features,
             'planar_faces': planar_faces,
             'cylindrical_faces': cylindrical_faces,
-            'analysis_type': 'dual_representation',
+            'analysis_type': 'dual_representation_with_feature_mapping',  # ⭐ Updated
             'quotation_ready': True,
             'status': 'success',
             'confidence': 0.98,
@@ -894,7 +979,7 @@ def analyze_cad():
 def root():
     return jsonify({
         "service": "CAD Geometry Analysis Service",
-        "version": "7.0.0-accurate-features",
+        "version": "8.0.0-feature-highlighting",  # ⭐ Updated version
         "status": "running",
         "endpoints": {
             "health": "/health",
@@ -905,7 +990,8 @@ def root():
             "feature_detection": "Accurate through-hole, blind hole, bore, and boss detection",
             "inner_surfaces": "Detected by cylinder radius and propagated to adjacent faces",
             "through_holes": "Detected by size and connectivity analysis",
-            "color_output": "Hex color codes for frontend display"
+            "color_output": "Hex color codes for frontend display",
+            "feature_mapping": "Triangle indices for interactive highlighting"  # ⭐ NEW
         },
         "documentation": "POST multipart/form-data with 'file' field containing .step file"
     })
