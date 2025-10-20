@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ChevronLeft, ChevronDown, ChevronUp, Mail, Phone, Building2, MapPin, User } from 'lucide-react';
 import { CADViewer } from '@/components/CADViewer';
 import FeatureTree from '@/components/FeatureTree';
-import { RoutingEditor } from './RoutingEditor';
+import RoutingEditor from './RoutingEditor';
 
 interface FileWithData {
   file: File;
@@ -207,21 +207,9 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
             {/* Routing Editor */}
             {selectedFile.analysis?.recommended_processes && (
               <RoutingEditor
-                routings={selectedFile.analysis.recommended_processes}
-                onRoutingsChange={(updatedRoutings) => {
-                  // Update the routing for this file
-                  onUpdateFile(selectedFileIndex, { 
-                    analysis: {
-                      ...selectedFile.analysis!,
-                      recommended_processes: updatedRoutings
-                    }
-                  });
-                }}
-                analysisReasoning={
-                  selectedFile.analysis.routing_reasoning
-                    ? selectedFile.analysis.routing_reasoning.join(' • ')
-                    : undefined
-                }
+                recommendedRoutings={selectedFile.analysis.recommended_processes}
+                routingReasoning={selectedFile.analysis.routing_reasoning || []}
+                machiningOperations={selectedFile.analysis.machining_summary || []}
               />
             )}
 
