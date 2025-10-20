@@ -1,6 +1,6 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { useThree } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber';
 
 interface MeshData {
   vertices: number[];
@@ -36,6 +36,11 @@ const TOPOLOGY_COLORS = {
 
 
 export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = 'solid', topologyColors = true }: MeshModelProps) {
+  
+  const { camera } = useThree();
+  const meshRef = useRef<THREE.Mesh>(null);
+  const silhouetteEdgesRef = useRef<THREE.LineSegments>(null);
+  
   // Create single unified geometry for professional solid rendering
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
@@ -149,6 +154,165 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     }
   }, [geometry, topologyColors, meshData]);
   
+  // ===== NEW: Pre-compute edge connectivity map for dynamic silhouettes =====
+  const edgeMap = useMemo(() => {
+    if (!showEdges) return null;
+    
+    const map = new Map<string, {
+      v1: THREE.Vector3;
+      v2: THREE.Vector3;
+      normals: THREE.Vector3[];
+    }>();
+    
+    const triangleCount = meshData.indices.length / 3;
+    
+    for (let i = 0; i < triangleCount; i++) {
+      const i0 = meshData.indices[i * 3];
+      const i1 = meshData.indices[i * 3 + 1];
+      const i2 = meshData.indices[i * 3 + 2];
+      
+      const v0 = new THREE.Vector3(
+        meshData.vertices[i0 * 3],
+        meshData.vertices[i0 * 3 + 1],
+        meshData.vertices[i0 * 3 + 2]
+      );
+      const v1 = new THREE.Vector3(
+        meshData.vertices[i1 * 3],
+        meshData.vertices[i1 * 3 + 1],
+        meshData.vertices[i1 * 3 + 2]
+      );
+      const v2 = new THREE.Vector3(
+        meshData.vertices[i2 * 3],
+        meshData.vertices[i2 * 3 + 1],
+        meshData.vertices[i2 * 3 + 2]
+      );
+      
+      // Calculate triangle normal
+      const e1 = new THREE.Vector3().subVectors(v1, v0);
+      const e2 = new THREE.Vector3().subVectors(v2, v0);
+      const normal = new THREE.Vector3().crossVectors(e1, e2).normalize();
+      
+      // Store all three edges
+      const edges = [
+        { v1: v0, v2: v1, key: getEdgeKey(i0, i1) },
+        { v1: v1, v2: v2, key: getEdgeKey(i1, i2) },
+        { v1: v2, v2: v0, key: getEdgeKey(i2, i0) }
+      ];
+      
+      edges.forEach(edge => {
+        if (!map.has(edge.key)) {
+          map.set(edge.key, {
+            v1: edge.v1.clone(),
+            v2: edge.v2.clone(),
+            normals: [normal.clone()]
+          });
+        } else {
+          const existing = map.get(edge.key)!;
+          existing.normals.push(normal.clone());
+        }
+      });
+    }
+    
+    return map;
+  }, [meshData, showEdges]);
+  
+  // Helper function to generate edge keys
+  function getEdgeKey(i1: number, i2: number): string {
+    return i1 < i2 ? `${i1}_${i2}` : `${i2}_${i1}`;
+  }
+  
+  // ===== NEW: Dynamic silhouette edge calculation every frame =====
+  useFrame(() => {
+    if (!showEdges || !edgeMap || !meshRef.current || displayStyle === 'wireframe') return;
+    
+    const mesh = meshRef.current;
+    const silhouettePositions: number[] = [];
+    
+    // Get camera position
+    const cameraWorldPos = new THREE.Vector3();
+    camera.getWorldPosition(cameraWorldPos);
+    
+    // Transform camera to mesh local space
+    const worldToLocal = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+    const cameraLocalPos = cameraWorldPos.clone().applyMatrix4(worldToLocal);
+    
+    // Check each edge
+    edgeMap.forEach((edgeData) => {
+      // Boundary edges (only 1 adjacent face) are always silhouettes
+      if (edgeData.normals.length === 1) {
+        const v1World = edgeData.v1.clone().applyMatrix4(mesh.matrixWorld);
+        const v2World = edgeData.v2.clone().applyMatrix4(mesh.matrixWorld);
+        silhouettePositions.push(
+          v1World.x, v1World.y, v1World.z,
+          v2World.x, v2World.y, v2World.z
+        );
+        return;
+      }
+      
+      // For shared edges (2 adjacent faces), check if they face opposite directions
+      if (edgeData.normals.length === 2) {
+        const n1 = edgeData.normals[0];
+        const n2 = edgeData.normals[1];
+        
+        // Calculate view direction from edge midpoint to camera
+        const edgeMidpoint = new THREE.Vector3()
+          .addVectors(edgeData.v1, edgeData.v2)
+          .multiplyScalar(0.5);
+        const viewDir = new THREE.Vector3()
+          .subVectors(cameraLocalPos, edgeMidpoint)
+          .normalize();
+        
+        // Check if normals face opposite directions relative to camera
+        const dot1 = n1.dot(viewDir);
+        const dot2 = n2.dot(viewDir);
+        
+        // Silhouette edge: one face front-facing, one back-facing
+        if ((dot1 > 0 && dot2 < 0) || (dot1 < 0 && dot2 > 0)) {
+          const v1World = edgeData.v1.clone().applyMatrix4(mesh.matrixWorld);
+          const v2World = edgeData.v2.clone().applyMatrix4(mesh.matrixWorld);
+          silhouettePositions.push(
+            v1World.x, v1World.y, v1World.z,
+            v2World.x, v2World.y, v2World.z
+          );
+        }
+      }
+    });
+    
+    // Update or create silhouette edges geometry
+    if (silhouettePositions.length > 0) {
+      if (!silhouetteEdgesRef.current) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(silhouettePositions, 3));
+        const mat = new THREE.LineBasicMaterial({ 
+          color: '#000000', 
+          linewidth: 1.5,
+          toneMapped: false 
+        });
+        silhouetteEdgesRef.current = new THREE.LineSegments(geo, mat);
+        mesh.parent?.add(silhouetteEdgesRef.current);
+      } else {
+        const geo = silhouetteEdgesRef.current.geometry as THREE.BufferGeometry;
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(silhouettePositions, 3));
+        geo.attributes.position.needsUpdate = true;
+        geo.computeBoundingSphere();
+      }
+      silhouetteEdgesRef.current.visible = true;
+    } else if (silhouetteEdgesRef.current) {
+      silhouetteEdgesRef.current.visible = false;
+    }
+  });
+  
+  // Cleanup silhouette edges on unmount
+  useEffect(() => {
+    return () => {
+      if (silhouetteEdgesRef.current) {
+        silhouetteEdgesRef.current.parent?.remove(silhouetteEdgesRef.current);
+        silhouetteEdgesRef.current.geometry.dispose();
+        (silhouetteEdgesRef.current.material as THREE.Material).dispose();
+      }
+    };
+  }, []);
+  
   // Create feature edges from BREP data (true CAD edges, not mesh tessellation)
   const featureEdges = useMemo(() => {
     if (!showEdges && displayStyle !== 'wireframe') return null;
@@ -234,7 +398,7 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
     <group>
       {/* Render solid mesh (hide in wireframe mode) */}
       {displayStyle !== 'wireframe' && (
-        <mesh geometry={geometry}>
+        <mesh ref={meshRef} geometry={geometry}>
           <meshStandardMaterial
             {...materialProps}
             color={topologyColors ? '#ffffff' : SOLID_COLOR}
@@ -245,8 +409,9 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
         </mesh>
       )}
       
-      {/* Render BREP feature edges (true CAD edges from backend) */}
-      {featureEdges && (
+      {/* Render BREP feature edges (true CAD edges from backend) - DISABLED */}
+      {/* Dynamic silhouette edges (above) replace these static edges */}
+      {featureEdges && false && (
         <lineSegments geometry={featureEdges}>
           <lineBasicMaterial 
             color="#000000" 
@@ -256,6 +421,8 @@ export function MeshModel({ meshData, sectionPlane, sectionPosition, showEdges, 
           />
         </lineSegments>
       )}
+      
+      {/* Dynamic silhouette edges are rendered via useFrame hook above */}
     </group>
   );
 }
