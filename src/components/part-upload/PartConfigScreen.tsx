@@ -185,14 +185,14 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                 <div className="space-y-2">
                   <Label htmlFor="process">Preferred Process (Optional)</Label>
                   <Select
-                    value={selectedFile.process || ''}
-                    onValueChange={(value) => onUpdateFile(selectedFileIndex, { process: value })}
+                    value={selectedFile.process || 'auto'}
+                    onValueChange={(value) => onUpdateFile(selectedFileIndex, { process: value === 'auto' ? undefined : value })}
                   >
                     <SelectTrigger id="process">
                       <SelectValue placeholder="Auto-select (recommended)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Auto-select (recommended)</SelectItem>
+                      <SelectItem value="auto">Auto-select (recommended)</SelectItem>
                       {processes.map((process) => (
                         <SelectItem key={process} value={process}>
                           {process}
