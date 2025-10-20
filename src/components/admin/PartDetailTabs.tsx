@@ -49,7 +49,7 @@ interface PartDetailTabsProps {
   onUpdateLineItem: (id: string, field: string, value: any) => void;
 }
 
-export const PartDetailTabs: React.FC<PartDetailTabsProps> = ({
+const PartDetailTabs: React.FC<PartDetailTabsProps> = ({
   lineItem,
   featureTree,
   onUpdateLineItem,
@@ -388,3 +388,5 @@ export const PartDetailTabs: React.FC<PartDetailTabsProps> = ({
     </Card>
   );
 };
+
+export default PartDetailTabs;

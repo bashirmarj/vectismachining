@@ -55,7 +55,7 @@ interface PartConfigScreenProps {
   isSubmitting: boolean;
 }
 
-export const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
+const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
   files,
   materials,
   processes,
@@ -185,14 +185,14 @@ export const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                 <div className="space-y-2">
                   <Label htmlFor="process">Preferred Process (Optional)</Label>
                   <Select
-                    value={selectedFile.process || 'auto'}
-                    onValueChange={(value) => onUpdateFile(selectedFileIndex, { process: value === 'auto' ? undefined : value })}
+                    value={selectedFile.process || ''}
+                    onValueChange={(value) => onUpdateFile(selectedFileIndex, { process: value })}
                   >
                     <SelectTrigger id="process">
                       <SelectValue placeholder="Auto-select (recommended)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="auto">Auto-select (recommended)</SelectItem>
+                      <SelectItem value="">Auto-select (recommended)</SelectItem>
                       {processes.map((process) => (
                         <SelectItem key={process} value={process}>
                           {process}
@@ -400,34 +400,6 @@ export const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
 
               {/* Features Tab - UPDATED TO USE NEW PROPS */}
               <TabsContent value="features" className="m-0 p-6">
-                {/* Visible Debug Panel */}
-                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded text-xs space-y-2">
-                  <div className="font-bold">🔍 Debug Info:</div>
-                  <div>Has analysis: {selectedFile.analysis ? '✅ YES' : '❌ NO'}</div>
-                  <div>Has manufacturing_features: {selectedFile.analysis?.manufacturing_features ? '✅ YES' : '❌ NO'}</div>
-                  <div>Has feature_summary: {selectedFile.analysis?.feature_summary ? '✅ YES' : '❌ NO'}</div>
-                  
-                  {/* Show ALL keys in analysis object */}
-                  {selectedFile.analysis && (
-                    <div className="mt-2 p-2 bg-white rounded">
-                      <div className="font-semibold">Available keys in analysis:</div>
-                      <div className="text-blue-600 mt-1">
-                        {Object.keys(selectedFile.analysis).join(', ')}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Show FULL analysis object */}
-                  {selectedFile.analysis && (
-                    <div className="mt-2 p-2 bg-white rounded max-h-96 overflow-auto">
-                      <div className="font-semibold">Complete Analysis Object:</div>
-                      <pre className="text-xs mt-1">
-                        {JSON.stringify(selectedFile.analysis, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-                
                 <FeatureTree
                   features={selectedFile.analysis?.manufacturing_features}
                   featureSummary={selectedFile.analysis?.feature_summary}
@@ -440,3 +412,5 @@ export const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
     </div>
   );
 };
+
+export default PartConfigScreen;
