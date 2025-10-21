@@ -293,7 +293,9 @@ export function CADViewer({
 
       // Rotate camera POSITION around pivot
       const offset = cameraRef.current.position.clone().sub(rotationPivotRef.current);
+      const distance = offset.length(); // Preserve original distance
       offset.applyQuaternion(combinedRotation);
+      offset.setLength(distance); // Restore exact distance (prevents zoom)
       cameraRef.current.position.copy(rotationPivotRef.current).add(offset);
 
       // Rotate camera ORIENTATION by same amount (keeps part visually still)
