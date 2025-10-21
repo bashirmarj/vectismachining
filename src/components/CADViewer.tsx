@@ -44,10 +44,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
   const showTopologyColors = true;
   
-  // NEW: Rotation target state with pending update
+  // NEW: Rotation target state
   const [rotationTarget, setRotationTarget] = useState<[number, number, number]>([0, 0, 0]);
-  const pendingRotationTarget = useRef<THREE.Vector3 | null>(null);
-  const isRotating = useRef(false);
   
   // Refs
   const controlsRef = useRef<any>(null);
@@ -171,8 +169,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   
   // Initialize rotation target to part center (with safety check)
   useEffect(() => {
-    if (boundingBox && boundingBox.center && Array.isArray(boundingBox.center)) {
+    if (boundingBox && boundingBox.center && Array.isArray(boundingBox.center) && controlsRef.current) {
       setRotationTarget(boundingBox.center);
+      controlsRef.current.target.set(...boundingBox.center);
+      controlsRef.current.update();
     }
   }, [boundingBox]);
   
@@ -205,11 +205,11 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     }
   };
   
-  // NEW: Handle mouse down to prepare rotation pivot point
+  // NEW: Handle mouse down - update pivot directly without re-render
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     // Only update rotation target on left click (button 0)
     if (event.button !== 0) return;
-    if (!canvasRef.current || !cameraRef.current || !meshRef.current) return;
+    if (!canvasRef.current || !cameraRef.current || !meshRef.current || !controlsRef.current) return;
     
     // Get canvas bounds for coordinate calculation
     const rect = canvasRef.current.getBoundingClientRect();
@@ -223,40 +223,16 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     const intersects = raycaster.intersectObject(meshRef.current, true);
     
     if (intersects.length > 0) {
-      // Store the point but don't apply it yet - wait for drag to start
-      pendingRotationTarget.current = intersects[0].point.clone();
-      isRotating.current = false;
+      const newTarget = intersects[0].point;
+      
+      // Update target directly in OrbitControls without React state
+      // This prevents re-render and keeps the view perfectly still
+      controlsRef.current.target.copy(newTarget);
+      
+      // Do NOT call setRotationTarget() to avoid re-render
+      // Do NOT call controlsRef.current.update()
     }
   };
-  
-  // Apply rotation target when drag starts - no camera compensation needed
-  useEffect(() => {
-    const handleMouseMove = () => {
-      if (pendingRotationTarget.current && !isRotating.current && controlsRef.current) {
-        const newTarget = pendingRotationTarget.current;
-        
-        // Simply update the target - OrbitControls will use it for rotation pivot
-        // WITHOUT recentering the view because we don't call .update()
-        controlsRef.current.target.copy(newTarget);
-        setRotationTarget([newTarget.x, newTarget.y, newTarget.z]);
-        
-        isRotating.current = true;
-      }
-    };
-    
-    const handleMouseUp = () => {
-      pendingRotationTarget.current = null;
-      isRotating.current = false;
-    };
-    
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [rotationTarget]);
   
   const handleFitView = () => {
     if (controlsRef.current && cameraRef.current) {
@@ -555,7 +531,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                 <OrbitControls
                   ref={controlsRef}
                   makeDefault
-                  target={rotationTarget}
                   enableDamping={true}
                   dampingFactor={0.15}
                   minDistance={viewportSettings.minDistance}
