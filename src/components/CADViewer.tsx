@@ -297,6 +297,11 @@ export function CADViewer({
       cameraRef.current.position.copy(rotationPivotRef.current).add(offset);
       cameraRef.current.lookAt(rotationPivotRef.current);
 
+      // Keep OrbitControls target synced (prevents zoom-in effect)
+      if (controlsRef.current) {
+        controlsRef.current.target.copy(rotationPivotRef.current);
+      }
+
       event.preventDefault();
       event.stopPropagation();
     };
