@@ -229,31 +229,41 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     }
   };
   
-  // Apply rotation target when drag starts with camera compensation
+  // Apply rotation target when drag starts with perfect camera compensation
   useEffect(() => {
     const handleMouseMove = () => {
       if (pendingRotationTarget.current && !isRotating.current && controlsRef.current && cameraRef.current) {
-        // User started dragging - apply the new rotation target with zero visual movement
         const newTarget = pendingRotationTarget.current;
         const oldTarget = new THREE.Vector3(...rotationTarget);
-        const cameraPos = cameraRef.current.position.clone();
         
-        // Calculate how to move the camera to compensate for target change
-        const targetDelta = new THREE.Vector3().subVectors(newTarget, oldTarget);
-        const newCameraPos = cameraPos.clone().add(targetDelta);
+        // Calculate the offset between old and new target
+        const offset = new THREE.Vector3().subVectors(newTarget, oldTarget);
         
-        // Apply both changes atomically
-        cameraRef.current.position.copy(newCameraPos);
+        // Temporarily disable controls to prevent interference
+        controlsRef.current.enabled = false;
+        
+        // Move camera by the same offset to maintain exact framing
+        cameraRef.current.position.add(offset);
+        
+        // Update target
         controlsRef.current.target.copy(newTarget);
         setRotationTarget([newTarget.x, newTarget.y, newTarget.z]);
         
-        // Don't call update - let the next frame handle it naturally
+        // Force immediate update without animation
+        controlsRef.current.update();
+        
+        // Re-enable after a frame to let changes settle
+        requestAnimationFrame(() => {
+          if (controlsRef.current) {
+            controlsRef.current.enabled = true;
+          }
+        });
+        
         isRotating.current = true;
       }
     };
     
     const handleMouseUp = () => {
-      // Reset state when mouse is released
       pendingRotationTarget.current = null;
       isRotating.current = false;
     };
