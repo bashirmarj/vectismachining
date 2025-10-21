@@ -55,7 +55,6 @@ export function CADViewer({
   const rotationPivotRef = useRef<THREE.Vector3 | null>(null);
   const isCustomRotatingRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
-  const rotationAxesRef = useRef<{ up: THREE.Vector3; right: THREE.Vector3 } | null>(null);
 
   // Refs
   const controlsRef = useRef<any>(null);
@@ -233,27 +232,11 @@ export function CADViewer({
       if (intersects.length > 0) {
         // Use clicked point as rotation pivot
         rotationPivotRef.current = intersects[0].point.clone();
-
-        // Capture camera axes at moment of click (screen-space rotation)
-        const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRef.current!.quaternion);
-        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current!.quaternion);
-        rotationAxesRef.current = {
-          up: cameraUp.normalize(),
-          right: cameraRight.normalize(),
-        };
       } else {
         // Fallback: use current view direction
         const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraRef.current!.quaternion);
         const distance = cameraRef.current!.position.length();
         rotationPivotRef.current = cameraRef.current!.position.clone().add(direction.multiplyScalar(distance * 0.5));
-
-        // Capture camera axes at moment of click (screen-space rotation)
-        const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRef.current!.quaternion);
-        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current!.quaternion);
-        rotationAxesRef.current = {
-          up: cameraUp.normalize(),
-          right: cameraRight.normalize(),
-        };
       }
 
       isCustomRotatingRef.current = true;
@@ -265,7 +248,7 @@ export function CADViewer({
     };
 
     const handleMouseMove = (event: MouseEvent) => {
-      if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current || !rotationAxesRef.current) {
+      if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current) {
         return;
       }
 
@@ -284,17 +267,22 @@ export function CADViewer({
       // Rotation speed
       const rotationSpeed = 0.005;
 
-      // Rotate around SCREEN-SPACE axes (captured at click time)
+      // CRITICAL: Calculate rotation axes EVERY FRAME based on current camera orientation
+      // This prevents gimbal lock and allows smooth 360° rotation
+      const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRef.current.quaternion);
+      const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current.quaternion);
+
+      // Rotate around CURRENT screen-space axes
       // Horizontal drag = rotate around camera UP axis
       // Vertical drag = rotate around camera RIGHT axis
       const horizontalAngle = -deltaX * rotationSpeed;
       const verticalAngle = -deltaY * rotationSpeed;
 
-      // Apply horizontal rotation around screen UP axis
-      offset.applyAxisAngle(rotationAxesRef.current.up, horizontalAngle);
+      // Apply horizontal rotation around current screen UP axis
+      offset.applyAxisAngle(cameraUp, horizontalAngle);
 
-      // Apply vertical rotation around screen RIGHT axis
-      offset.applyAxisAngle(rotationAxesRef.current.right, verticalAngle);
+      // Apply vertical rotation around current screen RIGHT axis
+      offset.applyAxisAngle(cameraRight, verticalAngle);
 
       // Normalize to maintain constant distance
       offset.normalize().multiplyScalar(radius);
@@ -313,7 +301,6 @@ export function CADViewer({
     const handleMouseUp = () => {
       isCustomRotatingRef.current = false;
       rotationPivotRef.current = null;
-      rotationAxesRef.current = null; // Clear axes for next rotation
       if (canvas) canvas.style.cursor = "grab";
     };
 
