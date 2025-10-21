@@ -225,18 +225,16 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       const oldTarget = new THREE.Vector3().copy(controlsRef.current.target);
       const cameraPos = new THREE.Vector3().copy(cameraRef.current.position);
       
-      // Calculate the offset to maintain visual framing
-      const targetDelta = new THREE.Vector3().subVectors(newTarget, oldTarget);
+      // Calculate the vector from old target to camera
+      const targetToCameraVector = new THREE.Vector3().subVectors(cameraPos, oldTarget);
       
-      // Move camera by the same delta to keep the part in the same screen position
-      const newCameraPos = cameraPos.add(targetDelta);
+      // Position the camera at the same relative position from the new target
+      const newCameraPos = new THREE.Vector3().addVectors(newTarget, targetToCameraVector);
       
-      // Update both target and camera position
+      // Update both target and camera position to maintain visual framing
       setRotationTarget([newTarget.x, newTarget.y, newTarget.z]);
-      controlsRef.current.target.copy(newTarget);
       cameraRef.current.position.copy(newCameraPos);
-      
-      // Force update to apply changes immediately
+      controlsRef.current.target.copy(newTarget);
       controlsRef.current.update();
     }
   };
