@@ -55,6 +55,7 @@ export function CADViewer({
   const rotationPivotRef = useRef<THREE.Vector3 | null>(null);
   const isCustomRotatingRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
+  const rotationAxesRef = useRef<{ up: THREE.Vector3; right: THREE.Vector3 } | null>(null);
 
   // Refs
   const controlsRef = useRef<any>(null);
@@ -243,12 +244,30 @@ export function CADViewer({
         // Use clicked point as rotation pivot
         rotationPivotRef.current = intersects[0].point.clone();
         console.log("🎯 Pivot set to:", rotationPivotRef.current);
+
+        // Capture camera axes at moment of click (screen-space rotation)
+        const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRef.current!.quaternion);
+        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current!.quaternion);
+        rotationAxesRef.current = {
+          up: cameraUp.normalize(),
+          right: cameraRight.normalize(),
+        };
+        console.log("📐 Rotation axes locked:", rotationAxesRef.current);
       } else {
         // Fallback: use current view direction
         const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraRef.current!.quaternion);
         const distance = cameraRef.current!.position.length();
         rotationPivotRef.current = cameraRef.current!.position.clone().add(direction.multiplyScalar(distance * 0.5));
         console.log("🎯 Pivot set to fallback:", rotationPivotRef.current);
+
+        // Capture camera axes at moment of click (screen-space rotation)
+        const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRef.current!.quaternion);
+        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current!.quaternion);
+        rotationAxesRef.current = {
+          up: cameraUp.normalize(),
+          right: cameraRight.normalize(),
+        };
+        console.log("📐 Rotation axes locked (fallback):", rotationAxesRef.current);
       }
 
       console.log("📷 Camera AFTER click:", {
@@ -265,7 +284,8 @@ export function CADViewer({
     };
 
     const handleMouseMove = (event: MouseEvent) => {
-      if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current) return;
+      if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current || !rotationAxesRef.current)
+        return;
 
       const deltaX = event.clientX - lastMouseRef.current.x;
       const deltaY = event.clientY - lastMouseRef.current.y;
@@ -279,26 +299,26 @@ export function CADViewer({
       const offset = cameraRef.current.position.clone().sub(rotationPivotRef.current);
       const radius = offset.length();
 
-      // Convert to spherical coordinates
-      const theta = Math.atan2(offset.x, offset.z); // Azimuth (horizontal angle)
-      const phi = Math.acos(Math.max(-1, Math.min(1, offset.y / radius))); // Polar (vertical angle)
-
       // Rotation speed
       const rotationSpeed = 0.005;
 
-      // Update angles based on mouse movement (horizontal unlimited, vertical clamped)
-      const newTheta = theta - deltaX * rotationSpeed;
-      const newPhi = Math.max(0.1, Math.min(Math.PI - 0.1, phi - deltaY * rotationSpeed));
+      // Rotate around SCREEN-SPACE axes (captured at click time)
+      // Horizontal drag = rotate around camera UP axis
+      // Vertical drag = rotate around camera RIGHT axis
+      const horizontalAngle = -deltaX * rotationSpeed;
+      const verticalAngle = -deltaY * rotationSpeed;
 
-      // Convert back to Cartesian coordinates
-      const newOffset = new THREE.Vector3(
-        radius * Math.sin(newPhi) * Math.sin(newTheta),
-        radius * Math.cos(newPhi),
-        radius * Math.sin(newPhi) * Math.cos(newTheta),
-      );
+      // Apply horizontal rotation around screen UP axis
+      offset.applyAxisAngle(rotationAxesRef.current.up, horizontalAngle);
+
+      // Apply vertical rotation around screen RIGHT axis
+      offset.applyAxisAngle(rotationAxesRef.current.right, verticalAngle);
+
+      // Normalize to maintain constant distance
+      offset.normalize().multiplyScalar(radius);
 
       // Update camera position
-      cameraRef.current.position.copy(rotationPivotRef.current).add(newOffset);
+      cameraRef.current.position.copy(rotationPivotRef.current).add(offset);
 
       // Calculate camera orientation manually (without lookAt to prevent centering)
       const forward = new THREE.Vector3().subVectors(rotationPivotRef.current, cameraRef.current.position).normalize();
@@ -321,6 +341,7 @@ export function CADViewer({
       console.log("🖱️ MOUSEUP");
       isCustomRotatingRef.current = false;
       rotationPivotRef.current = null;
+      rotationAxesRef.current = null; // Clear axes for next rotation
       if (canvas) canvas.style.cursor = "grab";
     };
 
