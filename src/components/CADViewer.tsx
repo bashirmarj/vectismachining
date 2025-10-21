@@ -205,7 +205,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     }
   };
   
-  // NEW: Handle mouse down - update pivot with perfect compensation
+  // NEW: Handle mouse down - update pivot without ANY view changes
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     // Only update rotation target on left click (button 0)
     if (event.button !== 0) return;
@@ -230,21 +230,14 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       // Calculate offset: how far the target moved
       const targetOffset = new THREE.Vector3().subVectors(newTarget, oldTarget);
       
-      // Temporarily disable damping to prevent smooth animation
-      const wasDamping = controlsRef.current.enableDamping;
-      controlsRef.current.enableDamping = false;
-      
       // Move camera by the EXACT same offset to keep visual frame identical
       cameraRef.current.position.add(targetOffset);
       
-      // Update the target
+      // Update the target directly
       controlsRef.current.target.copy(newTarget);
       
-      // Force immediate update without animation
-      controlsRef.current.update();
-      
-      // Re-enable damping
-      controlsRef.current.enableDamping = wasDamping;
+      // CRITICAL: Do NOT call .update() - it causes recentering!
+      // The changes will be applied naturally on the next animation frame
     }
   };
   
