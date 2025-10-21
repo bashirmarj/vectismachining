@@ -275,32 +275,43 @@ export function CADViewer({
       // Skip tiny movements
       if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
 
+      // Get offset from pivot to camera
+      const offset = cameraRef.current.position.clone().sub(rotationPivotRef.current);
+      const radius = offset.length();
+
+      // Convert to spherical coordinates
+      const theta = Math.atan2(offset.x, offset.z); // Azimuth (horizontal angle)
+      const phi = Math.acos(Math.max(-1, Math.min(1, offset.y / radius))); // Polar (vertical angle)
+
       // Rotation speed
       const rotationSpeed = 0.005;
 
-      // Horizontal rotation around world Y axis
-      const horizontalRotation = new THREE.Quaternion();
-      horizontalRotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -deltaX * rotationSpeed);
+      // Update angles based on mouse movement (horizontal unlimited, vertical clamped)
+      const newTheta = theta - deltaX * rotationSpeed;
+      const newPhi = Math.max(0.1, Math.min(Math.PI - 0.1, phi - deltaY * rotationSpeed));
 
-      // Vertical rotation around camera's right vector
-      const verticalRotation = new THREE.Quaternion();
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current.quaternion);
-      verticalRotation.setFromAxisAngle(right, -deltaY * rotationSpeed);
+      // Convert back to Cartesian coordinates
+      const newOffset = new THREE.Vector3(
+        radius * Math.sin(newPhi) * Math.sin(newTheta),
+        radius * Math.cos(newPhi),
+        radius * Math.sin(newPhi) * Math.cos(newTheta),
+      );
 
-      // Combine rotations
-      const combinedRotation = new THREE.Quaternion();
-      combinedRotation.multiplyQuaternions(horizontalRotation, verticalRotation);
+      // Update camera position
+      cameraRef.current.position.copy(rotationPivotRef.current).add(newOffset);
 
-      // Rotate camera POSITION around pivot
-      const offset = cameraRef.current.position.clone().sub(rotationPivotRef.current);
-      const distance = offset.length(); // Preserve original distance
-      offset.applyQuaternion(combinedRotation);
-      offset.setLength(distance); // Restore exact distance (prevents zoom)
-      cameraRef.current.position.copy(rotationPivotRef.current).add(offset);
+      // Calculate camera orientation manually (without lookAt to prevent centering)
+      const forward = new THREE.Vector3().subVectors(rotationPivotRef.current, cameraRef.current.position).normalize();
+      const worldUp = new THREE.Vector3(0, 1, 0);
+      const right = new THREE.Vector3().crossVectors(worldUp, forward).normalize();
+      const up = new THREE.Vector3().crossVectors(forward, right);
 
-      // Rotate camera ORIENTATION by same amount (keeps part visually still)
-      cameraRef.current.quaternion.premultiply(combinedRotation);
-      cameraRef.current.quaternion.normalize(); // Prevent accumulation errors and flipping
+      // Build rotation matrix from basis vectors
+      const matrix = new THREE.Matrix4();
+      matrix.makeBasis(right, up, forward.negate());
+
+      // Update camera quaternion from matrix
+      cameraRef.current.quaternion.setFromRotationMatrix(matrix);
 
       event.preventDefault();
       event.stopPropagation();
