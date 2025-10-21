@@ -250,7 +250,14 @@ export function CADViewer({
       lastMouseRef.current = { x: event.clientX, y: event.clientY };
       canvas.style.cursor = "grabbing";
 
-      event.preventDefault();
+      // Capture pointer to ensure we get all move events
+      if ((event as any).pointerId !== undefined) {
+        canvas.setPointerCapture((event as any).pointerId);
+        console.log("📍 Pointer captured");
+      }
+
+      // DON'T preventDefault on mousedown - it blocks subsequent mousemove
+      // event.preventDefault();
       event.stopPropagation();
     };
 
@@ -311,7 +318,10 @@ export function CADViewer({
       // and we're NOT updating OrbitControls target during rotation
       cameraRef.current.lookAt(rotationPivotRef.current);
 
-      event.preventDefault();
+      // Only preventDefault during active rotation to allow normal mouse movement otherwise
+      if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
+        event.preventDefault();
+      }
       event.stopPropagation();
     };
 
@@ -319,25 +329,38 @@ export function CADViewer({
       isCustomRotatingRef.current = false;
       rotationPivotRef.current = null;
       if (canvas) canvas.style.cursor = "grab";
+
+      console.log("🛑 Rotation stopped");
     };
 
     // Capture phase to intercept BEFORE OrbitControls
+    // Use both mouse and pointer events for maximum compatibility
     canvas.addEventListener("mousedown", handleMouseDown, { capture: true });
+    canvas.addEventListener("pointerdown", handleMouseDown as any, { capture: true });
     canvas.addEventListener("mousemove", handleMouseMove, { capture: true });
+    canvas.addEventListener("pointermove", handleMouseMove as any, { capture: true });
     window.addEventListener("mousemove", handleMouseMove, { capture: true });
+    window.addEventListener("pointermove", handleMouseMove as any, { capture: true });
     window.addEventListener("mouseup", handleMouseUp, { capture: true });
+    window.addEventListener("pointerup", handleMouseUp as any, { capture: true });
     canvas.addEventListener("mouseleave", handleMouseUp, { capture: true });
+    canvas.addEventListener("pointerleave", handleMouseUp as any, { capture: true });
 
-    console.log("📌 Event listeners attached to canvas and window");
+    console.log("📌 Event listeners attached (mouse + pointer events)");
 
     canvas.style.cursor = "grab";
 
     return () => {
       canvas.removeEventListener("mousedown", handleMouseDown, { capture: true });
+      canvas.removeEventListener("pointerdown", handleMouseDown as any, { capture: true });
       canvas.removeEventListener("mousemove", handleMouseMove, { capture: true });
+      canvas.removeEventListener("pointermove", handleMouseMove as any, { capture: true });
       window.removeEventListener("mousemove", handleMouseMove, { capture: true });
+      window.removeEventListener("pointermove", handleMouseMove as any, { capture: true });
       window.removeEventListener("mouseup", handleMouseUp, { capture: true });
+      window.removeEventListener("pointerup", handleMouseUp as any, { capture: true });
       canvas.removeEventListener("mouseleave", handleMouseUp, { capture: true });
+      canvas.removeEventListener("pointerleave", handleMouseUp as any, { capture: true });
     };
   }, []);
 
