@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { CameraControls, PerspectiveCamera } from '@react-three/drei';
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { Suspense, useMemo, useEffect, useState, useRef } from 'react';
 import { CardContent } from '@/components/ui/card';
 import { Loader2, Box } from 'lucide-react';
@@ -205,7 +205,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     }
   };
   
-  // CameraControls: Update pivot on click without view disruption
+  // NEW: Handle mouse down - update pivot without ANY view changes
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     // Only update rotation target on left click (button 0)
     if (event.button !== 0) return;
@@ -224,14 +224,20 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     
     if (intersects.length > 0) {
       const newTarget = intersects[0].point;
+      const oldTarget = controlsRef.current.target.clone();
+      const cameraPos = cameraRef.current.position.clone();
       
-      // CameraControls handles this perfectly - no compensation needed!
-      controlsRef.current.setTarget(
-        newTarget.x, 
-        newTarget.y, 
-        newTarget.z, 
-        false  // false = instant (no animation)
-      );
+      // Calculate offset: how far the target moved
+      const targetOffset = new THREE.Vector3().subVectors(newTarget, oldTarget);
+      
+      // Move camera by the EXACT same offset to keep visual frame identical
+      cameraRef.current.position.add(targetOffset);
+      
+      // Update the target directly
+      controlsRef.current.target.copy(newTarget);
+      
+      // CRITICAL: Do NOT call .update() - it causes recentering!
+      // The changes will be applied naturally on the next animation frame
     }
   };
   
@@ -528,20 +534,26 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   mode={measurementMode}
                 />
                 
-                {/* Professional CAD-style camera controls with dynamic pivot */}
-                <CameraControls
+                {/* SolidWorks-style orbit controls */}
+                <OrbitControls
                   ref={controlsRef}
                   makeDefault
-                  smoothTime={0.15}
+                  enableDamping={true}
+                  dampingFactor={0.15}
                   minDistance={viewportSettings.minDistance}
                   maxDistance={viewportSettings.maxDistance}
-                  dollySpeed={1.2}
-                  truckSpeed={1.0}
+                  rotateSpeed={1.0}
+                  panSpeed={1.0}
+                  zoomSpeed={1.2}
+                  screenSpacePanning={true}
+                  minAzimuthAngle={-Infinity}
+                  maxAzimuthAngle={Infinity}
+                  enableZoom={true}
+                  zoomToCursor={true}
                   mouseButtons={{
-                    left: 1,    // CameraControls.ACTION.ROTATE
-                    middle: 8,  // CameraControls.ACTION.TRUCK (pan)
-                    right: 0,   // CameraControls.ACTION.NONE
-                    wheel: 16,  // CameraControls.ACTION.DOLLY (zoom)
+                    LEFT: THREE.MOUSE.ROTATE,
+                    MIDDLE: THREE.MOUSE.DOLLY,
+                    RIGHT: THREE.MOUSE.PAN
                   }}
                 />
               </Suspense>
