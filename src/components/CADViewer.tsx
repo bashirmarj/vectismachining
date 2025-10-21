@@ -26,13 +26,29 @@ interface MeshData {
 }
 
 interface CADViewerProps {
-  meshData: MeshData;
-  boundingBox: BoundingBox;
+  meshData?: MeshData;
+  boundingBox?: BoundingBox;
   showEdges?: boolean;
   showHiddenEdges?: boolean;
   displayStyle?: 'solid' | 'wireframe' | 'translucent';
   topologyColors?: boolean;
+  // Legacy props for backward compatibility
+  file?: File;
+  fileName?: string;
+  meshId?: string;
+  fileUrl?: string;
+  detectedFeatures?: any;
 }
+
+// Default bounding box for when none is provided
+const DEFAULT_BOUNDING_BOX: BoundingBox = {
+  min: [-50, -50, -50],
+  max: [50, 50, 50],
+  center: [0, 0, 0],
+  width: 100,
+  height: 100,
+  depth: 100
+};
 
 export function CADViewer({ 
   meshData, 
@@ -40,11 +56,14 @@ export function CADViewer({
   showEdges = true,
   showHiddenEdges = false,
   displayStyle = 'solid',
-  topologyColors = true
+  topologyColors = false
 }: CADViewerProps) {
+  // Use provided boundingBox or default
+  const bbox = boundingBox || DEFAULT_BOUNDING_BOX;
+  
   // State for controlling view orientation and camera
   const [viewMode, setViewMode] = useState<'perspective' | 'front' | 'back' | 'top' | 'bottom' | 'left' | 'right'>('perspective');
-  const [rotationTarget, setRotationTarget] = useState<[number, number, number]>(boundingBox.center);
+  const [rotationTarget, setRotationTarget] = useState<[number, number, number]>(bbox.center);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
   // Section plane controls
@@ -61,8 +80,8 @@ export function CADViewer({
 
   // Calculate viewport settings based on bounding box
   const viewportSettings = {
-    minDistance: Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.5,
-    maxDistance: Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 5
+    minDistance: Math.max(bbox.width, bbox.height, bbox.depth) * 0.5,
+    maxDistance: Math.max(bbox.width, bbox.height, bbox.depth) * 5
   };
 
   // Handle cursor-based rotation center WITHOUT camera repositioning
@@ -113,9 +132,9 @@ export function CADViewer({
   const resetCamera = () => {
     if (!cameraRef.current || !controlsRef.current) return;
     
-    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+    const maxDim = Math.max(bbox.width, bbox.height, bbox.depth);
     const distance = maxDim * 2.5;
-    const target = new THREE.Vector3(...boundingBox.center);
+    const target = new THREE.Vector3(...bbox.center);
     
     cameraRef.current.position.set(
       target.x + distance * 0.5,
@@ -123,7 +142,7 @@ export function CADViewer({
       target.z + distance * 0.7
     );
     
-    setRotationTarget(boundingBox.center);
+    setRotationTarget(bbox.center);
     controlsRef.current.target.copy(target);
     controlsRef.current.update();
   };
@@ -131,9 +150,9 @@ export function CADViewer({
   const setIsometricView = () => {
     if (!cameraRef.current || !controlsRef.current) return;
     
-    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+    const maxDim = Math.max(bbox.width, bbox.height, bbox.depth);
     const distance = maxDim * 2;
-    const target = new THREE.Vector3(...boundingBox.center);
+    const target = new THREE.Vector3(...bbox.center);
     
     const phi = Math.PI / 4;
     const theta = Math.asin(Math.tan(Math.PI / 6));
@@ -144,7 +163,7 @@ export function CADViewer({
       target.z + distance * Math.cos(phi) * Math.cos(theta)
     );
     
-    setRotationTarget(boundingBox.center);
+    setRotationTarget(bbox.center);
     controlsRef.current.target.copy(target);
     controlsRef.current.update();
   };
@@ -152,9 +171,9 @@ export function CADViewer({
   const orientMainCameraToDirection = (direction: THREE.Vector3) => {
     if (!cameraRef.current || !controlsRef.current) return;
     
-    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+    const maxDim = Math.max(bbox.width, bbox.height, bbox.depth);
     const distance = maxDim * 2.5;
-    const target = new THREE.Vector3(...boundingBox.center);
+    const target = new THREE.Vector3(...bbox.center);
     
     const cameraDirection = direction.clone().normalize().multiplyScalar(-1);
     const newPosition = target.clone().add(cameraDirection.multiplyScalar(distance));
@@ -180,7 +199,7 @@ export function CADViewer({
       cameraRef.current.position.lerpVectors(startPos, newPosition, easedK);
       cameraRef.current.quaternion.slerpQuaternions(startQuat, targetQuat, easedK);
       
-      setRotationTarget(boundingBox.center);
+      setRotationTarget(bbox.center);
       controlsRef.current.target.copy(target);
       controlsRef.current.update();
       
@@ -314,9 +333,9 @@ export function CADViewer({
           shadows
           camera={{
             position: [
-              boundingBox.center[0] + boundingBox.width,
-              boundingBox.center[1] + boundingBox.height,
-              boundingBox.center[2] + boundingBox.depth * 1.5
+              bbox.center[0] + bbox.width,
+              bbox.center[1] + bbox.height,
+              bbox.center[2] + bbox.depth * 1.5
             ],
             fov: 50,
             near: 0.1,
@@ -345,37 +364,39 @@ export function CADViewer({
           <hemisphereLight intensity={0.4} groundColor="#444444" />
 
           {/* Main mesh */}
-          <group ref={meshRef}>
-            <MeshModel
-              meshData={meshData}
-              sectionPlane={sectionPlane}
-              sectionPosition={sectionPosition}
-              showEdges={showEdges}
-              showHiddenEdges={showHiddenEdges}
-              displayStyle={displayStyle}
-              topologyColors={topologyColors}
-            />
-          </group>
+          {meshData && (
+            <group ref={meshRef}>
+              <MeshModel
+                meshData={meshData}
+                sectionPlane={sectionPlane}
+                sectionPosition={sectionPosition}
+                showEdges={showEdges}
+                showHiddenEdges={showHiddenEdges}
+                displayStyle={displayStyle}
+                topologyColors={topologyColors}
+              />
+            </group>
+          )}
 
           {/* Ground plane */}
           <mesh 
             rotation={[-Math.PI / 2, 0, 0]} 
-            position={[boundingBox.center[0], boundingBox.min[1] - 0.01, boundingBox.center[2]]}
+            position={[bbox.center[0], bbox.min[1] - 0.01, bbox.center[2]]}
             receiveShadow
           >
-            <planeGeometry args={[boundingBox.width * 3, boundingBox.depth * 3]} />
+            <planeGeometry args={[bbox.width * 3, bbox.depth * 3]} />
             <shadowMaterial opacity={0.15} />
           </mesh>
 
           {/* Grid helper */}
           <gridHelper
             args={[
-              Math.max(boundingBox.width, boundingBox.depth) * 2,
+              Math.max(bbox.width, bbox.depth) * 2,
               20,
               '#cccccc',
               '#e0e0e0'
             ]}
-            position={[boundingBox.center[0], boundingBox.min[1], boundingBox.center[2]]}
+            position={[bbox.center[0], bbox.min[1], bbox.center[2]]}
           />
 
           {/* SolidWorks-style orbit controls with cursor rotation */}
@@ -412,11 +433,13 @@ export function CADViewer({
       {/* Info Panel */}
       <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-3 text-xs space-y-1">
         <div className="font-semibold text-gray-700">Model Info</div>
+        {meshData && (
+          <div className="text-gray-600">
+            Triangles: {meshData.triangle_count.toLocaleString()}
+          </div>
+        )}
         <div className="text-gray-600">
-          Triangles: {meshData.triangle_count.toLocaleString()}
-        </div>
-        <div className="text-gray-600">
-          Size: {boundingBox.width.toFixed(1)} × {boundingBox.height.toFixed(1)} × {boundingBox.depth.toFixed(1)} cm
+          Size: {bbox.width.toFixed(1)} × {bbox.height.toFixed(1)} × {bbox.depth.toFixed(1)} cm
         </div>
         <div className="text-gray-600">
           View: {viewMode.charAt(0).toUpperCase() + viewMode.slice(1)}
