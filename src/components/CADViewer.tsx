@@ -44,8 +44,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
   const showTopologyColors = true;
   
-  // NEW: Rotation target state
-  const [rotationTarget, setRotationTarget] = useState<[number, number, number]>([0, 0, 0]);
+  // Track rotation state to prevent pivot updates during drag
+  const [isRotating, setIsRotating] = useState(false);
   
   // Refs
   const controlsRef = useRef<any>(null);
@@ -167,10 +167,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     };
   }, [boundingBox]);
   
-  // Initialize rotation target to part center (with safety check)
+  // Initialize controls target to part center (with safety check)
   useEffect(() => {
     if (boundingBox && boundingBox.center && Array.isArray(boundingBox.center) && controlsRef.current) {
-      setRotationTarget(boundingBox.center);
       controlsRef.current.target.set(...boundingBox.center);
       controlsRef.current.update();
     }
@@ -205,18 +204,17 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     }
   };
   
-  // NEW: Handle mouse down - update pivot without ANY view changes
+  // Handle canvas click - update pivot BEFORE rotation starts
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    // Only update rotation target on left click (button 0)
-    if (event.button !== 0) return;
+    if (event.button !== 0) return; // Only left click
+    if (isRotating) return; // Don't update pivot during active rotation
     if (!canvasRef.current || !cameraRef.current || !meshRef.current || !controlsRef.current) return;
     
-    // Get canvas bounds for coordinate calculation
+    // Raycast to find click point
     const rect = canvasRef.current.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     
-    // Perform raycasting
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(x, y), cameraRef.current);
     
@@ -224,21 +222,23 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     
     if (intersects.length > 0) {
       const newTarget = intersects[0].point;
-      const oldTarget = controlsRef.current.target.clone();
-      const cameraPos = cameraRef.current.position.clone();
       
-      // Calculate offset: how far the target moved
-      const targetOffset = new THREE.Vector3().subVectors(newTarget, oldTarget);
-      
-      // Move camera by the EXACT same offset to keep visual frame identical
-      cameraRef.current.position.add(targetOffset);
-      
-      // Update the target directly
+      // Simply update the target - no camera compensation needed
       controlsRef.current.target.copy(newTarget);
+      controlsRef.current.update();
       
-      // CRITICAL: Do NOT call .update() - it causes recentering!
-      // The changes will be applied naturally on the next animation frame
+      console.log('✅ Pivot updated to:', newTarget);
     }
+  };
+  
+  // Track mouse state for rotation
+  const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    handleCanvasMouseDown(event);
+    setIsRotating(true);
+  };
+  
+  const handleMouseUp = () => {
+    setIsRotating(false);
   };
   
   const handleFitView = () => {
@@ -423,7 +423,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
             ref={canvasRef}
             className="relative h-full" 
             style={{ background: '#f8f9fa' }}
-            onMouseDown={handleCanvasMouseDown}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
           >
             
             <button
