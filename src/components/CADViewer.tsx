@@ -205,7 +205,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     }
   };
   
-  // NEW: Handle mouse down - update pivot directly without re-render
+  // NEW: Handle mouse down - update pivot with perfect compensation
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     // Only update rotation target on left click (button 0)
     if (event.button !== 0) return;
@@ -224,13 +224,27 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     
     if (intersects.length > 0) {
       const newTarget = intersects[0].point;
+      const oldTarget = controlsRef.current.target.clone();
+      const cameraPos = cameraRef.current.position.clone();
       
-      // Update target directly in OrbitControls without React state
-      // This prevents re-render and keeps the view perfectly still
+      // Calculate offset: how far the target moved
+      const targetOffset = new THREE.Vector3().subVectors(newTarget, oldTarget);
+      
+      // Temporarily disable damping to prevent smooth animation
+      const wasDamping = controlsRef.current.enableDamping;
+      controlsRef.current.enableDamping = false;
+      
+      // Move camera by the EXACT same offset to keep visual frame identical
+      cameraRef.current.position.add(targetOffset);
+      
+      // Update the target
       controlsRef.current.target.copy(newTarget);
       
-      // Do NOT call setRotationTarget() to avoid re-render
-      // Do NOT call controlsRef.current.update()
+      // Force immediate update without animation
+      controlsRef.current.update();
+      
+      // Re-enable damping
+      controlsRef.current.enableDamping = wasDamping;
     }
   };
   
