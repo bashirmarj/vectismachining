@@ -211,12 +211,16 @@ export function CADViewer({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !cameraRef.current || !meshRef.current) {
+      console.log("⏳ Waiting for refs...");
       return;
     }
+
+    console.log("✅ Rotation handlers attached");
 
     const raycaster = new THREE.Raycaster();
 
     const handleMouseDown = (event: MouseEvent) => {
+      console.log("🖱️ CLICK detected");
       if (event.button !== 0) return; // Only left click
 
       // Calculate rotation pivot from cursor position using raycasting
@@ -232,14 +236,17 @@ export function CADViewer({
       if (intersects.length > 0) {
         // Use clicked point as rotation pivot
         rotationPivotRef.current = intersects[0].point.clone();
+        console.log("✅ Pivot set, ready to rotate");
       } else {
         // Fallback: use current view direction
         const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraRef.current!.quaternion);
         const distance = cameraRef.current!.position.length();
         rotationPivotRef.current = cameraRef.current!.position.clone().add(direction.multiplyScalar(distance * 0.5));
+        console.log("✅ Fallback pivot set");
       }
 
       isCustomRotatingRef.current = true;
+      console.log("🎬 Rotation mode ACTIVE");
       lastMouseRef.current = { x: event.clientX, y: event.clientY };
       canvas.style.cursor = "grabbing";
 
@@ -249,8 +256,16 @@ export function CADViewer({
 
     const handleMouseMove = (event: MouseEvent) => {
       if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current) {
+        if (isCustomRotatingRef.current) {
+          console.log("❌ Missing refs:", {
+            pivot: !!rotationPivotRef.current,
+            camera: !!cameraRef.current,
+          });
+        }
         return;
       }
+
+      console.log("🔄 Moving...");
 
       const deltaX = event.clientX - lastMouseRef.current.x;
       const deltaY = event.clientY - lastMouseRef.current.y;
