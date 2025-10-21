@@ -210,7 +210,12 @@ export function CADViewer({
   // Custom cursor-based rotation (SolidWorks style) - OrbitControls never handles rotation
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !cameraRef.current || !meshRef.current) return;
+    if (!canvas || !cameraRef.current || !meshRef.current) {
+      console.log("⏳ Waiting for canvas/camera/mesh to be ready...");
+      return;
+    }
+
+    console.log("✅ Custom rotation handlers attached!");
 
     const raycaster = new THREE.Raycaster();
 
