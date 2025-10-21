@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { Camera, Home, Box, ZoomIn, ZoomOut, RotateCw, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
-import { MeshModel } from './MeshModel';
+import { MeshModel } from './cad-viewer/MeshModel';
 
 interface BoundingBox {
   min: [number, number, number];
@@ -467,3 +467,4 @@ function OrientationCube({
     </Canvas>
   );
 }
+
