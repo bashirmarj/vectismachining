@@ -291,11 +291,13 @@ export function CADViewer({
       const combinedRotation = new THREE.Quaternion();
       combinedRotation.multiplyQuaternions(horizontalRotation, verticalRotation);
 
-      // Rotate camera around pivot
+      // Rotate camera POSITION around pivot
       const offset = cameraRef.current.position.clone().sub(rotationPivotRef.current);
       offset.applyQuaternion(combinedRotation);
       cameraRef.current.position.copy(rotationPivotRef.current).add(offset);
-      cameraRef.current.lookAt(rotationPivotRef.current);
+
+      // Rotate camera ORIENTATION by the same amount (prevents lookAt jump!)
+      cameraRef.current.quaternion.multiplyQuaternions(combinedRotation, cameraRef.current.quaternion);
 
       // Keep OrbitControls target synced (prevents zoom-in effect)
       if (controlsRef.current) {
