@@ -111,9 +111,23 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   
   const activeMeshData = propMeshData || fetchedMeshData;
   
+  // Debug log for mesh data state
+  useEffect(() => {
+    console.log('🔍 Mesh data status:', {
+      hasPropMeshData: !!propMeshData,
+      hasFetchedMeshData: !!fetchedMeshData,
+      hasActiveMeshData: !!activeMeshData,
+      verticesLength: activeMeshData?.vertices?.length ?? 0
+    });
+  }, [propMeshData, fetchedMeshData, activeMeshData]);
+  
   // Calculate bounding box
   const boundingBox = useMemo(() => {
-    if (!activeMeshData || !activeMeshData.vertices || activeMeshData.vertices.length === 0) {
+    // Defensive check - ensure activeMeshData and vertices exist
+    if (!activeMeshData || 
+        !activeMeshData.vertices || 
+        !Array.isArray(activeMeshData.vertices) ||
+        activeMeshData.vertices.length === 0) {
       return { width: 100, height: 100, depth: 100, center: [0, 0, 0] as [number, number, number] };
     }
     
@@ -155,14 +169,20 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     };
   }, [boundingBox]);
   
-  // Initialize rotation target to part center
+  // Initialize rotation target to part center (with safety check)
   useEffect(() => {
-    if (boundingBox) {
+    if (boundingBox && boundingBox.center && Array.isArray(boundingBox.center)) {
       setRotationTarget(boundingBox.center);
     }
   }, [boundingBox]);
   
-  const hasValidModel = activeMeshData && activeMeshData.vertices && activeMeshData.vertices.length > 0;
+  // Determine if we have valid 3D data to display
+  const hasValidModel = Boolean(
+    activeMeshData && 
+    activeMeshData.vertices && 
+    Array.isArray(activeMeshData.vertices) &&
+    activeMeshData.vertices.length > 0
+  );
   
   const objectUrl = useMemo(() => {
     if (file) {
@@ -204,13 +224,24 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   
   // SolidWorks-style: Dynamic rotation center based on cursor position
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!cameraRef.current || !meshRef.current || !canvasRef.current) return;
+    // Safety checks for all required refs
+    if (!cameraRef.current || !meshRef.current || !canvasRef.current || !controlsRef.current) {
+      console.warn('⚠️ Refs not ready for rotation center update');
+      return;
+    }
     
     // Only update target on left mouse button (rotation)
     if (event.button !== 0) return;
     
     // Calculate mouse position in normalized device coordinates
     const rect = canvasRef.current.getBoundingClientRect();
+    
+    // Safety check for valid rect dimensions
+    if (!rect || rect.width === 0 || rect.height === 0) {
+      console.warn('⚠️ Invalid canvas dimensions');
+      return;
+    }
+    
     mouse.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     
@@ -219,6 +250,12 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     
     // Find intersection with mesh
     const intersects = raycaster.current.intersectObject(meshRef.current, true);
+    
+    // Safety check for valid intersects array
+    if (!Array.isArray(intersects)) {
+      console.warn('⚠️ Invalid intersects result');
+      return;
+    }
     
     if (intersects.length > 0) {
       // Clicked on model - rotate around that point
@@ -481,15 +518,17 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                 />
                 
                 <group ref={meshRef}>
-                  <MeshModel
-                    meshData={activeMeshData!}
-                    sectionPlane={sectionPlane}
-                    sectionPosition={sectionPosition}
-                    showEdges={showEdges}
-                    showHiddenEdges={showHiddenEdges}
-                    displayStyle={displayStyle}
-                    topologyColors={showTopologyColors}
-                  />
+                  {activeMeshData && (
+                    <MeshModel
+                      meshData={activeMeshData}
+                      sectionPlane={sectionPlane}
+                      sectionPosition={sectionPosition}
+                      showEdges={showEdges}
+                      showHiddenEdges={showHiddenEdges}
+                      displayStyle={displayStyle}
+                      topologyColors={showTopologyColors}
+                    />
+                  )}
                 </group>
                 
                 <mesh
