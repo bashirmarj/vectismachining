@@ -44,8 +44,10 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
   const showTopologyColors = true;
   
-  // NEW: Rotation target state
+  // NEW: Rotation target state with pending update
   const [rotationTarget, setRotationTarget] = useState<[number, number, number]>([0, 0, 0]);
+  const pendingRotationTarget = useRef<THREE.Vector3 | null>(null);
+  const isRotating = useRef(false);
   
   // Refs
   const controlsRef = useRef<any>(null);
@@ -203,11 +205,11 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     }
   };
   
-  // NEW: Handle mouse down to set rotation pivot point
+  // NEW: Handle mouse down to prepare rotation pivot point
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     // Only update rotation target on left click (button 0)
     if (event.button !== 0) return;
-    if (!canvasRef.current || !cameraRef.current || !meshRef.current || !controlsRef.current) return;
+    if (!canvasRef.current || !cameraRef.current || !meshRef.current) return;
     
     // Get canvas bounds for coordinate calculation
     const rect = canvasRef.current.getBoundingClientRect();
@@ -221,23 +223,49 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     const intersects = raycaster.intersectObject(meshRef.current, true);
     
     if (intersects.length > 0) {
-      const newTarget = intersects[0].point;
-      const oldTarget = new THREE.Vector3().copy(controlsRef.current.target);
-      const cameraPos = new THREE.Vector3().copy(cameraRef.current.position);
-      
-      // Calculate the vector from old target to camera
-      const targetToCameraVector = new THREE.Vector3().subVectors(cameraPos, oldTarget);
-      
-      // Position the camera at the same relative position from the new target
-      const newCameraPos = new THREE.Vector3().addVectors(newTarget, targetToCameraVector);
-      
-      // Update both target and camera position to maintain visual framing
-      setRotationTarget([newTarget.x, newTarget.y, newTarget.z]);
-      cameraRef.current.position.copy(newCameraPos);
-      controlsRef.current.target.copy(newTarget);
-      controlsRef.current.update();
+      // Store the point but don't apply it yet - wait for drag to start
+      pendingRotationTarget.current = intersects[0].point.clone();
+      isRotating.current = false;
     }
   };
+  
+  // Apply rotation target when drag starts with camera compensation
+  useEffect(() => {
+    const handleMouseMove = () => {
+      if (pendingRotationTarget.current && !isRotating.current && controlsRef.current && cameraRef.current) {
+        // User started dragging - apply the new rotation target with zero visual movement
+        const newTarget = pendingRotationTarget.current;
+        const oldTarget = new THREE.Vector3(...rotationTarget);
+        const cameraPos = cameraRef.current.position.clone();
+        
+        // Calculate how to move the camera to compensate for target change
+        const targetDelta = new THREE.Vector3().subVectors(newTarget, oldTarget);
+        const newCameraPos = cameraPos.clone().add(targetDelta);
+        
+        // Apply both changes atomically
+        cameraRef.current.position.copy(newCameraPos);
+        controlsRef.current.target.copy(newTarget);
+        setRotationTarget([newTarget.x, newTarget.y, newTarget.z]);
+        
+        // Don't call update - let the next frame handle it naturally
+        isRotating.current = true;
+      }
+    };
+    
+    const handleMouseUp = () => {
+      // Reset state when mouse is released
+      pendingRotationTarget.current = null;
+      isRotating.current = false;
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [rotationTarget]);
   
   const handleFitView = () => {
     if (controlsRef.current && cameraRef.current) {
