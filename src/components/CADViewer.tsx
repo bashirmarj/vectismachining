@@ -225,9 +225,9 @@ export function CADViewer({
 
       if (event.button !== 0) return; // Only left click
 
-      console.log("📷 Camera BEFORE click:", {
+      console.log("📷 Camera state:", {
         position: cameraRef.current!.position.clone(),
-        target: controlsRef.current?.target.clone(),
+        hasMesh: !!meshRef.current,
       });
 
       // Calculate rotation pivot from cursor position using raycasting
@@ -239,6 +239,8 @@ export function CADViewer({
 
       raycaster.setFromCamera(mouse, cameraRef.current!);
       const intersects = raycaster.intersectObject(meshRef.current!, true);
+
+      console.log("🎯 Raycasting results:", intersects.length, "intersections");
 
       if (intersects.length > 0) {
         // Use clicked point as rotation pivot
@@ -270,10 +272,7 @@ export function CADViewer({
         console.log("📐 Rotation axes locked (fallback):", rotationAxesRef.current);
       }
 
-      console.log("📷 Camera AFTER click:", {
-        position: cameraRef.current!.position.clone(),
-        target: controlsRef.current?.target.clone(),
-      });
+      console.log("✅ Ready to rotate - all refs set");
 
       isCustomRotatingRef.current = true;
       lastMouseRef.current = { x: event.clientX, y: event.clientY };
@@ -284,8 +283,17 @@ export function CADViewer({
     };
 
     const handleMouseMove = (event: MouseEvent) => {
-      if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current || !rotationAxesRef.current)
+      if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current || !rotationAxesRef.current) {
+        if (isCustomRotatingRef.current) {
+          console.log("⚠️ Missing refs during rotation:", {
+            hasRotating: !!isCustomRotatingRef.current,
+            hasPivot: !!rotationPivotRef.current,
+            hasCamera: !!cameraRef.current,
+            hasAxes: !!rotationAxesRef.current,
+          });
+        }
         return;
+      }
 
       const deltaX = event.clientX - lastMouseRef.current.x;
       const deltaY = event.clientY - lastMouseRef.current.y;
@@ -294,6 +302,8 @@ export function CADViewer({
 
       // Skip tiny movements
       if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
+
+      console.log("🔄 Rotating with delta:", { deltaX, deltaY });
 
       // Get offset from pivot to camera
       const offset = cameraRef.current.position.clone().sub(rotationPivotRef.current);
