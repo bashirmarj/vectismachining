@@ -1,3 +1,20 @@
+onsole.log('🚀 CADViewer LOADED - NEW BUILD');
+```
+
+Save the file.
+
+### Step 2: Wait for Build Notification
+Look for **"Building..."** or **"Deploying..."** notification in Lovable. 
+
+**If you DON'T see this notification**, Lovable isn't detecting your changes. Try:
+1. Click the **"Refresh"** button in Lovable
+2. Or use the **"Rebuild"** button if available
+3. Or close and reopen the preview
+
+### Step 3: Check Console
+After rebuild completes, refresh your browser and check console. You should now see:
+```
+🚀 CADViewer LOADED - NEW BUILD
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { Suspense, useMemo, useEffect, useState, useRef } from 'react';
