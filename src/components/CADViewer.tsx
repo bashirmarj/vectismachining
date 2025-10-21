@@ -229,35 +229,16 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     }
   };
   
-  // Apply rotation target when drag starts with perfect camera compensation
+  // Apply rotation target when drag starts - no camera compensation needed
   useEffect(() => {
     const handleMouseMove = () => {
-      if (pendingRotationTarget.current && !isRotating.current && controlsRef.current && cameraRef.current) {
+      if (pendingRotationTarget.current && !isRotating.current && controlsRef.current) {
         const newTarget = pendingRotationTarget.current;
-        const oldTarget = new THREE.Vector3(...rotationTarget);
         
-        // Calculate the offset between old and new target
-        const offset = new THREE.Vector3().subVectors(newTarget, oldTarget);
-        
-        // Temporarily disable controls to prevent interference
-        controlsRef.current.enabled = false;
-        
-        // Move camera by the same offset to maintain exact framing
-        cameraRef.current.position.add(offset);
-        
-        // Update target
+        // Simply update the target - OrbitControls will use it for rotation pivot
+        // WITHOUT recentering the view because we don't call .update()
         controlsRef.current.target.copy(newTarget);
         setRotationTarget([newTarget.x, newTarget.y, newTarget.z]);
-        
-        // Force immediate update without animation
-        controlsRef.current.update();
-        
-        // Re-enable after a frame to let changes settle
-        requestAnimationFrame(() => {
-          if (controlsRef.current) {
-            controlsRef.current.enabled = true;
-          }
-        });
         
         isRotating.current = true;
       }
