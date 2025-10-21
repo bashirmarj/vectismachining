@@ -207,7 +207,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     // Only update rotation target on left click (button 0)
     if (event.button !== 0) return;
-    if (!canvasRef.current || !cameraRef.current || !meshRef.current) return;
+    if (!canvasRef.current || !cameraRef.current || !meshRef.current || !controlsRef.current) return;
     
     // Get canvas bounds for coordinate calculation
     const rect = canvasRef.current.getBoundingClientRect();
@@ -221,16 +221,23 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     const intersects = raycaster.intersectObject(meshRef.current, true);
     
     if (intersects.length > 0) {
-      // Set the rotation target to the intersection point
-      const point = intersects[0].point;
-      setRotationTarget([point.x, point.y, point.z]);
+      const newTarget = intersects[0].point;
+      const oldTarget = new THREE.Vector3().copy(controlsRef.current.target);
+      const cameraPos = new THREE.Vector3().copy(cameraRef.current.position);
       
-      // Update controls target WITHOUT snapping the view
-      // The new target will be used on the next rotation drag
-      if (controlsRef.current) {
-        controlsRef.current.target.set(point.x, point.y, point.z);
-        // Removed .update() to prevent camera snap - rotation will use new pivot naturally
-      }
+      // Calculate the offset to maintain visual framing
+      const targetDelta = new THREE.Vector3().subVectors(newTarget, oldTarget);
+      
+      // Move camera by the same delta to keep the part in the same screen position
+      const newCameraPos = cameraPos.add(targetDelta);
+      
+      // Update both target and camera position
+      setRotationTarget([newTarget.x, newTarget.y, newTarget.z]);
+      controlsRef.current.target.copy(newTarget);
+      cameraRef.current.position.copy(newCameraPos);
+      
+      // Force update to apply changes immediately
+      controlsRef.current.update();
     }
   };
   
