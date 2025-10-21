@@ -300,6 +300,7 @@ export function CADViewer({
 
       // Rotate camera ORIENTATION by same amount (keeps part visually still)
       cameraRef.current.quaternion.premultiply(combinedRotation);
+      cameraRef.current.quaternion.normalize(); // Prevent accumulation errors and flipping
 
       event.preventDefault();
       event.stopPropagation();
