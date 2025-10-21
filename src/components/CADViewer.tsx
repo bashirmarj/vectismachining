@@ -308,42 +308,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     };
   }, []);
   
-  // NEW: Handle mouse down - update pivot without ANY view changes
-  const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    // Only update rotation target on left click (button 0)
-    if (event.button !== 0) return;
-    if (!canvasRef.current || !cameraRef.current || !meshRef.current || !controlsRef.current) return;
-    
-    // Get canvas bounds for coordinate calculation
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    
-    // Perform raycasting
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(new THREE.Vector2(x, y), cameraRef.current);
-    
-    const intersects = raycaster.intersectObject(meshRef.current, true);
-    
-    if (intersects.length > 0) {
-      const newTarget = intersects[0].point;
-      const oldTarget = controlsRef.current.target.clone();
-      const cameraPos = cameraRef.current.position.clone();
-      
-      // Calculate offset: how far the target moved
-      const targetOffset = new THREE.Vector3().subVectors(newTarget, oldTarget);
-      
-      // Move camera by the EXACT same offset to keep visual frame identical
-      cameraRef.current.position.add(targetOffset);
-      
-      // Update the target directly
-      controlsRef.current.target.copy(newTarget);
-      
-      // CRITICAL: Do NOT call .update() - it causes recentering!
-      // The changes will be applied naturally on the next animation frame
-    }
-  };
-  
   const handleFitView = () => {
     if (controlsRef.current && cameraRef.current) {
       const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
@@ -527,18 +491,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
             ref={canvasRef}
             className="relative h-full" 
             style={{ background: '#f8f9fa' }}
-            onMouseDown={(e) => {
-              // BLOCK all left clicks at React level FIRST
-              if (e.button === 0) {
-                e.preventDefault();
-                e.stopPropagation();
-              }
-            }}
-            onClickCapture={(e) => {
-              // BLOCK all clicks at capture phase
-              e.preventDefault();
-              e.stopPropagation();
-            }}
           >
             
             <button
@@ -649,7 +601,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   mode={measurementMode}
                 />
                 
-                {/* TEMPORARILY DISABLED - Testing if OrbitControls causes jump
+                {/* OrbitControls disabled - custom rotation handles all left-click interactions */}
                 <OrbitControls
                   ref={controlsRef}
                   makeDefault={false}
@@ -669,7 +621,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                     RIGHT: THREE.MOUSE.PAN
                   }}
                 />
-                */}
               </Suspense>
             </Canvas>
           </div>
