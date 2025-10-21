@@ -210,18 +210,19 @@ export function CADViewer({
   // Custom cursor-based rotation (SolidWorks style) - OrbitControls never handles rotation
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !cameraRef.current || !meshRef.current) {
-      console.log("⏳ Waiting for refs...");
-      return;
-    }
-
-    console.log("✅ Rotation handlers attached");
+    if (!canvas || !cameraRef.current || !meshRef.current) return;
 
     const raycaster = new THREE.Raycaster();
 
     const handleMouseDown = (event: MouseEvent) => {
-      console.log("🖱️ CLICK detected");
+      console.log("🖱️ MOUSEDOWN CAPTURED", event.button, event.target);
+
       if (event.button !== 0) return; // Only left click
+
+      console.log("📷 Camera BEFORE click:", {
+        position: cameraRef.current!.position.clone(),
+        target: controlsRef.current?.target.clone(),
+      });
 
       // Calculate rotation pivot from cursor position using raycasting
       const rect = canvas.getBoundingClientRect();
@@ -236,131 +237,83 @@ export function CADViewer({
       if (intersects.length > 0) {
         // Use clicked point as rotation pivot
         rotationPivotRef.current = intersects[0].point.clone();
-        console.log("✅ Pivot set, ready to rotate");
+        console.log("🎯 Pivot set to:", rotationPivotRef.current);
       } else {
         // Fallback: use current view direction
         const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraRef.current!.quaternion);
         const distance = cameraRef.current!.position.length();
         rotationPivotRef.current = cameraRef.current!.position.clone().add(direction.multiplyScalar(distance * 0.5));
-        console.log("✅ Fallback pivot set");
+        console.log("🎯 Pivot set to fallback:", rotationPivotRef.current);
       }
 
+      console.log("📷 Camera AFTER click:", {
+        position: cameraRef.current!.position.clone(),
+        target: controlsRef.current?.target.clone(),
+      });
+
       isCustomRotatingRef.current = true;
-      console.log("🎬 Rotation mode ACTIVE");
       lastMouseRef.current = { x: event.clientX, y: event.clientY };
       canvas.style.cursor = "grabbing";
 
-      // Capture pointer to ensure we get all move events
-      if ((event as any).pointerId !== undefined) {
-        canvas.setPointerCapture((event as any).pointerId);
-        console.log("📍 Pointer captured");
-      }
-
-      // DON'T preventDefault on mousedown - it blocks subsequent mousemove
-      // event.preventDefault();
+      event.preventDefault();
       event.stopPropagation();
     };
 
     const handleMouseMove = (event: MouseEvent) => {
-      console.log("👋 MouseMove event fired, rotating:", isCustomRotatingRef.current);
-
-      if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current) {
-        if (isCustomRotatingRef.current) {
-          console.log("❌ Missing refs:", {
-            pivot: !!rotationPivotRef.current,
-            camera: !!cameraRef.current,
-          });
-        }
-        return;
-      }
-
-      console.log("🔄 Actually rotating now...");
+      if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current) return;
 
       const deltaX = event.clientX - lastMouseRef.current.x;
       const deltaY = event.clientY - lastMouseRef.current.y;
 
       lastMouseRef.current = { x: event.clientX, y: event.clientY };
 
-      // Skip tiny movements (reduced threshold for better responsiveness)
-      if (Math.abs(deltaX) < 0.1 && Math.abs(deltaY) < 0.1) return;
-
-      // Get offset from pivot to camera
-      const offset = cameraRef.current.position.clone().sub(rotationPivotRef.current);
-      const radius = offset.length();
+      // Skip tiny movements
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
 
       // Rotation speed
       const rotationSpeed = 0.005;
 
-      // CRITICAL: Calculate rotation axes EVERY FRAME based on current camera orientation
-      // This prevents gimbal lock and allows smooth 360° rotation
-      const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRef.current.quaternion);
-      const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current.quaternion);
+      // Horizontal rotation around world Y axis
+      const horizontalRotation = new THREE.Quaternion();
+      horizontalRotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -deltaX * rotationSpeed);
 
-      // Rotate around CURRENT screen-space axes
-      // Horizontal drag = rotate around camera UP axis
-      // Vertical drag = rotate around camera RIGHT axis
-      const horizontalAngle = -deltaX * rotationSpeed;
-      const verticalAngle = -deltaY * rotationSpeed;
+      // Vertical rotation around camera's right vector
+      const verticalRotation = new THREE.Quaternion();
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current.quaternion);
+      verticalRotation.setFromAxisAngle(right, -deltaY * rotationSpeed);
 
-      // Apply horizontal rotation around current screen UP axis
-      offset.applyAxisAngle(cameraUp, horizontalAngle);
+      // Combine rotations
+      const combinedRotation = new THREE.Quaternion();
+      combinedRotation.multiplyQuaternions(horizontalRotation, verticalRotation);
 
-      // Apply vertical rotation around current screen RIGHT axis
-      offset.applyAxisAngle(cameraRight, verticalAngle);
-
-      // Normalize to maintain constant distance
-      offset.normalize().multiplyScalar(radius);
-
-      // Update camera position
+      // Rotate camera around pivot
+      const offset = cameraRef.current.position.clone().sub(rotationPivotRef.current);
+      offset.applyQuaternion(combinedRotation);
       cameraRef.current.position.copy(rotationPivotRef.current).add(offset);
-
-      // Make camera look at pivot - this is SAFE because we control exact position
-      // and we're NOT updating OrbitControls target during rotation
       cameraRef.current.lookAt(rotationPivotRef.current);
 
-      // Only preventDefault during active rotation to allow normal mouse movement otherwise
-      if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
-        event.preventDefault();
-      }
+      event.preventDefault();
       event.stopPropagation();
     };
 
     const handleMouseUp = () => {
+      console.log("🖱️ MOUSEUP");
       isCustomRotatingRef.current = false;
       rotationPivotRef.current = null;
       if (canvas) canvas.style.cursor = "grab";
-
-      console.log("🛑 Rotation stopped");
     };
 
     // Capture phase to intercept BEFORE OrbitControls
-    // Use both mouse and pointer events for maximum compatibility
     canvas.addEventListener("mousedown", handleMouseDown, { capture: true });
-    canvas.addEventListener("pointerdown", handleMouseDown as any, { capture: true });
-    canvas.addEventListener("mousemove", handleMouseMove, { capture: true });
-    canvas.addEventListener("pointermove", handleMouseMove as any, { capture: true });
     window.addEventListener("mousemove", handleMouseMove, { capture: true });
-    window.addEventListener("pointermove", handleMouseMove as any, { capture: true });
     window.addEventListener("mouseup", handleMouseUp, { capture: true });
-    window.addEventListener("pointerup", handleMouseUp as any, { capture: true });
-    canvas.addEventListener("mouseleave", handleMouseUp, { capture: true });
-    canvas.addEventListener("pointerleave", handleMouseUp as any, { capture: true });
-
-    console.log("📌 Event listeners attached (mouse + pointer events)");
 
     canvas.style.cursor = "grab";
 
     return () => {
       canvas.removeEventListener("mousedown", handleMouseDown, { capture: true });
-      canvas.removeEventListener("pointerdown", handleMouseDown as any, { capture: true });
-      canvas.removeEventListener("mousemove", handleMouseMove, { capture: true });
-      canvas.removeEventListener("pointermove", handleMouseMove as any, { capture: true });
       window.removeEventListener("mousemove", handleMouseMove, { capture: true });
-      window.removeEventListener("pointermove", handleMouseMove as any, { capture: true });
       window.removeEventListener("mouseup", handleMouseUp, { capture: true });
-      window.removeEventListener("pointerup", handleMouseUp as any, { capture: true });
-      canvas.removeEventListener("mouseleave", handleMouseUp, { capture: true });
-      canvas.removeEventListener("pointerleave", handleMouseUp as any, { capture: true });
     };
   }, []);
 
