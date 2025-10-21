@@ -223,18 +223,14 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     if (intersects.length > 0) {
       const newTarget = intersects[0].point;
       
-      // Save camera state BEFORE changing target
-      const savedPosition = cameraRef.current.position.clone();
-      const savedQuaternion = cameraRef.current.quaternion.clone();
+      // Temporarily disable controls to prevent lookAt during target change
+      controlsRef.current.enabled = false;
       
-      // Update target (this will trigger lookAt internally)
+      // Update target
       controlsRef.current.target.copy(newTarget);
-      controlsRef.current.update();
       
-      // Restore camera orientation to prevent view jumping
-      cameraRef.current.position.copy(savedPosition);
-      cameraRef.current.quaternion.copy(savedQuaternion);
-      controlsRef.current.update();
+      // Re-enable controls immediately (on the same frame)
+      controlsRef.current.enabled = true;
       
       console.log('✅ Pivot updated without view change:', newTarget);
     }
