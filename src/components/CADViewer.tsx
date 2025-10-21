@@ -296,13 +296,8 @@ export function CADViewer({
       offset.applyQuaternion(combinedRotation);
       cameraRef.current.position.copy(rotationPivotRef.current).add(offset);
 
-      // Rotate camera ORIENTATION by the same amount (prevents lookAt jump!)
-      cameraRef.current.quaternion.multiplyQuaternions(combinedRotation, cameraRef.current.quaternion);
-
-      // Keep OrbitControls target synced (prevents zoom-in effect)
-      if (controlsRef.current) {
-        controlsRef.current.target.copy(rotationPivotRef.current);
-      }
+      // Rotate camera ORIENTATION by same amount (keeps part visually still)
+      cameraRef.current.quaternion.premultiply(combinedRotation);
 
       event.preventDefault();
       event.stopPropagation();
