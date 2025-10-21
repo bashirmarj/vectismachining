@@ -261,14 +261,14 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       // Clicked on model - rotate around that point
       const point = intersects[0].point;
       const newTarget: [number, number, number] = [point.x, point.y, point.z];
-      
-      // FIXED: Just update the target, don't touch the camera
-      // Let OrbitControls handle everything naturally
       setRotationTarget(newTarget);
-      controlsRef.current.target.set(...newTarget);
-      controlsRef.current.update();
       
-      console.log('🎯 Rotation center updated (no camera movement):', newTarget);
+      if (controlsRef.current) {
+        controlsRef.current.target.set(...newTarget);
+        controlsRef.current.update();
+      }
+      
+      console.log('🎯 Rotation center set to cursor position:', newTarget);
     }
     // If clicked on empty space, keep current rotation target
   };
@@ -565,6 +565,8 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   panSpeed={1.0}
                   zoomSpeed={1.2}
                   screenSpacePanning={true}
+                  minPolarAngle={0}
+                  maxPolarAngle={Math.PI}
                   minAzimuthAngle={-Infinity}
                   maxAzimuthAngle={Infinity}
                   enableZoom={true}
