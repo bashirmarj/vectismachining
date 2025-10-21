@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -26,44 +26,77 @@ interface MeshData {
 }
 
 interface CADViewerProps {
-  meshData?: MeshData;
-  boundingBox?: BoundingBox;
+  meshData: MeshData;
+  boundingBox?: BoundingBox;  // ← Now optional!
   showEdges?: boolean;
   showHiddenEdges?: boolean;
   displayStyle?: 'solid' | 'wireframe' | 'translucent';
   topologyColors?: boolean;
-  // Legacy props for backward compatibility
-  file?: File;
-  fileName?: string;
-  meshId?: string;
-  fileUrl?: string;
-  detectedFeatures?: any;
 }
-
-// Default bounding box for when none is provided
-const DEFAULT_BOUNDING_BOX: BoundingBox = {
-  min: [-50, -50, -50],
-  max: [50, 50, 50],
-  center: [0, 0, 0],
-  width: 100,
-  height: 100,
-  depth: 100
-};
 
 export function CADViewer({ 
   meshData, 
-  boundingBox,
+  boundingBox: propBoundingBox,  // Rename to avoid conflict
   showEdges = true,
   showHiddenEdges = false,
   displayStyle = 'solid',
-  topologyColors = false
+  topologyColors = true
 }: CADViewerProps) {
-  // Use provided boundingBox or default
-  const bbox = boundingBox || DEFAULT_BOUNDING_BOX;
+  
+  // Calculate bounding box from mesh data if not provided
+  const boundingBox = useMemo(() => {
+    // If boundingBox was provided, use it
+    if (propBoundingBox) {
+      return propBoundingBox;
+    }
+    
+    // Otherwise, calculate from mesh vertices
+    if (!meshData || !meshData.vertices || meshData.vertices.length === 0) {
+      // Return safe default if no mesh data
+      return {
+        min: [-50, -50, -50] as [number, number, number],
+        max: [50, 50, 50] as [number, number, number],
+        center: [0, 0, 0] as [number, number, number],
+        width: 100,
+        height: 100,
+        depth: 100
+      };
+    }
+    
+    // Calculate from vertices
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    
+    for (let i = 0; i < meshData.vertices.length; i += 3) {
+      minX = Math.min(minX, meshData.vertices[i]);
+      maxX = Math.max(maxX, meshData.vertices[i]);
+      minY = Math.min(minY, meshData.vertices[i + 1]);
+      maxY = Math.max(maxY, meshData.vertices[i + 1]);
+      minZ = Math.min(minZ, meshData.vertices[i + 2]);
+      maxZ = Math.max(maxZ, meshData.vertices[i + 2]);
+    }
+    
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const depth = maxZ - minZ;
+    
+    return {
+      min: [minX, minY, minZ] as [number, number, number],
+      max: [maxX, maxY, maxZ] as [number, number, number],
+      center: [
+        (minX + maxX) / 2,
+        (minY + maxY) / 2,
+        (minZ + maxZ) / 2
+      ] as [number, number, number],
+      width,
+      height,
+      depth
+    };
+  }, [meshData, propBoundingBox]);
   
   // State for controlling view orientation and camera
   const [viewMode, setViewMode] = useState<'perspective' | 'front' | 'back' | 'top' | 'bottom' | 'left' | 'right'>('perspective');
-  const [rotationTarget, setRotationTarget] = useState<[number, number, number]>(bbox.center);
+  const [rotationTarget, setRotationTarget] = useState<[number, number, number]>(boundingBox.center);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
   // Section plane controls
@@ -79,10 +112,15 @@ export function CADViewer({
   const raycaster = useRef(new THREE.Raycaster());
 
   // Calculate viewport settings based on bounding box
-  const viewportSettings = {
-    minDistance: Math.max(bbox.width, bbox.height, bbox.depth) * 0.5,
-    maxDistance: Math.max(bbox.width, bbox.height, bbox.depth) * 5
-  };
+  const viewportSettings = useMemo(() => ({
+    minDistance: Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.5,
+    maxDistance: Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 5
+  }), [boundingBox]);
+
+  // Update rotation target when bounding box changes
+  useEffect(() => {
+    setRotationTarget(boundingBox.center);
+  }, [boundingBox]);
 
   // Handle cursor-based rotation center WITHOUT camera repositioning
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -132,9 +170,9 @@ export function CADViewer({
   const resetCamera = () => {
     if (!cameraRef.current || !controlsRef.current) return;
     
-    const maxDim = Math.max(bbox.width, bbox.height, bbox.depth);
+    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
     const distance = maxDim * 2.5;
-    const target = new THREE.Vector3(...bbox.center);
+    const target = new THREE.Vector3(...boundingBox.center);
     
     cameraRef.current.position.set(
       target.x + distance * 0.5,
@@ -142,7 +180,7 @@ export function CADViewer({
       target.z + distance * 0.7
     );
     
-    setRotationTarget(bbox.center);
+    setRotationTarget(boundingBox.center);
     controlsRef.current.target.copy(target);
     controlsRef.current.update();
   };
@@ -150,9 +188,9 @@ export function CADViewer({
   const setIsometricView = () => {
     if (!cameraRef.current || !controlsRef.current) return;
     
-    const maxDim = Math.max(bbox.width, bbox.height, bbox.depth);
+    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
     const distance = maxDim * 2;
-    const target = new THREE.Vector3(...bbox.center);
+    const target = new THREE.Vector3(...boundingBox.center);
     
     const phi = Math.PI / 4;
     const theta = Math.asin(Math.tan(Math.PI / 6));
@@ -163,7 +201,7 @@ export function CADViewer({
       target.z + distance * Math.cos(phi) * Math.cos(theta)
     );
     
-    setRotationTarget(bbox.center);
+    setRotationTarget(boundingBox.center);
     controlsRef.current.target.copy(target);
     controlsRef.current.update();
   };
@@ -171,9 +209,9 @@ export function CADViewer({
   const orientMainCameraToDirection = (direction: THREE.Vector3) => {
     if (!cameraRef.current || !controlsRef.current) return;
     
-    const maxDim = Math.max(bbox.width, bbox.height, bbox.depth);
+    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
     const distance = maxDim * 2.5;
-    const target = new THREE.Vector3(...bbox.center);
+    const target = new THREE.Vector3(...boundingBox.center);
     
     const cameraDirection = direction.clone().normalize().multiplyScalar(-1);
     const newPosition = target.clone().add(cameraDirection.multiplyScalar(distance));
@@ -199,7 +237,7 @@ export function CADViewer({
       cameraRef.current.position.lerpVectors(startPos, newPosition, easedK);
       cameraRef.current.quaternion.slerpQuaternions(startQuat, targetQuat, easedK);
       
-      setRotationTarget(bbox.center);
+      setRotationTarget(boundingBox.center);
       controlsRef.current.target.copy(target);
       controlsRef.current.update();
       
@@ -333,9 +371,9 @@ export function CADViewer({
           shadows
           camera={{
             position: [
-              bbox.center[0] + bbox.width,
-              bbox.center[1] + bbox.height,
-              bbox.center[2] + bbox.depth * 1.5
+              boundingBox.center[0] + boundingBox.width,
+              boundingBox.center[1] + boundingBox.height,
+              boundingBox.center[2] + boundingBox.depth * 1.5
             ],
             fov: 50,
             near: 0.1,
@@ -364,39 +402,37 @@ export function CADViewer({
           <hemisphereLight intensity={0.4} groundColor="#444444" />
 
           {/* Main mesh */}
-          {meshData && (
-            <group ref={meshRef}>
-              <MeshModel
-                meshData={meshData}
-                sectionPlane={sectionPlane}
-                sectionPosition={sectionPosition}
-                showEdges={showEdges}
-                showHiddenEdges={showHiddenEdges}
-                displayStyle={displayStyle}
-                topologyColors={topologyColors}
-              />
-            </group>
-          )}
+          <group ref={meshRef}>
+            <MeshModel
+              meshData={meshData}
+              sectionPlane={sectionPlane}
+              sectionPosition={sectionPosition}
+              showEdges={showEdges}
+              showHiddenEdges={showHiddenEdges}
+              displayStyle={displayStyle}
+              topologyColors={topologyColors}
+            />
+          </group>
 
           {/* Ground plane */}
           <mesh 
             rotation={[-Math.PI / 2, 0, 0]} 
-            position={[bbox.center[0], bbox.min[1] - 0.01, bbox.center[2]]}
+            position={[boundingBox.center[0], boundingBox.min[1] - 0.01, boundingBox.center[2]]}
             receiveShadow
           >
-            <planeGeometry args={[bbox.width * 3, bbox.depth * 3]} />
+            <planeGeometry args={[boundingBox.width * 3, boundingBox.depth * 3]} />
             <shadowMaterial opacity={0.15} />
           </mesh>
 
           {/* Grid helper */}
           <gridHelper
             args={[
-              Math.max(bbox.width, bbox.depth) * 2,
+              Math.max(boundingBox.width, boundingBox.depth) * 2,
               20,
               '#cccccc',
               '#e0e0e0'
             ]}
-            position={[bbox.center[0], bbox.min[1], bbox.center[2]]}
+            position={[boundingBox.center[0], boundingBox.min[1], boundingBox.center[2]]}
           />
 
           {/* SolidWorks-style orbit controls with cursor rotation */}
@@ -433,13 +469,11 @@ export function CADViewer({
       {/* Info Panel */}
       <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-3 text-xs space-y-1">
         <div className="font-semibold text-gray-700">Model Info</div>
-        {meshData && (
-          <div className="text-gray-600">
-            Triangles: {meshData.triangle_count.toLocaleString()}
-          </div>
-        )}
         <div className="text-gray-600">
-          Size: {bbox.width.toFixed(1)} × {bbox.height.toFixed(1)} × {bbox.depth.toFixed(1)} cm
+          Triangles: {meshData.triangle_count.toLocaleString()}
+        </div>
+        <div className="text-gray-600">
+          Size: {boundingBox.width.toFixed(1)} × {boundingBox.height.toFixed(1)} × {boundingBox.depth.toFixed(1)} cm
         </div>
         <div className="text-gray-600">
           View: {viewMode.charAt(0).toUpperCase() + viewMode.slice(1)}
