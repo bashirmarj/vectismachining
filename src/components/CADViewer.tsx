@@ -255,6 +255,8 @@ export function CADViewer({
     };
 
     const handleMouseMove = (event: MouseEvent) => {
+      console.log("👋 MouseMove event fired, rotating:", isCustomRotatingRef.current);
+
       if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current) {
         if (isCustomRotatingRef.current) {
           console.log("❌ Missing refs:", {
@@ -265,7 +267,7 @@ export function CADViewer({
         return;
       }
 
-      console.log("🔄 Moving...");
+      console.log("🔄 Actually rotating now...");
 
       const deltaX = event.clientX - lastMouseRef.current.x;
       const deltaY = event.clientY - lastMouseRef.current.y;
@@ -325,6 +327,8 @@ export function CADViewer({
     window.addEventListener("mousemove", handleMouseMove, { capture: true });
     window.addEventListener("mouseup", handleMouseUp, { capture: true });
     canvas.addEventListener("mouseleave", handleMouseUp, { capture: true });
+
+    console.log("📌 Event listeners attached to canvas and window");
 
     canvas.style.cursor = "grab";
 
