@@ -198,20 +198,15 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     }
   };
   
-  // Custom cursor-based rotation (SolidWorks style)
+  // Custom cursor-based rotation (SolidWorks style) - OrbitControls never handles rotation
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !cameraRef.current || !meshRef.current || !controlsRef.current) return;
+    if (!canvas || !cameraRef.current || !meshRef.current) return;
     
     const raycaster = new THREE.Raycaster();
     
     const handleMouseDown = (event: MouseEvent) => {
       if (event.button !== 0) return; // Only left click
-      
-      // Disable OrbitControls rotation temporarily
-      if (controlsRef.current) {
-        controlsRef.current.enabled = false;
-      }
       
       // Calculate rotation pivot from cursor position using raycasting
       const rect = canvas.getBoundingClientRect();
@@ -227,7 +222,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
         // Use clicked point as rotation pivot
         rotationPivotRef.current = intersects[0].point.clone();
       } else {
-        // Fallback: project screen center into 3D space
+        // Fallback: use current view direction
         const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraRef.current!.quaternion);
         const distance = cameraRef.current!.position.length();
         rotationPivotRef.current = cameraRef.current!.position.clone().add(direction.multiplyScalar(distance * 0.5));
@@ -236,6 +231,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       isCustomRotatingRef.current = true;
       lastMouseRef.current = { x: event.clientX, y: event.clientY };
       canvas.style.cursor = 'grabbing';
+      
+      event.preventDefault();
+      event.stopPropagation();
     };
     
     const handleMouseMove = (event: MouseEvent) => {
@@ -246,13 +244,17 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       
       lastMouseRef.current = { x: event.clientX, y: event.clientY };
       
-      // Rotation speed (adjust to taste)
+      // Skip tiny movements
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
+      
+      // Rotation speed
       const rotationSpeed = 0.005;
       
-      // Create rotation quaternions for horizontal and vertical rotation
+      // Horizontal rotation around world Y axis
       const horizontalRotation = new THREE.Quaternion();
       horizontalRotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -deltaX * rotationSpeed);
       
+      // Vertical rotation around camera's right vector
       const verticalRotation = new THREE.Quaternion();
       const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraRef.current.quaternion);
       verticalRotation.setFromAxisAngle(right, -deltaY * rotationSpeed);
@@ -261,45 +263,33 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       const combinedRotation = new THREE.Quaternion();
       combinedRotation.multiplyQuaternions(horizontalRotation, verticalRotation);
       
-      // Rotate camera around pivot point
+      // Rotate camera around pivot
       const offset = cameraRef.current.position.clone().sub(rotationPivotRef.current);
       offset.applyQuaternion(combinedRotation);
       cameraRef.current.position.copy(rotationPivotRef.current).add(offset);
-      
-      // Make camera look at pivot
       cameraRef.current.lookAt(rotationPivotRef.current);
       
-      // Update OrbitControls target to match (for consistency with other features)
-      if (controlsRef.current) {
-        controlsRef.current.target.copy(rotationPivotRef.current);
-      }
-      
       event.preventDefault();
+      event.stopPropagation();
     };
     
     const handleMouseUp = () => {
       isCustomRotatingRef.current = false;
-      
-      // Re-enable OrbitControls for pan/zoom
-      if (controlsRef.current) {
-        controlsRef.current.enabled = true;
-      }
-      
-      if (canvas) {
-        canvas.style.cursor = 'grab';
-      }
+      rotationPivotRef.current = null;
+      if (canvas) canvas.style.cursor = 'grab';
     };
     
-    canvas.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    // Capture phase to intercept BEFORE OrbitControls
+    canvas.addEventListener('mousedown', handleMouseDown, { capture: true });
+    window.addEventListener('mousemove', handleMouseMove, { capture: true });
+    window.addEventListener('mouseup', handleMouseUp, { capture: true });
     
     canvas.style.cursor = 'grab';
     
     return () => {
-      canvas.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      canvas.removeEventListener('mousedown', handleMouseDown, { capture: true });
+      window.removeEventListener('mousemove', handleMouseMove, { capture: true });
+      window.removeEventListener('mouseup', handleMouseUp, { capture: true });
     };
   }, []);
   
@@ -522,6 +512,18 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
             ref={canvasRef}
             className="relative h-full" 
             style={{ background: '#f8f9fa' }}
+            onMouseDown={(e) => {
+              // BLOCK all left clicks at React level FIRST
+              if (e.button === 0) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
+            onClickCapture={(e) => {
+              // BLOCK all clicks at capture phase
+              e.preventDefault();
+              e.stopPropagation();
+            }}
           >
             
             <button
@@ -632,27 +634,27 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   mode={measurementMode}
                 />
                 
-                {/* OrbitControls for pan/zoom only - rotation handled by custom hook */}
+                {/* TEMPORARILY DISABLED - Testing if OrbitControls causes jump
                 <OrbitControls
                   ref={controlsRef}
-                  makeDefault
-                  enableDamping={true}
-                  dampingFactor={0.15}
+                  makeDefault={false}
+                  enableDamping={false}
                   minDistance={viewportSettings.minDistance}
                   maxDistance={viewportSettings.maxDistance}
-                  rotateSpeed={0}
                   panSpeed={1.0}
                   zoomSpeed={1.2}
                   screenSpacePanning={true}
                   enableZoom={true}
                   zoomToCursor={true}
                   enableRotate={false}
+                  enablePan={true}
                   mouseButtons={{
                     LEFT: undefined,
                     MIDDLE: THREE.MOUSE.DOLLY,
                     RIGHT: THREE.MOUSE.PAN
                   }}
                 />
+                */}
               </Suspense>
             </Canvas>
           </div>
