@@ -44,17 +44,15 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
   const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
   const showTopologyColors = true;
   
-  // SolidWorks-style dynamic rotation center
+  // NEW: Rotation target state
   const [rotationTarget, setRotationTarget] = useState<[number, number, number]>([0, 0, 0]);
   
   // Refs
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const orientationCubeRef = useRef<OrientationCubeHandle>(null);
-  const meshRef = useRef<THREE.Group>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const raycaster = useRef(new THREE.Raycaster());
-  const mouse = useRef(new THREE.Vector2());
+  const meshRef = useRef<THREE.Group>(null);
   
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isSTEP = ['step', 'stp'].includes(fileExtension);
@@ -205,6 +203,36 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     }
   };
   
+  // NEW: Handle mouse down to set rotation pivot point
+  const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    // Only update rotation target on left click (button 0)
+    if (event.button !== 0) return;
+    if (!canvasRef.current || !cameraRef.current || !meshRef.current) return;
+    
+    // Get canvas bounds for coordinate calculation
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    // Perform raycasting
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(x, y), cameraRef.current);
+    
+    const intersects = raycaster.intersectObject(meshRef.current, true);
+    
+    if (intersects.length > 0) {
+      // Set the rotation target to the intersection point
+      const point = intersects[0].point;
+      setRotationTarget([point.x, point.y, point.z]);
+      
+      // Update controls target smoothly
+      if (controlsRef.current) {
+        controlsRef.current.target.set(point.x, point.y, point.z);
+        controlsRef.current.update();
+      }
+    }
+  };
+  
   const handleFitView = () => {
     if (controlsRef.current && cameraRef.current) {
       const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
@@ -216,61 +244,9 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
         boundingBox.center[2] + distance
       );
       
-      setRotationTarget(boundingBox.center);
       controlsRef.current.target.set(...boundingBox.center);
       controlsRef.current.update();
     }
-  };
-  
-  // SolidWorks-style: Dynamic rotation center based on cursor position
-  const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    // Safety checks for all required refs
-    if (!cameraRef.current || !meshRef.current || !canvasRef.current || !controlsRef.current) {
-      console.warn('⚠️ Refs not ready for rotation center update');
-      return;
-    }
-    
-    // Only update target on left mouse button (rotation)
-    if (event.button !== 0) return;
-    
-    // Calculate mouse position in normalized device coordinates
-    const rect = canvasRef.current.getBoundingClientRect();
-    
-    // Safety check for valid rect dimensions
-    if (!rect || rect.width === 0 || rect.height === 0) {
-      console.warn('⚠️ Invalid canvas dimensions');
-      return;
-    }
-    
-    mouse.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    
-    // Update raycaster
-    raycaster.current.setFromCamera(mouse.current, cameraRef.current);
-    
-    // Find intersection with mesh
-    const intersects = raycaster.current.intersectObject(meshRef.current, true);
-    
-    // Safety check for valid intersects array
-    if (!Array.isArray(intersects)) {
-      console.warn('⚠️ Invalid intersects result');
-      return;
-    }
-    
-    if (intersects.length > 0) {
-      // Clicked on model - rotate around that point
-      const point = intersects[0].point;
-      const newTarget: [number, number, number] = [point.x, point.y, point.z];
-      setRotationTarget(newTarget);
-      
-      if (controlsRef.current) {
-        controlsRef.current.target.set(...newTarget);
-        controlsRef.current.update();
-      }
-      
-      console.log('🎯 Rotation center set to cursor position:', newTarget);
-    }
-    // If clicked on empty space, keep current rotation target
   };
   
   const setIsometricView = () => {
@@ -289,7 +265,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       target.z + distance * Math.cos(phi) * Math.cos(theta)
     );
     
-    setRotationTarget(boundingBox.center);
     controlsRef.current.target.copy(target);
     controlsRef.current.update();
   };
@@ -325,7 +300,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       cameraRef.current.position.lerpVectors(startPos, newPosition, easedK);
       cameraRef.current.quaternion.slerpQuaternions(startQuat, targetQuat, easedK);
       
-      setRotationTarget(boundingBox.center);
       controlsRef.current.target.copy(target);
       controlsRef.current.update();
       
@@ -565,8 +539,6 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
                   panSpeed={1.0}
                   zoomSpeed={1.2}
                   screenSpacePanning={true}
-                  minPolarAngle={0}
-                  maxPolarAngle={Math.PI}
                   minAzimuthAngle={-Infinity}
                   maxAzimuthAngle={Infinity}
                   enableZoom={true}
