@@ -159,7 +159,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     
     return {
       cameraDistance: maxDim * 2.5,
-      minDistance: maxDim * 0.5,
+      minDistance: maxDim * 0.05, // Allow very close zoom (was 0.5)
       maxDistance: maxDim * 10,
       fogNear: maxDim * 5,
       fogFar: maxDim * 20,
@@ -225,10 +225,11 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       const point = intersects[0].point;
       setRotationTarget([point.x, point.y, point.z]);
       
-      // Update controls target smoothly
+      // Update controls target WITHOUT snapping the view
+      // The new target will be used on the next rotation drag
       if (controlsRef.current) {
         controlsRef.current.target.set(point.x, point.y, point.z);
-        controlsRef.current.update();
+        // Removed .update() to prevent camera snap - rotation will use new pivot naturally
       }
     }
   };
