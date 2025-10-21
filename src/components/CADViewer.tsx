@@ -300,8 +300,8 @@ export function CADViewer({
 
       lastMouseRef.current = { x: event.clientX, y: event.clientY };
 
-      // Skip tiny movements
-      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
+      // Skip tiny movements (reduced threshold for better responsiveness)
+      if (Math.abs(deltaX) < 0.1 && Math.abs(deltaY) < 0.1) return;
 
       console.log("🔄 Rotating with delta:", { deltaX, deltaY });
 
@@ -357,15 +357,19 @@ export function CADViewer({
 
     // Capture phase to intercept BEFORE OrbitControls
     canvas.addEventListener("mousedown", handleMouseDown, { capture: true });
+    canvas.addEventListener("mousemove", handleMouseMove, { capture: true });
     window.addEventListener("mousemove", handleMouseMove, { capture: true });
     window.addEventListener("mouseup", handleMouseUp, { capture: true });
+    canvas.addEventListener("mouseleave", handleMouseUp, { capture: true });
 
     canvas.style.cursor = "grab";
 
     return () => {
       canvas.removeEventListener("mousedown", handleMouseDown, { capture: true });
+      canvas.removeEventListener("mousemove", handleMouseMove, { capture: true });
       window.removeEventListener("mousemove", handleMouseMove, { capture: true });
       window.removeEventListener("mouseup", handleMouseUp, { capture: true });
+      canvas.removeEventListener("mouseleave", handleMouseUp, { capture: true });
     };
   }, []);
 
