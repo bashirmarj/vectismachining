@@ -223,14 +223,20 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     if (intersects.length > 0) {
       const newTarget = intersects[0].point;
       
-      // Temporarily disable controls to prevent lookAt during target change
-      controlsRef.current.enabled = false;
+      // Save damping state and disable it
+      const wasDamping = controlsRef.current.enableDamping;
+      controlsRef.current.enableDamping = false;
       
-      // Update target
+      // Update target immediately (no damping = no smooth interpolation)
       controlsRef.current.target.copy(newTarget);
+      controlsRef.current.update();
       
-      // Re-enable controls immediately (on the same frame)
-      controlsRef.current.enabled = true;
+      // Restore damping on next frame
+      requestAnimationFrame(() => {
+        if (controlsRef.current) {
+          controlsRef.current.enableDamping = wasDamping;
+        }
+      });
       
       console.log('✅ Pivot updated without view change:', newTarget);
     }
