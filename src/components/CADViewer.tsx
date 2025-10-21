@@ -206,7 +206,14 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     const raycaster = new THREE.Raycaster();
     
     const handleMouseDown = (event: MouseEvent) => {
+      console.log('🖱️ MOUSEDOWN CAPTURED', event.button, event.target);
+      
       if (event.button !== 0) return; // Only left click
+      
+      console.log('📷 Camera BEFORE click:', {
+        position: cameraRef.current!.position.clone(),
+        target: controlsRef.current?.target.clone()
+      });
       
       // Calculate rotation pivot from cursor position using raycasting
       const rect = canvas.getBoundingClientRect();
@@ -221,12 +228,19 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
       if (intersects.length > 0) {
         // Use clicked point as rotation pivot
         rotationPivotRef.current = intersects[0].point.clone();
+        console.log('🎯 Pivot set to:', rotationPivotRef.current);
       } else {
         // Fallback: use current view direction
         const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraRef.current!.quaternion);
         const distance = cameraRef.current!.position.length();
         rotationPivotRef.current = cameraRef.current!.position.clone().add(direction.multiplyScalar(distance * 0.5));
+        console.log('🎯 Pivot set to fallback:', rotationPivotRef.current);
       }
+      
+      console.log('📷 Camera AFTER click:', {
+        position: cameraRef.current!.position.clone(),
+        target: controlsRef.current?.target.clone()
+      });
       
       isCustomRotatingRef.current = true;
       lastMouseRef.current = { x: event.clientX, y: event.clientY };
@@ -274,6 +288,7 @@ export function CADViewer({ file, fileUrl, fileName, meshId, meshData: propMeshD
     };
     
     const handleMouseUp = () => {
+      console.log('🖱️ MOUSEUP');
       isCustomRotatingRef.current = false;
       rotationPivotRef.current = null;
       if (canvas) canvas.style.cursor = 'grab';
