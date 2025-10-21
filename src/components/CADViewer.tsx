@@ -212,23 +212,13 @@ export function CADViewer({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !cameraRef.current || !meshRef.current) {
-      console.log("⏳ Waiting for canvas/camera/mesh to be ready...");
       return;
     }
-
-    console.log("✅ Custom rotation handlers attached!");
 
     const raycaster = new THREE.Raycaster();
 
     const handleMouseDown = (event: MouseEvent) => {
-      console.log("🖱️ MOUSEDOWN CAPTURED", event.button, event.target);
-
       if (event.button !== 0) return; // Only left click
-
-      console.log("📷 Camera state:", {
-        position: cameraRef.current!.position.clone(),
-        hasMesh: !!meshRef.current,
-      });
 
       // Calculate rotation pivot from cursor position using raycasting
       const rect = canvas.getBoundingClientRect();
@@ -240,12 +230,9 @@ export function CADViewer({
       raycaster.setFromCamera(mouse, cameraRef.current!);
       const intersects = raycaster.intersectObject(meshRef.current!, true);
 
-      console.log("🎯 Raycasting results:", intersects.length, "intersections");
-
       if (intersects.length > 0) {
         // Use clicked point as rotation pivot
         rotationPivotRef.current = intersects[0].point.clone();
-        console.log("🎯 Pivot set to:", rotationPivotRef.current);
 
         // Capture camera axes at moment of click (screen-space rotation)
         const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRef.current!.quaternion);
@@ -254,13 +241,11 @@ export function CADViewer({
           up: cameraUp.normalize(),
           right: cameraRight.normalize(),
         };
-        console.log("📐 Rotation axes locked:", rotationAxesRef.current);
       } else {
         // Fallback: use current view direction
         const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraRef.current!.quaternion);
         const distance = cameraRef.current!.position.length();
         rotationPivotRef.current = cameraRef.current!.position.clone().add(direction.multiplyScalar(distance * 0.5));
-        console.log("🎯 Pivot set to fallback:", rotationPivotRef.current);
 
         // Capture camera axes at moment of click (screen-space rotation)
         const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cameraRef.current!.quaternion);
@@ -269,10 +254,7 @@ export function CADViewer({
           up: cameraUp.normalize(),
           right: cameraRight.normalize(),
         };
-        console.log("📐 Rotation axes locked (fallback):", rotationAxesRef.current);
       }
-
-      console.log("✅ Ready to rotate - all refs set");
 
       isCustomRotatingRef.current = true;
       lastMouseRef.current = { x: event.clientX, y: event.clientY };
@@ -284,14 +266,6 @@ export function CADViewer({
 
     const handleMouseMove = (event: MouseEvent) => {
       if (!isCustomRotatingRef.current || !rotationPivotRef.current || !cameraRef.current || !rotationAxesRef.current) {
-        if (isCustomRotatingRef.current) {
-          console.log("⚠️ Missing refs during rotation:", {
-            hasRotating: !!isCustomRotatingRef.current,
-            hasPivot: !!rotationPivotRef.current,
-            hasCamera: !!cameraRef.current,
-            hasAxes: !!rotationAxesRef.current,
-          });
-        }
         return;
       }
 
@@ -302,8 +276,6 @@ export function CADViewer({
 
       // Skip tiny movements (reduced threshold for better responsiveness)
       if (Math.abs(deltaX) < 0.1 && Math.abs(deltaY) < 0.1) return;
-
-      console.log("🔄 Rotating with delta:", { deltaX, deltaY });
 
       // Get offset from pivot to camera
       const offset = cameraRef.current.position.clone().sub(rotationPivotRef.current);
@@ -330,25 +302,15 @@ export function CADViewer({
       // Update camera position
       cameraRef.current.position.copy(rotationPivotRef.current).add(offset);
 
-      // Calculate camera orientation manually (without lookAt to prevent centering)
-      const forward = new THREE.Vector3().subVectors(rotationPivotRef.current, cameraRef.current.position).normalize();
-      const worldUp = new THREE.Vector3(0, 1, 0);
-      const right = new THREE.Vector3().crossVectors(worldUp, forward).normalize();
-      const up = new THREE.Vector3().crossVectors(forward, right);
-
-      // Build rotation matrix from basis vectors
-      const matrix = new THREE.Matrix4();
-      matrix.makeBasis(right, up, forward.negate());
-
-      // Update camera quaternion from matrix
-      cameraRef.current.quaternion.setFromRotationMatrix(matrix);
+      // Make camera look at pivot - this is SAFE because we control exact position
+      // and we're NOT updating OrbitControls target during rotation
+      cameraRef.current.lookAt(rotationPivotRef.current);
 
       event.preventDefault();
       event.stopPropagation();
     };
 
     const handleMouseUp = () => {
-      console.log("🖱️ MOUSEUP");
       isCustomRotatingRef.current = false;
       rotationPivotRef.current = null;
       rotationAxesRef.current = null; // Clear axes for next rotation
