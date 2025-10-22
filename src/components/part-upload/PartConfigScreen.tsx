@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { ChevronLeft, ChevronDown, ChevronUp, Mail, Phone, Building2, MapPin, User } from 'lucide-react';
-import { CADViewer } from '@/components/CADViewer';
+import CADViewerV2 from '@/components/CADViewerV2';
 import FeatureTree from '@/components/FeatureTree';
 import { RoutingEditor } from './RoutingEditor';
 
@@ -21,10 +21,10 @@ interface FileWithData {
     vertices: number[];
     indices: number[];
     normals: number[];
-    vertex_colors?: string[];
+    vertex_colors?: number[];
     triangle_count: number;
     face_types?: string[];
-    feature_edges?: number[][][];
+    feature_edges?: number[];
   };
   analysis?: {
     volume_cm3?: number;
@@ -385,7 +385,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
               {/* 3D Model Tab */}
               <TabsContent value="3d-model" className="h-full m-0 p-6">
                 <div className="h-full min-h-[600px]">
-                  <CADViewer
+                  <CADViewerV2
                     file={selectedFile.file}
                     fileName={selectedFile.file.name}
                     meshId={selectedFile.meshId}
