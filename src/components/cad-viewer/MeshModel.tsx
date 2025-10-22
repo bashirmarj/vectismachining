@@ -366,7 +366,7 @@ export function MeshModel({
   return (
     <group>
       {/* Mesh surface (hidden in wireframe mode) */}
-      <mesh ref={meshRef} geometry={geometry}>
+      <mesh ref={meshRef} geometry={geometry} castShadow receiveShadow>
         <meshStandardMaterial
           {...materialProps}
           color={topologyColors ? "#ffffff" : SOLID_COLOR}

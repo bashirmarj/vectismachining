@@ -1,10 +1,13 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import ModelMesh from './ModelMesh';
 import * as THREE from 'three';
 import { animateCameraToView, getViewPresetVectors } from '@/lib/cameraAnimations';
 import type { ViewPreset } from '@/lib/cameraAnimations';
+import LightingRig from './pro/LightingRig';
+import GroundPlane from './pro/GroundPlane';
+import VisualEffects from './pro/VisualEffects';
 
 interface MeshData {
   vertices: number[];
@@ -22,6 +25,9 @@ interface Canvas3DProps {
   onViewPreset?: (preset: ViewPreset) => void;
   viewPresetTrigger?: { preset: ViewPreset; timestamp: number };
   cameraRotationCallback?: (rotation: THREE.Euler) => void;
+  shadowsEnabled?: boolean;
+  ssaoEnabled?: boolean;
+  quality?: 'low' | 'medium' | 'high';
 }
 
 const Canvas3D = ({ 
@@ -29,7 +35,10 @@ const Canvas3D = ({
   detectedFeatures, 
   displayStyle = 'solid',
   viewPresetTrigger,
-  cameraRotationCallback 
+  cameraRotationCallback,
+  shadowsEnabled = true,
+  ssaoEnabled = true,
+  quality = 'medium'
 }: Canvas3DProps) => {
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera>(null);
@@ -158,6 +167,10 @@ const Canvas3D = ({
         preserveDrawingBuffer: true,
         toneMapping: THREE.NoToneMapping,
       }}
+      onCreated={({ gl }) => {
+        gl.shadowMap.enabled = shadowsEnabled;
+        gl.shadowMap.type = THREE.PCFSoftShadowMap;
+      }}
     >
       {/* Camera */}
       <PerspectiveCamera
@@ -169,17 +182,11 @@ const Canvas3D = ({
         position={[cameraDistance, cameraDistance, cameraDistance]}
       />
 
-      {/* Professional lighting - matches old viewer */}
-      <ambientLight intensity={0.5} />
-      <directionalLight 
-        position={[10, 10, 5]} 
-        intensity={0.6} 
-        color="#ffffff" 
-      />
-      <directionalLight 
-        position={[-5, -5, -3]} 
-        intensity={0.2} 
-        color="#ffffff" 
+      {/* Professional 5-light PBR setup with shadows */}
+      <LightingRig 
+        shadowsEnabled={shadowsEnabled}
+        intensity={1.0}
+        modelBounds={boundingBox}
       />
 
       {/* Controls - Clean OrbitControls, no custom rotation */}
@@ -197,6 +204,19 @@ const Canvas3D = ({
 
       {/* Model */}
       <ModelMesh meshData={meshData} displayStyle={displayStyle} />
+
+      {/* Ground plane for shadows */}
+      <GroundPlane 
+        position={[0, boundingBox.min.y - 0.1, 0]}
+        size={maxDim * 2}
+        showGrid={false}
+      />
+
+      {/* Visual effects (SSAO, Bloom, FXAA, Environment) */}
+      <VisualEffects 
+        enabled={ssaoEnabled}
+        quality={quality}
+      />
 
       {/* Grid helper (optional) */}
       <gridHelper args={[maxDim * 2, 20, '#555555', '#444444']} position={[0, boundingBox.min.y, 0]} />

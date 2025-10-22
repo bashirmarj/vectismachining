@@ -1,8 +1,8 @@
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, PerspectiveCamera, Environment } from "@react-three/drei";
+import { OrbitControls, PerspectiveCamera } from "@react-three/drei";
 import { Suspense, useMemo, useEffect, useState, useRef } from "react";
 import { CardContent } from "@/components/ui/card";
-import { Loader2, Box, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Box } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import * as THREE from "three";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,10 @@ import { MeshModel } from "./cad-viewer/MeshModel";
 import { DimensionAnnotations } from "./cad-viewer/DimensionAnnotations";
 import { MeasurementTool } from "./cad-viewer/MeasurementTool";
 import { OrientationCubePreview, OrientationCubeHandle } from "./cad-viewer/OrientationCubePreview";
+import LightingRig from "./cad-viewer-v2/pro/LightingRig";
+import GroundPlane from "./cad-viewer-v2/pro/GroundPlane";
+import VisualEffects from "./cad-viewer-v2/pro/VisualEffects";
+import PerformanceSettingsPanel from "./cad-viewer-v2/pro/PerformanceSettingsPanel";
 
 interface CADViewerProps {
   file?: File;
@@ -53,6 +57,11 @@ export function CADViewer({
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const orientationCubeRef = useRef<OrientationCubeHandle>(null);
+
+  // Performance settings for professional visual quality
+  const [shadowsEnabled, setShadowsEnabled] = useState(true);
+  const [ssaoEnabled, setSSAOEnabled] = useState(true);
+  const [quality, setQuality] = useState<'low' | 'medium' | 'high'>('medium');
 
   const fileExtension = fileName.split(".").pop()?.toLowerCase() || "";
   const isSTEP = ["step", "stp"].includes(fileExtension);
@@ -118,7 +127,15 @@ export function CADViewer({
   // Calculate bounding box for camera and annotations
   const boundingBox = useMemo(() => {
     if (!activeMeshData || !activeMeshData.vertices || activeMeshData.vertices.length === 0) {
-      return { width: 100, height: 100, depth: 100, center: [0, 0, 0] as [number, number, number] };
+      return { 
+        width: 100, 
+        height: 100, 
+        depth: 100, 
+        center: [0, 0, 0] as [number, number, number],
+        min: new THREE.Vector3(-50, -50, -50),
+        max: new THREE.Vector3(50, 50, 50),
+        size: new THREE.Vector3(100, 100, 100),
+      };
     }
 
     let minX = Infinity,
@@ -140,9 +157,13 @@ export function CADViewer({
     const width = maxX - minX;
     const height = maxY - minY;
     const depth = maxZ - minZ;
-    const center: [number, number, number] = [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2];
+    const centerTuple: [number, number, number] = [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2];
+    const min = new THREE.Vector3(minX, minY, minZ);
+    const max = new THREE.Vector3(maxX, maxY, maxZ);
+    const center = new THREE.Vector3(...centerTuple);
+    const size = new THREE.Vector3(width, height, depth);
 
-    return { width, height, depth, center };
+    return { width, height, depth, center: centerTuple, min, max, size, centerVec: center };
   }, [activeMeshData]);
 
   // Determine if we have valid 3D data to display
@@ -458,6 +479,7 @@ export function CADViewer({
             </div>
 
             <Canvas
+              shadows
               camera={{ position: [150, 150, 150], fov: 45 }}
               gl={{
                 antialias: true,
@@ -468,16 +490,27 @@ export function CADViewer({
                 toneMapping: THREE.NoToneMapping,
                 sortObjects: true,
               }}
+              onCreated={({ gl }) => {
+                gl.shadowMap.enabled = shadowsEnabled;
+                gl.shadowMap.type = THREE.PCFSoftShadowMap;
+              }}
               dpr={[1, 2]}
             >
               <Suspense fallback={null}>
                 {/* Clean white background */}
                 <color attach="background" args={["#f8f9fa"]} />
                 <fog attach="fog" args={["#f8f9fa", 300, 1000]} />
-                {/* Professional CAD lighting - subtle depth without color variation */}
-                <ambientLight intensity={0.5} />
-                <directionalLight position={[10, 10, 5]} intensity={0.6} color="#ffffff" />
-                <directionalLight position={[-5, -5, -3]} intensity={0.2} color="#ffffff" />
+                {/* Professional 5-light PBR setup with shadows */}
+                <LightingRig 
+                  shadowsEnabled={shadowsEnabled}
+                  intensity={1.0}
+                  modelBounds={{
+                    min: boundingBox.min,
+                    max: boundingBox.max,
+                    center: boundingBox.centerVec,
+                    size: boundingBox.size
+                  }}
+                />
                 {/* Subtle grid (light gray) */}
                 ...
                 {/* Auto-framed camera */}
@@ -501,17 +534,25 @@ export function CADViewer({
                   displayStyle={displayStyle}
                   topologyColors={showTopologyColors}
                 />
-                {/* Soft contact shadow */}
-                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -boundingBox.height / 2 - 10.5, 0]} receiveShadow>
-                  <planeGeometry args={[boundingBox.width * 3, boundingBox.depth * 3]} />
-                  <shadowMaterial opacity={0.15} />
-                </mesh>
+                {/* Ground plane for shadows */}
+                <GroundPlane 
+                  position={[0, -boundingBox.height / 2 - 10.5, 0]}
+                  size={Math.max(boundingBox.width, boundingBox.depth) * 3}
+                  showGrid={false}
+                />
                 {/* Dimension Annotations */}
                 {showDimensions && detectedFeatures && (
                   <DimensionAnnotations features={detectedFeatures} boundingBox={boundingBox} />
                 )}
                 {/* Measurement Tool */}
                 <MeasurementTool enabled={measurementMode !== null} mode={measurementMode} />
+                
+                {/* Visual effects (SSAO, Bloom, FXAA, Environment) */}
+                <VisualEffects 
+                  enabled={ssaoEnabled}
+                  quality={quality}
+                />
+                
                 {/* Camera controls with damping and inertia */}
                 <OrbitControls
                   ref={controlsRef}
@@ -527,6 +568,17 @@ export function CADViewer({
                 />
               </Suspense>
             </Canvas>
+            
+            {/* Performance Settings Panel */}
+            <PerformanceSettingsPanel
+              shadowsEnabled={shadowsEnabled}
+              setShadowsEnabled={setShadowsEnabled}
+              ssaoEnabled={ssaoEnabled}
+              setSSAOEnabled={setSSAOEnabled}
+              quality={quality}
+              setQuality={setQuality}
+              triangleCount={activeMeshData.triangle_count}
+            />
           </div>
         ) : isRenderableFormat ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
