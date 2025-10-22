@@ -563,6 +563,8 @@ export function CADViewer({
                   zoomSpeed={1.2}
                   minPolarAngle={-Infinity}
                   maxPolarAngle={Infinity}
+                  minAzimuthAngle={-Infinity}
+                  maxAzimuthAngle={Infinity}
                 />
               </Suspense>
               
