@@ -104,7 +104,7 @@ const PerformanceSettingsPanel = ({
               </div>
 
               <div className="flex items-center justify-between">
-                <Label htmlFor="ssao" className="text-xs">SSAO (Depth)</Label>
+                <Label htmlFor="ssao" className="text-xs">Environment Map</Label>
                 <Switch
                   id="ssao"
                   checked={ssaoEnabled}
