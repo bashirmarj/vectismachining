@@ -34,6 +34,9 @@ const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
       geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     }
     
+    // Compute smooth vertex normals for curved surfaces
+    geom.computeVertexNormals();
+    
     geom.computeBoundingBox();
     geom.computeBoundingSphere();
     
