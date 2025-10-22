@@ -14,7 +14,7 @@ interface MeshData {
   indices: number[];
   normals: number[];
   triangle_count: number;
-  vertex_colors?: string[];
+  vertex_colors?: number[];
   feature_edges?: number[];
 }
 

@@ -15,7 +15,7 @@ import orientationCubeSTL from '@/assets/orientation-cube.stl?url';
 interface OrientationCubePreviewProps {
   onOrientationChange?: (direction: THREE.Vector3) => void;
   onUpVectorChange?: (upVector: THREE.Vector3) => void;
-  onDisplayStyleChange?: (style: 'solid' | 'wireframe' | 'shaded-edges') => void;
+  onDisplayStyleChange?: (style: 'solid' | 'wireframe' | 'translucent') => void;
 }
 
 export interface OrientationCubeHandle {
@@ -40,7 +40,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     type: 'face' | 'edge' | 'corner';
     description: string;
   } | null>(null);
-  const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'shaded-edges'>('solid');
+  const [displayStyle, setDisplayStyle] = useState<'solid' | 'wireframe' | 'translucent'>('solid');
 
   // Helper function to classify click region (face, edge, or corner)
   const classifyClickRegion = (localPoint: THREE.Vector3) => {
@@ -668,7 +668,7 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     }
   };
   
-  const handleDisplayStyleChange = (value: 'solid' | 'wireframe' | 'shaded-edges') => {
+  const handleDisplayStyleChange = (value: 'solid' | 'wireframe' | 'translucent') => {
     setDisplayStyle(value);
     onDisplayStyleChange?.(value);
   };
@@ -769,8 +769,8 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
           <SelectItem value="wireframe" className="text-white text-xs hover:bg-white/10 cursor-pointer">
             Display Wire Frames
           </SelectItem>
-          <SelectItem value="shaded-edges" className="text-white text-xs hover:bg-white/10 cursor-pointer">
-            Display Shaded with Edges
+          <SelectItem value="translucent" className="text-white text-xs hover:bg-white/10 cursor-pointer">
+            Display Solid Model (translucent)
           </SelectItem>
         </SelectContent>
       </Select>
