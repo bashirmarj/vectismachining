@@ -1,8 +1,10 @@
 import { useRef, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
+import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
 import ModelMesh from './ModelMesh';
 import * as THREE from 'three';
+import { animateCameraToView, getViewPresetVectors } from '@/lib/cameraAnimations';
+import type { ViewPreset } from '@/lib/cameraAnimations';
 
 interface MeshData {
   vertices: number[];
@@ -16,9 +18,19 @@ interface MeshData {
 interface Canvas3DProps {
   meshData: MeshData;
   detectedFeatures?: any;
+  displayStyle?: 'solid' | 'wireframe' | 'shaded-edges';
+  onViewPreset?: (preset: ViewPreset) => void;
+  viewPresetTrigger?: { preset: ViewPreset; timestamp: number };
+  cameraRotationCallback?: (rotation: THREE.Euler) => void;
 }
 
-const Canvas3D = ({ meshData, detectedFeatures }: Canvas3DProps) => {
+const Canvas3D = ({ 
+  meshData, 
+  detectedFeatures, 
+  displayStyle = 'solid',
+  viewPresetTrigger,
+  cameraRotationCallback 
+}: Canvas3DProps) => {
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera>(null);
 
@@ -106,6 +118,36 @@ const Canvas3D = ({ meshData, detectedFeatures }: Canvas3DProps) => {
     }
   }, [meshData]);
 
+  // Handle view preset changes
+  useEffect(() => {
+    if (!viewPresetTrigger || !cameraRef.current || !controlsRef.current) return;
+
+    const box = new THREE.Box3(boundingBox.min, boundingBox.max);
+    const { position, target } = getViewPresetVectors(viewPresetTrigger.preset, box);
+
+    animateCameraToView({
+      camera: cameraRef.current,
+      controls: controlsRef.current,
+      targetPosition: position,
+      targetLookAt: target,
+      duration: 800,
+    });
+  }, [viewPresetTrigger]);
+
+  // Update camera rotation callback for orientation cube
+  useEffect(() => {
+    if (!cameraRotationCallback || !cameraRef.current) return;
+
+    const updateRotation = () => {
+      if (cameraRef.current) {
+        cameraRotationCallback(cameraRef.current.rotation.clone());
+      }
+      requestAnimationFrame(updateRotation);
+    };
+
+    updateRotation();
+  }, [cameraRotationCallback]);
+
   return (
     <Canvas
       shadows
@@ -126,20 +168,32 @@ const Canvas3D = ({ meshData, detectedFeatures }: Canvas3DProps) => {
         position={[cameraDistance, cameraDistance, cameraDistance]}
       />
 
-      {/* Lighting - Professional 3-point setup */}
-      <ambientLight intensity={0.4} />
+      {/* Environment Map for realistic reflections */}
+      <Environment preset="studio" />
+
+      {/* Lighting - Professional setup */}
+      <ambientLight intensity={0.5} />
       <directionalLight
         position={[10, 10, 5]}
-        intensity={0.8}
+        intensity={1.0}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
+        shadow-camera-near={0.1}
+        shadow-camera-far={500}
+        shadow-camera-left={-100}
+        shadow-camera-right={100}
+        shadow-camera-top={100}
+        shadow-camera-bottom={-100}
       />
+      {/* Rim light for edge definition */}
       <directionalLight
-        position={[-5, -5, -3]}
-        intensity={0.3}
+        position={[-8, 5, -8]}
+        intensity={0.4}
+        color="#b0c4de"
       />
-      <hemisphereLight args={['#ffffff', '#444444', 0.3]} />
+      {/* Fill light from below */}
+      <hemisphereLight args={['#ffffff', '#666666', 0.4]} />
 
       {/* Controls - Clean OrbitControls, no custom rotation */}
       <OrbitControls
@@ -155,7 +209,7 @@ const Canvas3D = ({ meshData, detectedFeatures }: Canvas3DProps) => {
       />
 
       {/* Model */}
-      <ModelMesh meshData={meshData} />
+      <ModelMesh meshData={meshData} displayStyle={displayStyle} />
 
       {/* Grid helper (optional) */}
       <gridHelper args={[maxDim * 2, 20, '#888888', '#444444']} position={[0, boundingBox.min.y, 0]} />

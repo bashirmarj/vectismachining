@@ -1,7 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import Canvas3D from './cad-viewer-v2/Canvas3D';
+import Toolbar, { DisplayStyle, ViewPreset } from './cad-viewer-v2/Toolbar';
+import OrientationCube from './cad-viewer-v2/OrientationCube';
+import { Card, CardContent } from './ui/card';
 import { Loader2 } from 'lucide-react';
+import * as THREE from 'three';
 
 export interface MeshData {
   vertices: number[];
@@ -32,6 +36,9 @@ const CADViewerV2 = ({
   const [meshData, setMeshData] = useState<MeshData | null>(propMeshData || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [displayStyle, setDisplayStyle] = useState<DisplayStyle>('solid');
+  const [viewPresetTrigger, setViewPresetTrigger] = useState<{ preset: ViewPreset; timestamp: number } | undefined>();
+  const [cameraRotation, setCameraRotation] = useState<THREE.Euler>(new THREE.Euler());
 
   // Fetch mesh data from Supabase if meshId is provided
   useEffect(() => {
@@ -115,13 +122,61 @@ const CADViewerV2 = ({
     );
   }
 
+  const handleViewPreset = (preset: ViewPreset) => {
+    setViewPresetTrigger({ preset, timestamp: Date.now() });
+  };
+
+  const handleFitView = () => {
+    setViewPresetTrigger({ preset: 'isometric', timestamp: Date.now() });
+  };
+
+  const handleResetCamera = () => {
+    setViewPresetTrigger({ preset: 'isometric', timestamp: Date.now() });
+  };
+
+  const handleCameraRotation = (rotation: THREE.Euler) => {
+    setCameraRotation(rotation);
+  };
+
   // Main viewer
   return (
-    <div className="w-full h-full relative bg-background">
+    <div className="w-full h-full relative bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      {/* Toolbar */}
+      <Toolbar
+        displayStyle={displayStyle}
+        onDisplayStyleChange={setDisplayStyle}
+        onViewPreset={handleViewPreset}
+        onFitView={handleFitView}
+        onResetCamera={handleResetCamera}
+      />
+
+      {/* Orientation Cube */}
+      <div className="absolute top-4 right-4 z-10">
+        <OrientationCube 
+          cameraRotation={cameraRotation}
+          onFaceClick={handleViewPreset}
+        />
+      </div>
+
+      {/* Main 3D Canvas */}
       <Canvas3D 
         meshData={meshData} 
         detectedFeatures={detectedFeatures}
+        displayStyle={displayStyle}
+        viewPresetTrigger={viewPresetTrigger}
+        cameraRotationCallback={handleCameraRotation}
       />
+
+      {/* Info Bar */}
+      <div className="absolute bottom-4 left-4 z-10">
+        <Card className="backdrop-blur-md bg-card/80 border-border/50">
+          <CardContent className="p-2 px-3 text-xs text-muted-foreground flex gap-3">
+            <span>Triangles: {meshData.triangle_count.toLocaleString()}</span>
+            <span>•</span>
+            <span>Vertices: {(meshData.vertices.length / 3).toLocaleString()}</span>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

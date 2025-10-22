@@ -12,9 +12,10 @@ interface MeshData {
 
 interface ModelMeshProps {
   meshData: MeshData;
+  displayStyle?: 'solid' | 'wireframe' | 'shaded-edges';
 }
 
-const ModelMesh = ({ meshData }: ModelMeshProps) => {
+const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
   // Create geometry from mesh data
   const geometry = useMemo(() => {
     const geom = new THREE.BufferGeometry();
@@ -52,6 +53,13 @@ const ModelMesh = ({ meshData }: ModelMeshProps) => {
     return edgeGeom;
   }, [meshData.feature_edges]);
 
+  // Create edges geometry for shaded-edges mode
+  const standardEdges = useMemo(() => {
+    if (displayStyle !== 'shaded-edges') return null;
+    const edges = new THREE.EdgesGeometry(geometry, 15); // 15 degree threshold
+    return edges;
+  }, [geometry, displayStyle]);
+
   return (
     <group>
       {/* Main mesh */}
@@ -60,20 +68,35 @@ const ModelMesh = ({ meshData }: ModelMeshProps) => {
         castShadow 
         receiveShadow
       >
-        <meshStandardMaterial
-          color="#a0a0a0"
-          metalness={0.1}
-          roughness={0.4}
-          vertexColors={meshData.vertex_colors ? true : false}
-          side={THREE.DoubleSide}
-          flatShading={false}
-        />
+        {displayStyle === 'wireframe' ? (
+          <meshBasicMaterial
+            color="#C8D0D8"
+            wireframe
+          />
+        ) : (
+          <meshStandardMaterial
+            color="#C8D0D8"
+            metalness={0.25}
+            roughness={0.3}
+            envMapIntensity={1.5}
+            vertexColors={meshData.vertex_colors ? true : false}
+            side={THREE.DoubleSide}
+            flatShading={false}
+          />
+        )}
       </mesh>
 
-      {/* BREP edges */}
-      {edgesGeometry && (
+      {/* BREP feature edges (always show if available) */}
+      {edgesGeometry && displayStyle !== 'wireframe' && (
         <lineSegments geometry={edgesGeometry}>
-          <lineBasicMaterial color="#000000" linewidth={1} />
+          <lineBasicMaterial color="#2a2a2a" linewidth={1} opacity={0.8} transparent />
+        </lineSegments>
+      )}
+
+      {/* Standard edges for shaded-edges mode */}
+      {standardEdges && displayStyle === 'shaded-edges' && (
+        <lineSegments geometry={standardEdges}>
+          <lineBasicMaterial color="#1a1a1a" linewidth={1} opacity={0.6} transparent />
         </lineSegments>
       )}
     </group>
