@@ -17,39 +17,56 @@ interface ModelMeshProps {
 
 const ModelMesh = ({ meshData, displayStyle = "solid" }: ModelMeshProps) => {
   // Create geometry from mesh data
+  // Create single unified geometry for professional solid rendering
   const geometry = useMemo(() => {
-    const geom = new THREE.BufferGeometry();
+    const geo = new THREE.BufferGeometry();
 
-    const positions = new Float32Array(meshData.vertices);
-    const indices = new Uint32Array(meshData.indices);
+    if (!topologyColors) {
+      // Professional solid rendering mode
+      const positions = new Float32Array(meshData.vertices);
+      const indices = new Uint32Array(meshData.indices);
 
-    geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geom.setIndex(new THREE.BufferAttribute(indices, 1));
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geo.setIndex(new THREE.BufferAttribute(indices, 1));
 
-    // ✅ FIX: Use high-quality normals from OpenCascade backend
-    // The backend generates CAD-aware normals that respect surface types
-    // (cylinders, planes, splines, etc.) which prevents banding artifacts
-    if (meshData.normals && meshData.normals.length > 0) {
-      const normals = new Float32Array(meshData.normals);
-      geom.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
-      console.log("✅ Using backend-provided CAD normals");
+      // ✅ FIX: Use backend normals directly (don't recompute)
+      if (meshData.normals && meshData.normals.length > 0) {
+        const normals = new Float32Array(meshData.normals);
+        geo.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+        console.log("✅ Using backend-provided CAD normals");
+      } else {
+        console.warn("⚠️ No normals provided, computing fallback");
+        geo.computeVertexNormals();
+      }
     } else {
-      // Fallback only if normals not provided (e.g., legacy STL files)
-      console.warn("⚠️ No normals in mesh data, computing fallback normals");
-      geom.computeVertexNormals();
+      // Topology colors mode - duplicate vertices for flat shading
+      const triangleCount = meshData.indices.length / 3;
+      const positions = new Float32Array(triangleCount * 9);
+
+      for (let i = 0; i < triangleCount; i++) {
+        const idx0 = meshData.indices[i * 3];
+        const idx1 = meshData.indices[i * 3 + 1];
+        const idx2 = meshData.indices[i * 3 + 2];
+
+        positions[i * 9 + 0] = meshData.vertices[idx0 * 3];
+        positions[i * 9 + 1] = meshData.vertices[idx0 * 3 + 1];
+        positions[i * 9 + 2] = meshData.vertices[idx0 * 3 + 2];
+
+        positions[i * 9 + 3] = meshData.vertices[idx1 * 3];
+        positions[i * 9 + 4] = meshData.vertices[idx1 * 3 + 1];
+        positions[i * 9 + 5] = meshData.vertices[idx1 * 3 + 2];
+
+        positions[i * 9 + 6] = meshData.vertices[idx2 * 3];
+        positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
+        positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
+      }
+
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     }
 
-    // Add vertex colors if available
-    if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
-      const colors = new Float32Array(meshData.vertex_colors);
-      geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-    }
-
-    geom.computeBoundingBox();
-    geom.computeBoundingSphere();
-
-    return geom;
-  }, [meshData]);
+    geo.computeBoundingSphere();
+    return geo;
+  }, [meshData, topologyColors]);
 
   // Create BREP edges geometry if available
   const edgesGeometry = useMemo(() => {
