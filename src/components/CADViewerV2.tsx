@@ -10,10 +10,10 @@ import { MeshModel } from "./cad-viewer/MeshModel";
 import { DimensionAnnotations } from "./cad-viewer/DimensionAnnotations";
 import { MeasurementTool } from "./cad-viewer/MeasurementTool";
 import { OrientationCubePreview, OrientationCubeHandle } from "./cad-viewer/OrientationCubePreview";
-import LightingRig from "./cad-viewer-v2/pro/LightingRig";
-import GroundPlane from "./cad-viewer-v2/pro/GroundPlane";
-import VisualEffects from "./cad-viewer-v2/pro/VisualEffects";
-import PerformanceSettingsPanel from "./cad-viewer-v2/pro/PerformanceSettingsPanel";
+import LightingRig from "./cad-viewer/LightingRig";
+import GroundPlane from "./cad-viewer/GroundPlane";
+import VisualEffects from "./cad-viewer/VisualEffects";
+import PerformanceSettingsPanel from "./cad-viewer/PerformanceSettingsPanel";
 
 interface CADViewerProps {
   file?: File;
