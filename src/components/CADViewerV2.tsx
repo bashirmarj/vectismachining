@@ -58,9 +58,7 @@ export function CADViewer({
   const cameraRef = useRef<any>(null);
   const orientationCubeRef = useRef<OrientationCubeHandle>(null);
   
-  // Professional dolly zoom refs
-  const raycasterRef = useRef(new THREE.Raycaster());
-  const mouseRef = useRef(new THREE.Vector2());
+  // Mesh ref for model access
   const meshRef = useRef<THREE.Mesh>(null);
 
   // Performance settings for professional visual quality
@@ -376,56 +374,6 @@ export function CADViewer({
     }
   };
 
-  // Professional CAD dolly zoom handler
-  const handleDollyZoom = useCallback((event: WheelEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    
-    if (!cameraRef.current || !controlsRef.current || !meshRef.current) return;
-    
-    const camera = cameraRef.current;
-    const controls = controlsRef.current;
-    const mesh = meshRef.current;
-    
-    // Get canvas bounds
-    const canvas = event.target as HTMLCanvasElement;
-    const rect = canvas.getBoundingClientRect();
-    
-    // Normalized device coordinates (-1 to +1)
-    mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    
-    // Raycast from camera through mouse
-    raycasterRef.current.setFromCamera(mouseRef.current, camera);
-    const intersects = raycasterRef.current.intersectObject(mesh, true);
-    
-    let targetDistance;
-    
-    if (intersects.length > 0) {
-      // Zoom toward the 3D point under cursor
-      targetDistance = camera.position.distanceTo(intersects[0].point);
-    } else {
-      // No intersection - zoom toward orbit center
-      targetDistance = camera.position.distanceTo(controls.target);
-    }
-    
-    // Calculate dolly amount (percentage of distance)
-    const zoomSpeed = 0.05; // 5% per wheel tick
-    const direction = event.deltaY > 0 ? 1 : -1;
-    const dollyAmount = targetDistance * zoomSpeed * direction;
-    
-    // Get camera's forward direction
-    const forward = new THREE.Vector3();
-    camera.getWorldDirection(forward);
-    
-    // Move camera along forward direction
-    camera.position.addScaledVector(forward, dollyAmount);
-    
-    // Update controls
-    controls.update();
-  }, []);
-
-  // Dolly zoom is now handled via Canvas onWheel prop
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -524,45 +472,6 @@ export function CADViewer({
                 gl.shadowMap.type = THREE.PCFSoftShadowMap;
               }}
               dpr={[1, 2]}
-              onWheel={(e) => {
-                e.stopPropagation();
-                
-                if (!cameraRef.current || !controlsRef.current || !meshRef.current) return;
-                
-                const camera = cameraRef.current;
-                const controls = controlsRef.current;
-                const mesh = meshRef.current;
-                
-                // Calculate mouse position in normalized device coordinates
-                const mouse = new THREE.Vector2(
-                  (e.clientX / window.innerWidth) * 2 - 1,
-                  -(e.clientY / window.innerHeight) * 2 + 1
-                );
-                
-                // Raycast to find intersection point
-                raycasterRef.current.setFromCamera(mouse, camera);
-                const intersects = raycasterRef.current.intersectObject(mesh, true);
-                
-                // Determine target distance for zoom
-                let targetDistance;
-                if (intersects.length > 0) {
-                  targetDistance = camera.position.distanceTo(intersects[0].point);
-                } else {
-                  targetDistance = camera.position.distanceTo(controls.target);
-                }
-                
-                // Calculate dolly amount
-                const zoomSpeed = 0.05;
-                const direction = e.deltaY > 0 ? 1 : -1;
-                const dollyAmount = targetDistance * zoomSpeed * direction;
-                
-                // Move camera along its view direction
-                const forward = new THREE.Vector3();
-                camera.getWorldDirection(forward);
-                camera.position.addScaledVector(forward, dollyAmount);
-                
-                controls.update();
-              }}
             >
               <Suspense fallback={null}>
                 {/* Clean white background */}
@@ -630,7 +539,6 @@ export function CADViewer({
                   panSpeed={0.8}
                   zoomSpeed={1.2}
                   staticMoving={false}
-                  noZoom={true}
                   noPan={false}
                   noRotate={false}
                 />
