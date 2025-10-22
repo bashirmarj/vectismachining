@@ -425,22 +425,26 @@ export function CADViewer({
     controls.update();
   }, []);
 
-  // Attach custom dolly zoom handler
+  // Attach custom dolly zoom handler after mesh loads
   useEffect(() => {
-    const canvas = document.querySelector('canvas');
-    if (!canvas) return;
+    if (!activeMeshData) return;
     
-    // Wait for refs to be ready
-    if (!cameraRef.current || !controlsRef.current || !meshRef.current) {
-      return;
-    }
-    
-    canvas.addEventListener('wheel', handleDollyZoom, { passive: false });
+    // Small delay to ensure canvas and refs are ready
+    const timeoutId = setTimeout(() => {
+      const canvas = document.querySelector('canvas');
+      if (!canvas) return;
+      
+      canvas.addEventListener('wheel', handleDollyZoom, { passive: false });
+    }, 100);
     
     return () => {
-      canvas.removeEventListener('wheel', handleDollyZoom);
+      clearTimeout(timeoutId);
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        canvas.removeEventListener('wheel', handleDollyZoom);
+      }
     };
-  }, [handleDollyZoom]);
+  }, [activeMeshData, handleDollyZoom]);
 
   // Keyboard shortcuts
   useEffect(() => {
