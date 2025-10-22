@@ -6,7 +6,7 @@ import { Loader2, Box } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import * as THREE from "three";
 import { supabase } from "@/integrations/supabase/client";
-import MeshModel from "./cad-viewer-v2/ModelMesh";
+import { MeshModel } from "./cad-viewer/MeshModel";
 import { DimensionAnnotations } from "./cad-viewer/DimensionAnnotations";
 import { MeasurementTool } from "./cad-viewer/MeasurementTool";
 import { OrientationCubePreview, OrientationCubeHandle } from "./cad-viewer/OrientationCubePreview";
