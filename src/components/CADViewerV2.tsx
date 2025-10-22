@@ -570,6 +570,8 @@ export function CADViewer({
                   rotateSpeed={0.6}
                   panSpeed={0.8}
                   zoomSpeed={1.2}
+                  minPolarAngle={0}
+                  maxPolarAngle={Math.PI}
                 />
               </Suspense>
             </Canvas>
