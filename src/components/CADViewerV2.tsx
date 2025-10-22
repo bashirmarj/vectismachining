@@ -499,7 +499,7 @@ export function CADViewer({
               <Suspense fallback={null}>
                 {/* Clean white background */}
                 <color attach="background" args={["#f8f9fa"]} />
-                <fog attach="fog" args={["#f8f9fa", 300, 1000]} />
+                <fog attach="fog" args={["#f8f9fa", Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 3, Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 8]} />
                 {/* Professional 5-light PBR setup with shadows */}
                 <LightingRig 
                   shadowsEnabled={shadowsEnabled}
