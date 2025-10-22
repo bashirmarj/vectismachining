@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, PerspectiveCamera, ContactShadows } from "@react-three/drei";
+import { OrbitControls, PerspectiveCamera, ContactShadows, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { Suspense, useMemo, useEffect, useState, useRef } from "react";
 import { CardContent } from "@/components/ui/card";
 import { Loader2, Box } from "lucide-react";
@@ -561,10 +561,17 @@ export function CADViewer({
                   rotateSpeed={0.6}
                   panSpeed={0.8}
                   zoomSpeed={1.2}
-                  minPolarAngle={0}
-                  maxPolarAngle={Math.PI}
                 />
               </Suspense>
+              
+              {/* XYZ Axis Gizmo - Bottom Right */}
+              <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
+                <GizmoViewport 
+                  axisColors={['#ff0000', '#00ff00', '#0000ff']} 
+                  labelColor="white"
+                  labels={['X', 'Y', 'Z']}
+                />
+              </GizmoHelper>
             </Canvas>
             
             {/* Performance Settings Panel */}
