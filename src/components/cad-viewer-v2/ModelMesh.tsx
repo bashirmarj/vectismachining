@@ -6,7 +6,7 @@ interface MeshData {
   indices: number[];
   normals: number[];
   triangle_count: number;
-  vertex_colors?: number[];
+  vertex_colors?: string[];
   feature_edges?: number[];
 }
 
@@ -14,6 +14,29 @@ interface ModelMeshProps {
   meshData: MeshData;
   displayStyle?: "solid" | "wireframe" | "shaded-edges";
 }
+
+// Convert backend string labels to RGB colors for Three.js
+const mapVertexLabelsToRGB = (labels: string[]): Float32Array => {
+  const colorMap: Record<string, [number, number, number]> = {
+    'external': [0.75, 0.75, 0.75],  // Light gray
+    'internal': [1.0, 0.0, 0.0],      // Red
+    'through': [1.0, 1.0, 0.0],       // Yellow
+    'boss': [0.36, 0.61, 0.84],       // Blue (#5b9bd5)
+  };
+  
+  const rgbArray = new Float32Array(labels.length * 3);
+  
+  for (let i = 0; i < labels.length; i++) {
+    const label = labels[i];
+    const color = colorMap[label] || colorMap['external']; // Default to gray
+    
+    rgbArray[i * 3] = color[0];      // R
+    rgbArray[i * 3 + 1] = color[1];  // G  
+    rgbArray[i * 3 + 2] = color[2];  // B
+  }
+  
+  return rgbArray;
+};
 
 const ModelMesh = ({ meshData, displayStyle = "solid" }: ModelMeshProps) => {
   // Create geometry from mesh data
@@ -39,10 +62,14 @@ const ModelMesh = ({ meshData, displayStyle = "solid" }: ModelMeshProps) => {
       geom.computeVertexNormals();
     }
 
-    // Add vertex colors if available
+    // Add vertex colors if available (convert string labels to RGB)
     if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
-      const colors = new Float32Array(meshData.vertex_colors);
+      const colors = mapVertexLabelsToRGB(meshData.vertex_colors);
       geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      console.log("✅ Applied vertex colors:", {
+        total: meshData.vertex_colors.length,
+        sample: meshData.vertex_colors.slice(0, 5)
+      });
     }
 
     geom.computeBoundingBox();
@@ -79,11 +106,11 @@ const ModelMesh = ({ meshData, displayStyle = "solid" }: ModelMeshProps) => {
           <meshBasicMaterial color="#C8D0D8" wireframe />
         ) : (
           <meshStandardMaterial
-            color="#5b9bd5"
-            metalness={0}
-            roughness={0.8}
+            color="#ffffff"
+            metalness={0.3}
+            roughness={0.5}
             envMapIntensity={0}
-            vertexColors={false}
+            vertexColors={true}
             side={THREE.FrontSide}
             flatShading={false}
             toneMapped={false}

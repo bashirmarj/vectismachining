@@ -19,7 +19,7 @@ interface FileWithQuantity {
     triangle_count: number;
     face_types?: string[];
     feature_edges?: number[];
-    vertex_colors?: number[];
+    vertex_colors?: string[];
   };
   analysis?: {
     volume_cm3?: number;

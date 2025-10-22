@@ -21,7 +21,7 @@ interface FileWithData {
     vertices: number[];
     indices: number[];
     normals: number[];
-    vertex_colors?: number[];
+    vertex_colors?: string[];
     triangle_count: number;
     face_types?: string[];
     feature_edges?: number[];

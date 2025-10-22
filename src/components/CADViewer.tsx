@@ -31,7 +31,7 @@ interface MeshData {
   face_types?: string[];
   triangle_count: number;
   feature_edges?: number[];
-  vertex_colors?: number[];
+  vertex_colors?: string[];
 }
 
 export function CADViewer({
