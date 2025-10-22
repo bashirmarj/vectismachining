@@ -313,15 +313,13 @@ export function CADViewer({
     // Calculate new camera position
     const newPosition = target.clone().add(cameraDirection.multiplyScalar(distance));
 
-    // Handle up vector for top/bottom views
-    const up = new THREE.Vector3(0, 1, 0);
-    // Check the ORIGINAL direction for top/bottom (before inverting)
-    if (Math.abs(direction.y) > 0.99) {
-      up.set(0, 0, direction.y > 0 ? -1 : 1);
-    }
-
-    const lookAtMatrix = new THREE.Matrix4().lookAt(newPosition, target, up);
-    const targetQuat = new THREE.Quaternion().setFromRotationMatrix(lookAtMatrix);
+    // Calculate target quaternion without forcing up vector
+    // Let TrackballControls maintain natural orientation
+    const lookDirection = target.clone().sub(newPosition).normalize();
+    const targetQuat = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 0, -1), // Camera default forward
+      lookDirection
+    );
 
     // Smooth animation
     const startPos = cameraRef.current.position.clone();
@@ -348,35 +346,10 @@ export function CADViewer({
     requestAnimationFrame(animate);
   };
 
-  // Handle UP vector change from orientation cube
+  // No-op: TrackballControls manages its own up vector for free rotation
   const handleCubeUpVectorChange = (newUpVector: THREE.Vector3) => {
-    if (!cameraRef.current || !controlsRef.current) return;
-
-    const target = new THREE.Vector3(...boundingBox.center);
-
-    // Animate the main camera's UP vector
-    const startUp = cameraRef.current.up.clone();
-    const duration = 400;
-    const t0 = performance.now();
-
-    const animate = (t: number) => {
-      const elapsed = t - t0;
-      const k = Math.min(1, elapsed / duration);
-      const easedK = 1 - Math.pow(1 - k, 3);
-
-      const currentUp = startUp.clone().lerp(newUpVector, easedK).normalize();
-      cameraRef.current.up.copy(currentUp);
-      cameraRef.current.lookAt(target);
-
-      controlsRef.current.target.copy(target);
-      controlsRef.current.update();
-
-      if (k < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-
-    requestAnimationFrame(animate);
+    // Disabled to allow TrackballControls full freedom
+    // True CAD-style rotation doesn't constrain the up vector
   };
 
   const handleViewChange = (direction: "up" | "down" | "left" | "right") => {
