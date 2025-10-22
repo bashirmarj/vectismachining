@@ -140,7 +140,7 @@ const CADViewerV2 = ({
 
   // Main viewer
   return (
-    <div className="w-full h-full relative bg-[#3A3A3C]">
+    <div className="w-full h-full relative bg-[#f8f9fa]">
       {/* Toolbar */}
       <Toolbar
         displayStyle={displayStyle}

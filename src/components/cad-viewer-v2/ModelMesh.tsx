@@ -75,13 +75,14 @@ const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
           />
         ) : (
           <meshStandardMaterial
-            color="#A8A8A8"
-            metalness={0.0}
-            roughness={0.85}
-            envMapIntensity={0.3}
+            color="#5b9bd5"
+            metalness={0}
+            roughness={0.8}
+            envMapIntensity={0}
             vertexColors={false}
             side={THREE.DoubleSide}
             flatShading={false}
+            toneMapped={false}
           />
         )}
       </mesh>
@@ -89,7 +90,16 @@ const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
       {/* BREP feature edges (always show if available) */}
       {edgesGeometry && displayStyle !== 'wireframe' && (
         <lineSegments geometry={edgesGeometry}>
-          <lineBasicMaterial color="#2a2a2a" linewidth={1} opacity={0.8} transparent />
+          <lineBasicMaterial 
+            color="#000000"
+            linewidth={1.5}
+            toneMapped={false}
+            depthTest={true}
+            depthWrite={false}
+            polygonOffset={true}
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
         </lineSegments>
       )}
 

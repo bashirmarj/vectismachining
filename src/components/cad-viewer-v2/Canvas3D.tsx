@@ -154,8 +154,9 @@ const Canvas3D = ({
       dpr={[1, 2]}
       gl={{ 
         antialias: true,
-        alpha: true,
-        preserveDrawingBuffer: true
+        alpha: false,
+        preserveDrawingBuffer: true,
+        toneMapping: THREE.NoToneMapping,
       }}
     >
       {/* Camera */}
@@ -168,17 +169,17 @@ const Canvas3D = ({
         position={[cameraDistance, cameraDistance, cameraDistance]}
       />
 
-      {/* Simple professional lighting */}
-      <ambientLight intensity={0.4} />
-      <directionalLight
-        position={[5, 10, 7]}
-        intensity={0.8}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
+      {/* Professional lighting - matches old viewer */}
+      <ambientLight intensity={0.5} />
+      <directionalLight 
+        position={[10, 10, 5]} 
+        intensity={0.6} 
+        color="#ffffff" 
       />
-      <directionalLight
-        position={[-5, 5, -5]}
-        intensity={0.3}
+      <directionalLight 
+        position={[-5, -5, -3]} 
+        intensity={0.2} 
+        color="#ffffff" 
       />
 
       {/* Controls - Clean OrbitControls, no custom rotation */}
