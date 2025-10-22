@@ -22,11 +22,9 @@ const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
     
     const positions = new Float32Array(meshData.vertices);
     const indices = new Uint32Array(meshData.indices);
-    const normals = new Float32Array(meshData.normals);
     
     geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geom.setIndex(new THREE.BufferAttribute(indices, 1));
-    geom.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
     
     // Add vertex colors if available
     if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
