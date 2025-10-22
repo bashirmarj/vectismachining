@@ -79,7 +79,7 @@ const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
             metalness={0.25}
             roughness={0.3}
             envMapIntensity={1.5}
-            vertexColors={meshData.vertex_colors ? true : false}
+            vertexColors={false}
             side={THREE.DoubleSide}
             flatShading={false}
           />
