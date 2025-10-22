@@ -425,26 +425,7 @@ export function CADViewer({
     controls.update();
   }, []);
 
-  // Attach custom dolly zoom handler after mesh loads
-  useEffect(() => {
-    if (!activeMeshData) return;
-    
-    // Small delay to ensure canvas and refs are ready
-    const timeoutId = setTimeout(() => {
-      const canvas = document.querySelector('canvas');
-      if (!canvas) return;
-      
-      canvas.addEventListener('wheel', handleDollyZoom, { passive: false });
-    }, 100);
-    
-    return () => {
-      clearTimeout(timeoutId);
-      const canvas = document.querySelector('canvas');
-      if (canvas) {
-        canvas.removeEventListener('wheel', handleDollyZoom);
-      }
-    };
-  }, [activeMeshData, handleDollyZoom]);
+  // Dolly zoom is now handled via Canvas onWheel prop
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -543,6 +524,45 @@ export function CADViewer({
                 gl.shadowMap.type = THREE.PCFSoftShadowMap;
               }}
               dpr={[1, 2]}
+              onWheel={(e) => {
+                e.stopPropagation();
+                
+                if (!cameraRef.current || !controlsRef.current || !meshRef.current) return;
+                
+                const camera = cameraRef.current;
+                const controls = controlsRef.current;
+                const mesh = meshRef.current;
+                
+                // Calculate mouse position in normalized device coordinates
+                const mouse = new THREE.Vector2(
+                  (e.clientX / window.innerWidth) * 2 - 1,
+                  -(e.clientY / window.innerHeight) * 2 + 1
+                );
+                
+                // Raycast to find intersection point
+                raycasterRef.current.setFromCamera(mouse, camera);
+                const intersects = raycasterRef.current.intersectObject(mesh, true);
+                
+                // Determine target distance for zoom
+                let targetDistance;
+                if (intersects.length > 0) {
+                  targetDistance = camera.position.distanceTo(intersects[0].point);
+                } else {
+                  targetDistance = camera.position.distanceTo(controls.target);
+                }
+                
+                // Calculate dolly amount
+                const zoomSpeed = 0.05;
+                const direction = e.deltaY > 0 ? 1 : -1;
+                const dollyAmount = targetDistance * zoomSpeed * direction;
+                
+                // Move camera along its view direction
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+                camera.position.addScaledVector(forward, dollyAmount);
+                
+                controls.update();
+              }}
             >
               <Suspense fallback={null}>
                 {/* Clean white background */}
