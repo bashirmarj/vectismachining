@@ -536,15 +536,6 @@ export function CADViewer({
                   displayStyle={displayStyle}
                   topologyColors={showTopologyColors}
                 />
-                {/* Contact shadow under the part */}
-                <ContactShadows
-                  position={[boundingBox.center[0], boundingBox.min.y - 0.01, boundingBox.center[2]]}
-                  opacity={0.4}
-                  scale={Math.max(boundingBox.width, boundingBox.depth) * 1.5}
-                  blur={2}
-                  far={boundingBox.height * 2}
-                  resolution={512}
-                />
                 {/* Dimension Annotations */}
                 {showDimensions && detectedFeatures && (
                   <DimensionAnnotations features={detectedFeatures} boundingBox={boundingBox} />
