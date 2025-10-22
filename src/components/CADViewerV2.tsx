@@ -528,7 +528,7 @@ export function CADViewer({
                   makeDefault
                   target={boundingBox.center}
                   dynamicDampingFactor={0.2}
-                  minDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.5}
+                  minDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.01}
                   maxDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 5}
                   rotateSpeed={1.8}
                   panSpeed={0.8}
