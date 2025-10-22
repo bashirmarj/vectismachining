@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import * as THREE from 'three';
+import { useMemo } from "react";
+import * as THREE from "three";
 
 interface MeshData {
   vertices: number[];
@@ -12,32 +12,42 @@ interface MeshData {
 
 interface ModelMeshProps {
   meshData: MeshData;
-  displayStyle?: 'solid' | 'wireframe' | 'shaded-edges';
+  displayStyle?: "solid" | "wireframe" | "shaded-edges";
 }
 
-const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
+const ModelMesh = ({ meshData, displayStyle = "solid" }: ModelMeshProps) => {
   // Create geometry from mesh data
   const geometry = useMemo(() => {
     const geom = new THREE.BufferGeometry();
-    
+
     const positions = new Float32Array(meshData.vertices);
     const indices = new Uint32Array(meshData.indices);
-    
-    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geom.setIndex(new THREE.BufferAttribute(indices, 1));
-    
+
+    // ✅ FIX: Use high-quality normals from OpenCascade backend
+    // The backend generates CAD-aware normals that respect surface types
+    // (cylinders, planes, splines, etc.) which prevents banding artifacts
+    if (meshData.normals && meshData.normals.length > 0) {
+      const normals = new Float32Array(meshData.normals);
+      geom.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+      console.log("✅ Using backend-provided CAD normals");
+    } else {
+      // Fallback only if normals not provided (e.g., legacy STL files)
+      console.warn("⚠️ No normals in mesh data, computing fallback normals");
+      geom.computeVertexNormals();
+    }
+
     // Add vertex colors if available
     if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
       const colors = new Float32Array(meshData.vertex_colors);
-      geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     }
-    
-    // Compute smooth vertex normals for curved surfaces
-    geom.computeVertexNormals();
-    
+
     geom.computeBoundingBox();
     geom.computeBoundingSphere();
-    
+
     return geom;
   }, [meshData]);
 
@@ -46,17 +56,17 @@ const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
     if (!meshData.feature_edges || meshData.feature_edges.length === 0) {
       return null;
     }
-    
+
     const edgeGeom = new THREE.BufferGeometry();
     const positions = new Float32Array(meshData.feature_edges);
-    edgeGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    
+    edgeGeom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
     return edgeGeom;
   }, [meshData.feature_edges]);
 
   // Create edges geometry for shaded-edges mode
   const standardEdges = useMemo(() => {
-    if (displayStyle !== 'shaded-edges') return null;
+    if (displayStyle !== "shaded-edges") return null;
     const edges = new THREE.EdgesGeometry(geometry, 15); // 15 degree threshold
     return edges;
   }, [geometry, displayStyle]);
@@ -64,16 +74,9 @@ const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
   return (
     <group>
       {/* Main mesh */}
-      <mesh 
-        geometry={geometry} 
-        castShadow 
-        receiveShadow
-      >
-        {displayStyle === 'wireframe' ? (
-          <meshBasicMaterial
-            color="#C8D0D8"
-            wireframe
-          />
+      <mesh geometry={geometry} castShadow receiveShadow>
+        {displayStyle === "wireframe" ? (
+          <meshBasicMaterial color="#C8D0D8" wireframe />
         ) : (
           <meshStandardMaterial
             color="#5b9bd5"
@@ -89,9 +92,9 @@ const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
       </mesh>
 
       {/* BREP feature edges (always show if available) */}
-      {edgesGeometry && displayStyle !== 'wireframe' && (
+      {edgesGeometry && displayStyle !== "wireframe" && (
         <lineSegments geometry={edgesGeometry}>
-          <lineBasicMaterial 
+          <lineBasicMaterial
             color="#000000"
             linewidth={1.5}
             toneMapped={false}
@@ -105,7 +108,7 @@ const ModelMesh = ({ meshData, displayStyle = 'solid' }: ModelMeshProps) => {
       )}
 
       {/* Standard edges for shaded-edges mode */}
-      {standardEdges && displayStyle === 'shaded-edges' && (
+      {standardEdges && displayStyle === "shaded-edges" && (
         <lineSegments geometry={standardEdges}>
           <lineBasicMaterial color="#1a1a1a" linewidth={1} opacity={0.6} transparent />
         </lineSegments>
