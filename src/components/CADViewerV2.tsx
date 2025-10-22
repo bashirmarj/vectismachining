@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { TrackballControls, PerspectiveCamera, ContactShadows, GizmoHelper, GizmoViewport } from "@react-three/drei";
-import { Suspense, useMemo, useEffect, useState, useRef } from "react";
+import { Suspense, useMemo, useEffect, useState, useRef, useCallback } from "react";
 import { CardContent } from "@/components/ui/card";
 import { Loader2, Box } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -377,7 +377,7 @@ export function CADViewer({
   };
 
   // Professional CAD dolly zoom handler
-  const handleDollyZoom = (event: WheelEvent) => {
+  const handleDollyZoom = useCallback((event: WheelEvent) => {
     event.preventDefault();
     event.stopPropagation();
     
@@ -423,19 +423,24 @@ export function CADViewer({
     
     // Update controls
     controls.update();
-  };
+  }, []);
 
   // Attach custom dolly zoom handler
   useEffect(() => {
     const canvas = document.querySelector('canvas');
     if (!canvas) return;
     
+    // Wait for refs to be ready
+    if (!cameraRef.current || !controlsRef.current || !meshRef.current) {
+      return;
+    }
+    
     canvas.addEventListener('wheel', handleDollyZoom, { passive: false });
     
     return () => {
       canvas.removeEventListener('wheel', handleDollyZoom);
     };
-  }, []);
+  }, [handleDollyZoom]);
 
   // Keyboard shortcuts
   useEffect(() => {
