@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect, useRef, forwardRef } from "react";
 import * as THREE from "three";
 import { useThree, useFrame } from "@react-three/fiber";
 
@@ -34,7 +34,7 @@ const TOPOLOGY_COLORS = {
   default: "#CCCCCC",
 };
 
-export function MeshModel({
+export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(({
   meshData,
   sectionPlane,
   sectionPosition,
@@ -42,9 +42,10 @@ export function MeshModel({
   showHiddenEdges = false,
   displayStyle = "solid",
   topologyColors = true,
-}: MeshModelProps) {
+}, ref) => {
   const { camera } = useThree();
-  const meshRef = useRef<THREE.Mesh>(null);
+  const internalMeshRef = useRef<THREE.Mesh>(null);
+  const meshRef = (ref as React.RefObject<THREE.Mesh>) || internalMeshRef;
   const dynamicEdgesRef = useRef<THREE.Group>(null);
   const wireframeEdgesRef = useRef<THREE.Group>(null);
 
@@ -383,4 +384,4 @@ export function MeshModel({
       {displayStyle === "wireframe" && <group ref={wireframeEdgesRef} />}
     </group>
   );
-}
+});
