@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, PerspectiveCamera } from "@react-three/drei";
+import { OrbitControls, PerspectiveCamera, ContactShadows } from "@react-three/drei";
 import { Suspense, useMemo, useEffect, useState, useRef } from "react";
 import { CardContent } from "@/components/ui/card";
 import { Loader2, Box } from "lucide-react";
@@ -11,7 +11,7 @@ import { DimensionAnnotations } from "./cad-viewer/DimensionAnnotations";
 import { MeasurementTool } from "./cad-viewer/MeasurementTool";
 import { OrientationCubePreview, OrientationCubeHandle } from "./cad-viewer/OrientationCubePreview";
 import LightingRig from "./cad-viewer/LightingRig";
-import GroundPlane from "./cad-viewer/GroundPlane";
+
 import VisualEffects from "./cad-viewer/VisualEffects";
 import PerformanceSettingsPanel from "./cad-viewer/PerformanceSettingsPanel";
 
@@ -499,7 +499,7 @@ export function CADViewer({
               <Suspense fallback={null}>
                 {/* Clean white background */}
                 <color attach="background" args={["#f8f9fa"]} />
-                <fog attach="fog" args={["#f8f9fa", Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 3, Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 8]} />
+                <fog attach="fog" args={["#f8f9fa", Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 10, Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 20]} />
                 {/* Professional 5-light PBR setup with shadows */}
                 <LightingRig 
                   shadowsEnabled={shadowsEnabled}
@@ -523,6 +523,8 @@ export function CADViewer({
                     boundingBox.center[2] + boundingBox.depth * 1.5,
                   ]}
                   fov={45}
+                  near={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.01}
+                  far={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 15}
                 />
                 {/* 3D Model */}
                 <MeshModel
@@ -534,11 +536,14 @@ export function CADViewer({
                   displayStyle={displayStyle}
                   topologyColors={showTopologyColors}
                 />
-                {/* Ground plane for shadows */}
-                <GroundPlane 
-                  position={[0, -boundingBox.height / 2 - 10.5, 0]}
-                  size={Math.max(boundingBox.width, boundingBox.depth) * 3}
-                  showGrid={false}
+                {/* Contact shadow under the part */}
+                <ContactShadows
+                  position={[boundingBox.center[0], boundingBox.min.y - 0.01, boundingBox.center[2]]}
+                  opacity={0.4}
+                  scale={Math.max(boundingBox.width, boundingBox.depth) * 1.5}
+                  blur={2}
+                  far={boundingBox.height * 2}
+                  resolution={512}
                 />
                 {/* Dimension Annotations */}
                 {showDimensions && detectedFeatures && (
