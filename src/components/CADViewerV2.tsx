@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, PerspectiveCamera, ContactShadows, GizmoHelper, GizmoViewport } from "@react-three/drei";
+import { TrackballControls, PerspectiveCamera, ContactShadows, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { Suspense, useMemo, useEffect, useState, useRef } from "react";
 import { CardContent } from "@/components/ui/card";
 import { Loader2, Box } from "lucide-react";
@@ -549,22 +549,21 @@ export function CADViewer({
                   quality={quality}
                 />
                 
-                {/* Camera controls with damping and inertia */}
-                <OrbitControls
+                {/* Camera controls with trackball rotation for CAD-style interaction */}
+                <TrackballControls
                   ref={controlsRef}
                   makeDefault
                   target={boundingBox.center}
-                  enableDamping
-                  dampingFactor={0.08}
+                  dynamicDampingFactor={0.2}
                   minDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.5}
                   maxDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 5}
-                  rotateSpeed={0.6}
+                  rotateSpeed={1.8}
                   panSpeed={0.8}
                   zoomSpeed={1.2}
-                  minPolarAngle={-Infinity}
-                  maxPolarAngle={Infinity}
-                  minAzimuthAngle={-Infinity}
-                  maxAzimuthAngle={Infinity}
+                  staticMoving={false}
+                  noZoom={false}
+                  noPan={false}
+                  noRotate={false}
                 />
               </Suspense>
               
