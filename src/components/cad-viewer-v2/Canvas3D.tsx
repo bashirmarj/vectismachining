@@ -168,32 +168,18 @@ const Canvas3D = ({
         position={[cameraDistance, cameraDistance, cameraDistance]}
       />
 
-      {/* Environment Map for realistic reflections */}
-      <Environment preset="studio" />
-
-      {/* Lighting - Professional setup */}
-      <ambientLight intensity={0.5} />
+      {/* Simple professional lighting */}
+      <ambientLight intensity={0.4} />
       <directionalLight
-        position={[10, 10, 5]}
-        intensity={1.0}
+        position={[5, 10, 7]}
+        intensity={0.8}
         castShadow
-        shadow-mapSize-width={4096}
-        shadow-mapSize-height={4096}
-        shadow-camera-near={0.1}
-        shadow-camera-far={500}
-        shadow-camera-left={-100}
-        shadow-camera-right={100}
-        shadow-camera-top={100}
-        shadow-camera-bottom={-100}
+        shadow-mapSize={[2048, 2048]}
       />
-      {/* Rim light for edge definition */}
       <directionalLight
-        position={[-8, 5, -8]}
-        intensity={0.4}
-        color="#b0c4de"
+        position={[-5, 5, -5]}
+        intensity={0.3}
       />
-      {/* Fill light from below */}
-      <hemisphereLight args={['#ffffff', '#666666', 0.4]} />
 
       {/* Controls - Clean OrbitControls, no custom rotation */}
       <OrbitControls
@@ -212,7 +198,7 @@ const Canvas3D = ({
       <ModelMesh meshData={meshData} displayStyle={displayStyle} />
 
       {/* Grid helper (optional) */}
-      <gridHelper args={[maxDim * 2, 20, '#888888', '#444444']} position={[0, boundingBox.min.y, 0]} />
+      <gridHelper args={[maxDim * 2, 20, '#555555', '#444444']} position={[0, boundingBox.min.y, 0]} />
     </Canvas>
   );
 };
