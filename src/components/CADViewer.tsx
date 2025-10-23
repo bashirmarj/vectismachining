@@ -214,10 +214,6 @@ export function CADViewer({
     cameraRef.current.up.set(0, 0, 1);
     controlsRef.current.target.set(...boundingBox.center);
     controlsRef.current.update();
-
-    if (orientationCubeRef.current) {
-      orientationCubeRef.current.updateFromCamera(cameraRef.current);
-    }
   }, [boundingBox]);
 
   const orientMainCameraToDirection = useCallback(
@@ -242,18 +238,6 @@ export function CADViewer({
     controlsRef.current.update();
   }, []);
 
-  useEffect(() => {
-    if (controlsRef.current && orientationCubeRef.current) {
-      const controls = controlsRef.current;
-      const handleChange = () => {
-        if (cameraRef.current && orientationCubeRef.current) {
-          orientationCubeRef.current.updateFromCamera(cameraRef.current);
-        }
-      };
-      controls.addEventListener("change", handleChange);
-      return () => controls.removeEventListener("change", handleChange);
-    }
-  }, []);
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
