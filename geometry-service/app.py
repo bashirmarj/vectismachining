@@ -507,6 +507,78 @@ def calculate_face_center(triangulation, transform):
         return [0, 0, 0]
 
 
+def compute_smooth_vertex_normals(vertices, indices):
+    """
+    Compute smooth per-vertex normals by averaging adjacent face normals.
+    This eliminates horizontal banding on curved surfaces (cylinders, fillets).
+    
+    Args:
+        vertices: Flat list of vertex coordinates [x0,y0,z0, x1,y1,z1, ...]
+        indices: Flat list of triangle indices [i0,i1,i2, i3,i4,i5, ...]
+    
+    Returns:
+        List of smooth normals [nx0,ny0,nz0, nx1,ny1,nz1, ...]
+    """
+    try:
+        vertex_count = len(vertices) // 3
+        triangle_count = len(indices) // 3
+        
+        # Initialize normals accumulator (will sum face normals)
+        normals = [0.0] * len(vertices)
+        
+        # For each triangle, compute face normal and accumulate at vertices
+        for tri_idx in range(triangle_count):
+            i0 = indices[tri_idx * 3]
+            i1 = indices[tri_idx * 3 + 1]
+            i2 = indices[tri_idx * 3 + 2]
+            
+            # Get vertex positions
+            v0 = [vertices[i0 * 3], vertices[i0 * 3 + 1], vertices[i0 * 3 + 2]]
+            v1 = [vertices[i1 * 3], vertices[i1 * 3 + 1], vertices[i1 * 3 + 2]]
+            v2 = [vertices[i2 * 3], vertices[i2 * 3 + 1], vertices[i2 * 3 + 2]]
+            
+            # Compute edges
+            e1 = [v1[j] - v0[j] for j in range(3)]
+            e2 = [v2[j] - v0[j] for j in range(3)]
+            
+            # Compute face normal (cross product)
+            face_normal = [
+                e1[1] * e2[2] - e1[2] * e2[1],
+                e1[2] * e2[0] - e1[0] * e2[2],
+                e1[0] * e2[1] - e1[1] * e2[0],
+            ]
+            
+            # Accumulate at each vertex of the triangle
+            for idx in [i0, i1, i2]:
+                normals[idx * 3] += face_normal[0]
+                normals[idx * 3 + 1] += face_normal[1]
+                normals[idx * 3 + 2] += face_normal[2]
+        
+        # Normalize all accumulated normals
+        for i in range(vertex_count):
+            nx = normals[i * 3]
+            ny = normals[i * 3 + 1]
+            nz = normals[i * 3 + 2]
+            
+            length = math.sqrt(nx * nx + ny * ny + nz * nz)
+            if length > 1e-7:  # Avoid division by zero
+                normals[i * 3] = nx / length
+                normals[i * 3 + 1] = ny / length
+                normals[i * 3 + 2] = nz / length
+            else:
+                # Degenerate case: use arbitrary normal
+                normals[i * 3] = 0.0
+                normals[i * 3 + 1] = 0.0
+                normals[i * 3 + 2] = 1.0
+        
+        return normals
+        
+    except Exception as e:
+        logger.error(f"Error computing smooth normals: {e}")
+        # Return zero normals if computation fails
+        return [0.0] * len(vertices)
+
+
 def tessellate_shape(shape):
     """
     === SECTION 1: MESH GENERATION ONLY ===
@@ -630,10 +702,16 @@ def tessellate_shape(shape):
         triangle_count = len(indices) // 3
         logger.info(f"✅ Mesh generation complete: {vertex_count} vertices, {triangle_count} triangles")
         
+        # Compute smooth vertex normals for professional CAD rendering
+        # This eliminates horizontal banding on curved surfaces
+        smooth_normals = compute_smooth_vertex_normals(vertices, indices)
+        logger.info(f"✅ Smooth normals computed for {vertex_count} vertices")
+        
         return {
             "vertices": vertices,
             "indices": indices,
-            "normals": normals,
+            "normals": normals,  # Keep original flat normals for backward compatibility
+            "smooth_normals": smooth_normals,  # NEW: Add smooth normals for curved surfaces
             "face_data": face_data,
             "bbox": (xmin, ymin, zmin, xmax, ymax, zmax),
             "triangle_count": triangle_count,
@@ -645,6 +723,7 @@ def tessellate_shape(shape):
             "vertices": [],
             "indices": [],
             "normals": [],
+            "smooth_normals": [],  # Add for consistency
             "face_data": [],
             "bbox": (0, 0, 0, 0, 0, 0),
             "triangle_count": 0,
