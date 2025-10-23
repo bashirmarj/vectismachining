@@ -58,9 +58,8 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
 
-      // Use smooth normals ONLY when topology colors are OFF
-      // Topology colors need flat normals to avoid blocky appearance
-      const normalsToUse = !topologyColors && meshData.smooth_normals ? meshData.smooth_normals : meshData.normals;
+      // Use smooth normals from backend if available, otherwise fall back to flat normals
+      const normalsToUse = meshData.smooth_normals || meshData.normals;
 
       if (!topologyColors) {
         // Simple indexed geometry mode (solid color)
@@ -369,7 +368,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       gl.clippingPlanes = [];
     }, [sectionPlane, gl]);
 
-    // Material properties for CAD rendering
     const materialProps = useMemo(() => {
       const base = {
         color: "#5b9bd5",
