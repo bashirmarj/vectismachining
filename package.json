@@ -9,13 +9,13 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview"
-  },
-  "dependencies": {
     ```json
 {
   "zustand": "^5.0.2"
 }
 ```
+  },
+  "dependencies": {
     "@react-three/postprocessing": "^2.15.0",
     "postprocessing": "^6.34.0",
     "@react-three/drei": "^9.88.0",
