@@ -58,8 +58,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
 
-      // Use smooth normals from backend if available, otherwise fall back to flat normals
-      const normalsToUse = meshData.smooth_normals || meshData.normals;
+      // Use smooth normals ONLY when topology colors are OFF
+      // Topology colors need flat normals to avoid blocky appearance
+      const normalsToUse = !topologyColors && meshData.smooth_normals ? meshData.smooth_normals : meshData.normals;
 
       if (!topologyColors) {
         // Simple indexed geometry mode (solid color)
@@ -368,16 +369,16 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       gl.clippingPlanes = [];
     }, [sectionPlane, gl]);
 
-    // ⭐ CORRECTED: Professional material properties
+    // Material properties for CAD rendering
     const materialProps = useMemo(() => {
       const base = {
-        color: "#FFFFFF", // ✅ White (no color tinting on vertex colors)
+        color: "#5b9bd5",
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
-        metalness: 0.15, // ✅ Subtle metallic look (was 0)
-        roughness: 0.6, // ✅ Semi-glossy (was 0.8)
-        envMapIntensity: 0.5, // ✅ Environment reflections (was 0)
+        metalness: 0,
+        roughness: 0.8,
+        envMapIntensity: 0,
       };
 
       if (displayStyle === "wireframe") {
