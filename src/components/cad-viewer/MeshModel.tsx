@@ -64,79 +64,74 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         geo.computeVertexNormals();
         geo.normalizeNormals();
       } else {
-        // For topology colors with smooth normals on curved surfaces:
-        // 1. Compute bounding box center to determine "outward" direction
-        // 2. Compute smooth normals from geometry
-        // 3. Ensure all normals point outward consistently
-        // 4. Expand to non-indexed for per-face colors
+        // For topology colors, we need selective smoothing:
+        // - Smooth normals on curved surfaces (cylinders, fillets) to eliminate banding
+        // - Keep sharp normals at hard edges (planar boundaries)
+        // This is done by angle-weighted normal averaging
 
-        // Step 1: Calculate bounding box center
-        let minX = Infinity,
-          minY = Infinity,
-          minZ = Infinity;
-        let maxX = -Infinity,
-          maxY = -Infinity,
-          maxZ = -Infinity;
+        const vertexCount = meshData.vertices.length / 3;
+        const triangleCount = meshData.indices.length / 3;
 
-        for (let i = 0; i < meshData.vertices.length; i += 3) {
-          const x = meshData.vertices[i];
-          const y = meshData.vertices[i + 1];
-          const z = meshData.vertices[i + 2];
-          minX = Math.min(minX, x);
-          maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y);
-          maxY = Math.max(maxY, y);
-          minZ = Math.min(minZ, z);
-          maxZ = Math.max(maxZ, z);
+        // Build vertex-to-triangles map
+        const vertexTriangles = Array.from({ length: vertexCount }, () => [] as number[]);
+        for (let i = 0; i < triangleCount; i++) {
+          vertexTriangles[meshData.indices[i * 3]].push(i);
+          vertexTriangles[meshData.indices[i * 3 + 1]].push(i);
+          vertexTriangles[meshData.indices[i * 3 + 2]].push(i);
         }
 
-        const centerX = (minX + maxX) / 2;
-        const centerY = (minY + maxY) / 2;
-        const centerZ = (minZ + maxZ) / 2;
+        // Calculate face normals from backend data (already computed per triangle)
+        const faceNormals = [];
+        for (let i = 0; i < triangleCount; i++) {
+          // Backend provides same normal for all 3 vertices of each triangle
+          const idx = meshData.indices[i * 3];
+          faceNormals.push(
+            new THREE.Vector3(meshData.normals[idx * 3], meshData.normals[idx * 3 + 1], meshData.normals[idx * 3 + 2]),
+          );
+        }
 
-        // Step 2: Create temporary indexed geometry and compute smooth normals
-        const tempGeo = new THREE.BufferGeometry();
-        tempGeo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
-        tempGeo.setIndex(meshData.indices);
-        tempGeo.computeVertexNormals();
+        // Compute smooth normals with angle-weighted averaging
+        // This preserves sharp edges while smoothing curved surfaces
+        const smoothNormals = new Float32Array(vertexCount * 3);
+        const CREASE_ANGLE = Math.cos((30 * Math.PI) / 180); // 30 degrees threshold
 
-        // Get the computed smooth normals
-        const smoothNormals = tempGeo.getAttribute("normal");
+        for (let i = 0; i < vertexCount; i++) {
+          const adjacentTris = vertexTriangles[i];
+          if (adjacentTris.length === 0) continue;
 
-        // Step 3: Ensure normals point outward by checking against center
-        // Create a corrected normals array
-        const correctedNormals = new Float32Array(meshData.vertices.length);
+          const avgNormal = new THREE.Vector3(0, 0, 0);
 
-        for (let i = 0; i < meshData.vertices.length / 3; i++) {
-          const vx = meshData.vertices[i * 3];
-          const vy = meshData.vertices[i * 3 + 1];
-          const vz = meshData.vertices[i * 3 + 2];
+          for (const triIdx of adjacentTris) {
+            const faceNormal = faceNormals[triIdx];
 
-          // Vector from center to vertex (outward direction)
-          const dx = vx - centerX;
-          const dy = vy - centerY;
-          const dz = vz - centerZ;
+            // Angle-weighted averaging: only average with similar-facing triangles
+            // This keeps sharp edges while smoothing curves
+            let weight = 1.0;
 
-          // Get computed normal
-          let nx = smoothNormals.getX(i);
-          let ny = smoothNormals.getY(i);
-          let nz = smoothNormals.getZ(i);
+            // Compare with other adjacent faces
+            for (const otherTriIdx of adjacentTris) {
+              if (triIdx === otherTriIdx) continue;
+              const otherNormal = faceNormals[otherTriIdx];
+              const dot = faceNormal.dot(otherNormal);
 
-          // Dot product: if negative, normal points inward -> flip it
-          const dot = nx * dx + ny * dy + nz * dz;
-          if (dot < 0) {
-            nx = -nx;
-            ny = -ny;
-            nz = -nz;
+              // If angle is too sharp (< 30 degrees apart), reduce weight
+              if (dot < CREASE_ANGLE) {
+                weight = 0.1; // Keep it more flat-shaded at sharp edges
+                break;
+              }
+            }
+
+            avgNormal.addScaledVector(faceNormal, weight);
           }
 
-          correctedNormals[i * 3] = nx;
-          correctedNormals[i * 3 + 1] = ny;
-          correctedNormals[i * 3 + 2] = nz;
+          avgNormal.normalize();
+
+          smoothNormals[i * 3] = avgNormal.x;
+          smoothNormals[i * 3 + 1] = avgNormal.y;
+          smoothNormals[i * 3 + 2] = avgNormal.z;
         }
 
-        // Step 4: Expand to non-indexed geometry with corrected normals
-        const triangleCount = meshData.indices.length / 3;
+        // Expand to non-indexed geometry with smooth normals
         const positions = new Float32Array(triangleCount * 9);
         const normals = new Float32Array(triangleCount * 9);
 
@@ -158,25 +153,22 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
           positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
 
-          // Copy corrected smooth normals
-          normals[i * 9 + 0] = correctedNormals[idx0 * 3];
-          normals[i * 9 + 1] = correctedNormals[idx0 * 3 + 1];
-          normals[i * 9 + 2] = correctedNormals[idx0 * 3 + 2];
+          // Copy smooth normals
+          normals[i * 9 + 0] = smoothNormals[idx0 * 3];
+          normals[i * 9 + 1] = smoothNormals[idx0 * 3 + 1];
+          normals[i * 9 + 2] = smoothNormals[idx0 * 3 + 2];
 
-          normals[i * 9 + 3] = correctedNormals[idx1 * 3];
-          normals[i * 9 + 4] = correctedNormals[idx1 * 3 + 1];
-          normals[i * 9 + 5] = correctedNormals[idx1 * 3 + 2];
+          normals[i * 9 + 3] = smoothNormals[idx1 * 3];
+          normals[i * 9 + 4] = smoothNormals[idx1 * 3 + 1];
+          normals[i * 9 + 5] = smoothNormals[idx1 * 3 + 2];
 
-          normals[i * 9 + 6] = correctedNormals[idx2 * 3];
-          normals[i * 9 + 7] = correctedNormals[idx2 * 3 + 1];
-          normals[i * 9 + 8] = correctedNormals[idx2 * 3 + 2];
+          normals[i * 9 + 6] = smoothNormals[idx2 * 3];
+          normals[i * 9 + 7] = smoothNormals[idx2 * 3 + 1];
+          normals[i * 9 + 8] = smoothNormals[idx2 * 3 + 2];
         }
 
         geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
         geo.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
-
-        // Dispose temporary geometry
-        tempGeo.dispose();
       }
 
       geo.computeBoundingSphere();
