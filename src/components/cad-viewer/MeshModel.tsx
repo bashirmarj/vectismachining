@@ -6,7 +6,6 @@ interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
-  smooth_normals?: number[]; // NEW: Backend-computed smooth normals for curved surfaces
   vertex_colors?: string[];
   triangle_count: number;
   feature_edges?: number[][][];
@@ -58,27 +57,21 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
 
-      // ALWAYS USE FLAT NORMALS (original behavior that worked)
-      const normalsToUse = meshData.normals;
-
       if (!topologyColors) {
-        // Simple indexed geometry mode (solid color)
         geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
         geo.setIndex(meshData.indices);
-        geo.setAttribute("normal", new THREE.Float32BufferAttribute(normalsToUse, 3));
+        geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
+        geo.computeVertexNormals();
+        geo.normalizeNormals();
       } else {
-        // Non-indexed geometry mode (for per-face topology colors)
-        // Expand indexed data to non-indexed so each triangle can have different colors
         const triangleCount = meshData.indices.length / 3;
         const positions = new Float32Array(triangleCount * 9);
-        const normals = new Float32Array(triangleCount * 9);
 
         for (let i = 0; i < triangleCount; i++) {
           const idx0 = meshData.indices[i * 3];
           const idx1 = meshData.indices[i * 3 + 1];
           const idx2 = meshData.indices[i * 3 + 2];
 
-          // Copy positions
           positions[i * 9 + 0] = meshData.vertices[idx0 * 3];
           positions[i * 9 + 1] = meshData.vertices[idx0 * 3 + 1];
           positions[i * 9 + 2] = meshData.vertices[idx0 * 3 + 2];
@@ -90,23 +83,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           positions[i * 9 + 6] = meshData.vertices[idx2 * 3];
           positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
           positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
-
-          // Copy flat normals (original behavior)
-          normals[i * 9 + 0] = normalsToUse[idx0 * 3];
-          normals[i * 9 + 1] = normalsToUse[idx0 * 3 + 1];
-          normals[i * 9 + 2] = normalsToUse[idx0 * 3 + 2];
-
-          normals[i * 9 + 3] = normalsToUse[idx1 * 3];
-          normals[i * 9 + 4] = normalsToUse[idx1 * 3 + 1];
-          normals[i * 9 + 5] = normalsToUse[idx1 * 3 + 2];
-
-          normals[i * 9 + 6] = normalsToUse[idx2 * 3];
-          normals[i * 9 + 7] = normalsToUse[idx2 * 3 + 1];
-          normals[i * 9 + 8] = normalsToUse[idx2 * 3 + 2];
         }
 
         geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-        geo.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
       }
 
       geo.computeBoundingSphere();
@@ -397,6 +376,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
             {...materialProps}
             color={topologyColors ? "#ffffff" : SOLID_COLOR}
             vertexColors={topologyColors}
+            flatShading={topologyColors}
             toneMapped={false}
           />
         </mesh>
