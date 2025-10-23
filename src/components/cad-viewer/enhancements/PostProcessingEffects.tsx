@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { EffectComposer, SSAO, Bloom, FXAA } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
+import * as THREE from 'three';
 
 interface PostProcessingEffectsProps {
   enableSSAO?: boolean;
@@ -49,15 +50,19 @@ export function PostProcessingEffects({
           blendFunction={BlendFunction.MULTIPLY}
           samples={ssaoSamples}
           radius={ssaoRadius}
-          intensity={ssaoIntensity * 30}  // Scale for visibility
+          intensity={ssaoIntensity * 30}
           luminanceInfluence={0.6}
-          color="black"
+          color={new THREE.Color('black')}
           bias={0.01}
           distanceScaling={true}
           distanceThreshold={0.5}
           distanceFalloff={0.1}
           rangeThreshold={0.001}
           rangeFalloff={0.001}
+          worldDistanceThreshold={0.5}
+          worldDistanceFalloff={0.1}
+          worldProximityThreshold={0.001}
+          worldProximityFalloff={0.001}
         />
       )}
 
