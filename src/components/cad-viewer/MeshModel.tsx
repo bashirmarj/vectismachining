@@ -64,16 +64,30 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         geo.computeVertexNormals();
         geo.normalizeNormals();
       } else {
-        // For topology colors, we need non-indexed geometry for per-face colors
-        // BUT we need smooth normals for curved surfaces (not flat backend normals)
+        // For topology colors with smooth normals on curved surfaces:
+        // 1. First compute smooth normals on indexed geometry
+        // 2. Then expand to non-indexed for per-face colors
+
+        // Step 1: Create temporary indexed geometry and compute smooth normals
+        const tempGeo = new THREE.BufferGeometry();
+        tempGeo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
+        tempGeo.setIndex(meshData.indices);
+        tempGeo.computeVertexNormals();
+
+        // Get the computed smooth normals
+        const smoothNormals = tempGeo.getAttribute("normal");
+
+        // Step 2: Expand to non-indexed geometry with smooth normals
         const triangleCount = meshData.indices.length / 3;
         const positions = new Float32Array(triangleCount * 9);
+        const normals = new Float32Array(triangleCount * 9);
 
         for (let i = 0; i < triangleCount; i++) {
           const idx0 = meshData.indices[i * 3];
           const idx1 = meshData.indices[i * 3 + 1];
           const idx2 = meshData.indices[i * 3 + 2];
 
+          // Copy positions
           positions[i * 9 + 0] = meshData.vertices[idx0 * 3];
           positions[i * 9 + 1] = meshData.vertices[idx0 * 3 + 1];
           positions[i * 9 + 2] = meshData.vertices[idx0 * 3 + 2];
@@ -85,13 +99,26 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           positions[i * 9 + 6] = meshData.vertices[idx2 * 3];
           positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
           positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
+
+          // Copy smooth normals from indexed geometry
+          normals[i * 9 + 0] = smoothNormals.getX(idx0);
+          normals[i * 9 + 1] = smoothNormals.getY(idx0);
+          normals[i * 9 + 2] = smoothNormals.getZ(idx0);
+
+          normals[i * 9 + 3] = smoothNormals.getX(idx1);
+          normals[i * 9 + 4] = smoothNormals.getY(idx1);
+          normals[i * 9 + 5] = smoothNormals.getZ(idx1);
+
+          normals[i * 9 + 6] = smoothNormals.getX(idx2);
+          normals[i * 9 + 7] = smoothNormals.getY(idx2);
+          normals[i * 9 + 8] = smoothNormals.getZ(idx2);
         }
 
         geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+        geo.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
 
-        // Compute smooth vertex normals from geometry (fixes horizontal lines on cylinders)
-        // Backend provides flat face normals which cause banding on curved surfaces
-        geo.computeVertexNormals();
+        // Dispose temporary geometry
+        tempGeo.dispose();
       }
 
       geo.computeBoundingSphere();
