@@ -6,6 +6,7 @@ interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
+  smooth_normals?: number[]; // NEW: Backend-computed smooth normals for curved surfaces
   vertex_colors?: string[];
   triangle_count: number;
   feature_edges?: number[][][];
@@ -57,81 +58,18 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
 
+      // Use smooth normals from backend if available, otherwise fall back to flat normals
+      const normalsToUse = meshData.smooth_normals || meshData.normals;
+
       if (!topologyColors) {
+        // Simple indexed geometry mode (solid color)
         geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
         geo.setIndex(meshData.indices);
-        geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
-        geo.computeVertexNormals();
-        geo.normalizeNormals();
+        geo.setAttribute("normal", new THREE.Float32BufferAttribute(normalsToUse, 3));
       } else {
-        // For topology colors, we need selective smoothing:
-        // - Smooth normals on curved surfaces (cylinders, fillets) to eliminate banding
-        // - Keep sharp normals at hard edges (planar boundaries)
-        // This is done by angle-weighted normal averaging
-
-        const vertexCount = meshData.vertices.length / 3;
+        // Non-indexed geometry mode (for per-face topology colors)
+        // Expand indexed data to non-indexed so each triangle can have different colors
         const triangleCount = meshData.indices.length / 3;
-
-        // Build vertex-to-triangles map
-        const vertexTriangles = Array.from({ length: vertexCount }, () => [] as number[]);
-        for (let i = 0; i < triangleCount; i++) {
-          vertexTriangles[meshData.indices[i * 3]].push(i);
-          vertexTriangles[meshData.indices[i * 3 + 1]].push(i);
-          vertexTriangles[meshData.indices[i * 3 + 2]].push(i);
-        }
-
-        // Calculate face normals from backend data (already computed per triangle)
-        const faceNormals = [];
-        for (let i = 0; i < triangleCount; i++) {
-          // Backend provides same normal for all 3 vertices of each triangle
-          const idx = meshData.indices[i * 3];
-          faceNormals.push(
-            new THREE.Vector3(meshData.normals[idx * 3], meshData.normals[idx * 3 + 1], meshData.normals[idx * 3 + 2]),
-          );
-        }
-
-        // Compute smooth normals with angle-weighted averaging
-        // This preserves sharp edges while smoothing curved surfaces
-        const smoothNormals = new Float32Array(vertexCount * 3);
-        const CREASE_ANGLE = Math.cos((30 * Math.PI) / 180); // 30 degrees threshold
-
-        for (let i = 0; i < vertexCount; i++) {
-          const adjacentTris = vertexTriangles[i];
-          if (adjacentTris.length === 0) continue;
-
-          const avgNormal = new THREE.Vector3(0, 0, 0);
-
-          for (const triIdx of adjacentTris) {
-            const faceNormal = faceNormals[triIdx];
-
-            // Angle-weighted averaging: only average with similar-facing triangles
-            // This keeps sharp edges while smoothing curves
-            let weight = 1.0;
-
-            // Compare with other adjacent faces
-            for (const otherTriIdx of adjacentTris) {
-              if (triIdx === otherTriIdx) continue;
-              const otherNormal = faceNormals[otherTriIdx];
-              const dot = faceNormal.dot(otherNormal);
-
-              // If angle is too sharp (< 30 degrees apart), reduce weight
-              if (dot < CREASE_ANGLE) {
-                weight = 0.1; // Keep it more flat-shaded at sharp edges
-                break;
-              }
-            }
-
-            avgNormal.addScaledVector(faceNormal, weight);
-          }
-
-          avgNormal.normalize();
-
-          smoothNormals[i * 3] = avgNormal.x;
-          smoothNormals[i * 3 + 1] = avgNormal.y;
-          smoothNormals[i * 3 + 2] = avgNormal.z;
-        }
-
-        // Expand to non-indexed geometry with smooth normals
         const positions = new Float32Array(triangleCount * 9);
         const normals = new Float32Array(triangleCount * 9);
 
@@ -153,18 +91,18 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
           positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
 
-          // Copy smooth normals
-          normals[i * 9 + 0] = smoothNormals[idx0 * 3];
-          normals[i * 9 + 1] = smoothNormals[idx0 * 3 + 1];
-          normals[i * 9 + 2] = smoothNormals[idx0 * 3 + 2];
+          // Copy smooth normals from backend (or flat normals if smooth not available)
+          normals[i * 9 + 0] = normalsToUse[idx0 * 3];
+          normals[i * 9 + 1] = normalsToUse[idx0 * 3 + 1];
+          normals[i * 9 + 2] = normalsToUse[idx0 * 3 + 2];
 
-          normals[i * 9 + 3] = smoothNormals[idx1 * 3];
-          normals[i * 9 + 4] = smoothNormals[idx1 * 3 + 1];
-          normals[i * 9 + 5] = smoothNormals[idx1 * 3 + 2];
+          normals[i * 9 + 3] = normalsToUse[idx1 * 3];
+          normals[i * 9 + 4] = normalsToUse[idx1 * 3 + 1];
+          normals[i * 9 + 5] = normalsToUse[idx1 * 3 + 2];
 
-          normals[i * 9 + 6] = smoothNormals[idx2 * 3];
-          normals[i * 9 + 7] = smoothNormals[idx2 * 3 + 1];
-          normals[i * 9 + 8] = smoothNormals[idx2 * 3 + 2];
+          normals[i * 9 + 6] = normalsToUse[idx2 * 3];
+          normals[i * 9 + 7] = normalsToUse[idx2 * 3 + 1];
+          normals[i * 9 + 8] = normalsToUse[idx2 * 3 + 2];
         }
 
         geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
