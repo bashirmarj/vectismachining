@@ -65,10 +65,36 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         geo.normalizeNormals();
       } else {
         // For topology colors with smooth normals on curved surfaces:
-        // 1. First compute smooth normals on indexed geometry
-        // 2. Then expand to non-indexed for per-face colors
+        // 1. Compute bounding box center to determine "outward" direction
+        // 2. Compute smooth normals from geometry
+        // 3. Ensure all normals point outward consistently
+        // 4. Expand to non-indexed for per-face colors
 
-        // Step 1: Create temporary indexed geometry and compute smooth normals
+        // Step 1: Calculate bounding box center
+        let minX = Infinity,
+          minY = Infinity,
+          minZ = Infinity;
+        let maxX = -Infinity,
+          maxY = -Infinity,
+          maxZ = -Infinity;
+
+        for (let i = 0; i < meshData.vertices.length; i += 3) {
+          const x = meshData.vertices[i];
+          const y = meshData.vertices[i + 1];
+          const z = meshData.vertices[i + 2];
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+          minZ = Math.min(minZ, z);
+          maxZ = Math.max(maxZ, z);
+        }
+
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        const centerZ = (minZ + maxZ) / 2;
+
+        // Step 2: Create temporary indexed geometry and compute smooth normals
         const tempGeo = new THREE.BufferGeometry();
         tempGeo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
         tempGeo.setIndex(meshData.indices);
@@ -77,7 +103,39 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         // Get the computed smooth normals
         const smoothNormals = tempGeo.getAttribute("normal");
 
-        // Step 2: Expand to non-indexed geometry with smooth normals
+        // Step 3: Ensure normals point outward by checking against center
+        // Create a corrected normals array
+        const correctedNormals = new Float32Array(meshData.vertices.length);
+
+        for (let i = 0; i < meshData.vertices.length / 3; i++) {
+          const vx = meshData.vertices[i * 3];
+          const vy = meshData.vertices[i * 3 + 1];
+          const vz = meshData.vertices[i * 3 + 2];
+
+          // Vector from center to vertex (outward direction)
+          const dx = vx - centerX;
+          const dy = vy - centerY;
+          const dz = vz - centerZ;
+
+          // Get computed normal
+          let nx = smoothNormals.getX(i);
+          let ny = smoothNormals.getY(i);
+          let nz = smoothNormals.getZ(i);
+
+          // Dot product: if negative, normal points inward -> flip it
+          const dot = nx * dx + ny * dy + nz * dz;
+          if (dot < 0) {
+            nx = -nx;
+            ny = -ny;
+            nz = -nz;
+          }
+
+          correctedNormals[i * 3] = nx;
+          correctedNormals[i * 3 + 1] = ny;
+          correctedNormals[i * 3 + 2] = nz;
+        }
+
+        // Step 4: Expand to non-indexed geometry with corrected normals
         const triangleCount = meshData.indices.length / 3;
         const positions = new Float32Array(triangleCount * 9);
         const normals = new Float32Array(triangleCount * 9);
@@ -100,18 +158,18 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
           positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
 
-          // Copy smooth normals from indexed geometry
-          normals[i * 9 + 0] = smoothNormals.getX(idx0);
-          normals[i * 9 + 1] = smoothNormals.getY(idx0);
-          normals[i * 9 + 2] = smoothNormals.getZ(idx0);
+          // Copy corrected smooth normals
+          normals[i * 9 + 0] = correctedNormals[idx0 * 3];
+          normals[i * 9 + 1] = correctedNormals[idx0 * 3 + 1];
+          normals[i * 9 + 2] = correctedNormals[idx0 * 3 + 2];
 
-          normals[i * 9 + 3] = smoothNormals.getX(idx1);
-          normals[i * 9 + 4] = smoothNormals.getY(idx1);
-          normals[i * 9 + 5] = smoothNormals.getZ(idx1);
+          normals[i * 9 + 3] = correctedNormals[idx1 * 3];
+          normals[i * 9 + 4] = correctedNormals[idx1 * 3 + 1];
+          normals[i * 9 + 5] = correctedNormals[idx1 * 3 + 2];
 
-          normals[i * 9 + 6] = smoothNormals.getX(idx2);
-          normals[i * 9 + 7] = smoothNormals.getY(idx2);
-          normals[i * 9 + 8] = smoothNormals.getZ(idx2);
+          normals[i * 9 + 6] = correctedNormals[idx2 * 3];
+          normals[i * 9 + 7] = correctedNormals[idx2 * 3 + 1];
+          normals[i * 9 + 8] = correctedNormals[idx2 * 3 + 2];
         }
 
         geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
