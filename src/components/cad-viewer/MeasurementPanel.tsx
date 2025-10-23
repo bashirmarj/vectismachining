@@ -1,4 +1,4 @@
-import { useMeasurementStore } from './measurementStore';
+import { useMeasurementStore } from '@/stores/measurementStore';
 import { Button } from '@/components/ui/button';
 import { Ruler, Triangle, Circle, Eye, EyeOff, X, Download, Trash2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';

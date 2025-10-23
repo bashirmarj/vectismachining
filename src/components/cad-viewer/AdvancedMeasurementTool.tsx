@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Html } from '@react-three/drei';
-import { useMeasurementStore, Measurement, MeasurementPoint } from './measurementStore';
+import { useMeasurementStore, Measurement, MeasurementPoint } from '@/stores/measurementStore';
 import {
   calculateDistance,
   calculateAngle,
@@ -12,7 +12,7 @@ import {
   snapToVertex,
   formatCoordinate,
   generateMeasurementId
-} from './measurementUtils';
+} from '@/lib/measurementUtils';
 
 interface MeshData {
   vertices: number[];
