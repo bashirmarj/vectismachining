@@ -368,15 +368,16 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       gl.clippingPlanes = [];
     }, [sectionPlane, gl]);
 
+    // ⭐ CORRECTED: Professional material properties
     const materialProps = useMemo(() => {
       const base = {
-        color: "#5b9bd5",
+        color: "#FFFFFF", // ✅ White (no color tinting on vertex colors)
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
-        metalness: 0,
-        roughness: 0.8,
-        envMapIntensity: 0,
+        metalness: 0.15, // ✅ Subtle metallic look (was 0)
+        roughness: 0.6, // ✅ Semi-glossy (was 0.8)
+        envMapIntensity: 0.5, // ✅ Environment reflections (was 0)
       };
 
       if (displayStyle === "wireframe") {
