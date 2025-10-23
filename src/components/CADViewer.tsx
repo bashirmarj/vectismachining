@@ -11,9 +11,10 @@ import { DimensionAnnotations } from "./cad-viewer/DimensionAnnotations";
 import { MeasurementTool } from "./cad-viewer/MeasurementTool";
 import { OrientationCubePreview, OrientationCubeHandle } from "./cad-viewer/OrientationCubePreview";
 import LightingRig from "./cad-viewer/LightingRig";
-
 import VisualEffects from "./cad-viewer/VisualEffects";
 import PerformanceSettingsPanel from "./cad-viewer/PerformanceSettingsPanel";
+// Phase 1 Enhancement (Optional) - Only import if you created the enhancements folder
+// import { SceneEnhancementWrapper } from "./cad-viewer/enhancements/SceneEnhancementWrapper";
 
 interface CADViewerProps {
   file?: File;
@@ -22,6 +23,7 @@ interface CADViewerProps {
   meshId?: string;
   meshData?: MeshData;
   detectedFeatures?: any;
+  usePhase1Enhancement?: boolean; // NEW: Toggle Phase 1 enhancements (requires enhancements folder)
 }
 
 interface MeshData {
@@ -40,6 +42,7 @@ export function CADViewer({
   meshId,
   meshData: propMeshData,
   detectedFeatures,
+  usePhase1Enhancement = false, // NEW: Default to false (use existing LightingRig/VisualEffects)
 }: CADViewerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,26 +60,22 @@ export function CADViewer({
   const controlsRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
   const orientationCubeRef = useRef<OrientationCubeHandle>(null);
-  
+
   // Mesh ref for model access
   const meshRef = useRef<THREE.Mesh>(null);
 
   // Performance settings for professional visual quality
   const [shadowsEnabled, setShadowsEnabled] = useState(true);
   const [ssaoEnabled, setSSAOEnabled] = useState(true);
-  const [quality, setQuality] = useState<'low' | 'medium' | 'high'>('medium');
+  const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
 
   const fileExtension = fileName.split(".").pop()?.toLowerCase() || "";
   const isSTEP = ["step", "stp"].includes(fileExtension);
   const isIGES = ["iges", "igs"].includes(fileExtension);
   const isRenderableFormat = ["stl", "step", "stp", "iges", "igs"].includes(fileExtension);
 
-  // STEP/IGES files are now processed server-side via geometry service
-  // Mesh data is fetched from database using meshId (provided after server analysis)
-
-  // Fetch mesh data from database when meshId is provided (for admin view)
+  // Fetch mesh data from database when meshId is provided
   useEffect(() => {
-    // Priority 1: Use mesh data passed via props
     if (propMeshData) {
       console.log("✅ Mesh data received from backend:", {
         vertices: propMeshData.vertices.length,
@@ -87,13 +86,12 @@ export function CADViewer({
       return;
     }
 
-    // Priority 2: Fetch from database if meshId is provided
     if (!meshId) {
       console.log("⚠️ No mesh data available (no propMeshData or meshId)");
       return;
     }
 
-    if (fetchedMeshData) return; // Already fetched
+    if (fetchedMeshData) return;
 
     const fetchMesh = async () => {
       setIsLoading(true);
@@ -124,16 +122,15 @@ export function CADViewer({
     fetchMesh();
   }, [meshId, propMeshData, fetchedMeshData]);
 
-  // Use mesh data from props or fetched data
   const activeMeshData = propMeshData || fetchedMeshData;
 
   // Calculate bounding box for camera and annotations
   const boundingBox = useMemo(() => {
     if (!activeMeshData || !activeMeshData.vertices || activeMeshData.vertices.length === 0) {
-      return { 
-        width: 100, 
-        height: 100, 
-        depth: 100, 
+      return {
+        width: 100,
+        height: 100,
+        depth: 100,
         center: [0, 0, 0] as [number, number, number],
         min: new THREE.Vector3(-50, -50, -50),
         max: new THREE.Vector3(50, 50, 50),
@@ -169,10 +166,8 @@ export function CADViewer({
     return { width, height, depth, center: centerTuple, min, max, size, centerVec: center };
   }, [activeMeshData]);
 
-  // Determine if we have valid 3D data to display
   const hasValidModel = activeMeshData && activeMeshData.vertices && activeMeshData.vertices.length > 0;
 
-  // Create object URL for File objects, cleanup on unmount
   const objectUrl = useMemo(() => {
     if (file) {
       return URL.createObjectURL(file);
@@ -195,201 +190,79 @@ export function CADViewer({
   };
 
   const handleFitView = () => {
-    if (controlsRef.current && cameraRef.current) {
-      const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
-      const distance = maxDim * 2;
+    if (!controlsRef.current || !cameraRef.current) return;
 
-      cameraRef.current.position.set(
-        boundingBox.center[0] + distance,
-        boundingBox.center[1] + distance,
-        boundingBox.center[2] + distance,
-      );
+    const maxDimension = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+    const distance = maxDimension * 2.5;
+    const direction = new THREE.Vector3(1, 1, 1).normalize();
+    const newPosition = new THREE.Vector3(...boundingBox.center).add(direction.multiplyScalar(distance));
 
-      controlsRef.current.target.set(...boundingBox.center);
-      controlsRef.current.update();
-    }
-  };
-
-  // Helper function to classify click region (face, edge, or corner)
-  const classifyClickRegion = (localPoint: THREE.Vector3) => {
-    const faceDistance = 1.5; // Cube is 3x3x3, so face distance from center is 1.5
-    const edgeThreshold = 0.4;
-    const cornerThreshold = 0.6;
-
-    const absX = Math.abs(localPoint.x);
-    const absY = Math.abs(localPoint.y);
-    const absZ = Math.abs(localPoint.z);
-
-    const nearMaxX = absX > faceDistance - edgeThreshold;
-    const nearMaxY = absY > faceDistance - edgeThreshold;
-    const nearMaxZ = absZ > faceDistance - edgeThreshold;
-
-    const edgeCount = [nearMaxX, nearMaxY, nearMaxZ].filter(Boolean).length;
-
-    // CORNER: All 3 dimensions near maximum
-    if (edgeCount === 3) {
-      const direction = new THREE.Vector3(
-        Math.sign(localPoint.x),
-        Math.sign(localPoint.y),
-        Math.sign(localPoint.z),
-      ).normalize();
-
-      return {
-        type: "corner" as const,
-        direction,
-        description: `Corner (${Math.sign(localPoint.x) > 0 ? "+" : "-"}X, ${Math.sign(localPoint.y) > 0 ? "+" : "-"}Y, ${Math.sign(localPoint.z) > 0 ? "+" : "-"}Z)`,
-      };
-    }
-    // EDGE: Exactly 2 dimensions near maximum
-    else if (edgeCount === 2) {
-      const direction = new THREE.Vector3(
-        nearMaxX ? Math.sign(localPoint.x) : 0,
-        nearMaxY ? Math.sign(localPoint.y) : 0,
-        nearMaxZ ? Math.sign(localPoint.z) : 0,
-      ).normalize();
-
-      return {
-        type: "edge" as const,
-        direction,
-        description: "Edge view",
-      };
-    }
-    // FACE: Only 1 dimension near maximum
-    else {
-      if (absX > absY && absX > absZ) {
-        return {
-          type: "face" as const,
-          direction: new THREE.Vector3(Math.sign(localPoint.x), 0, 0),
-          description: Math.sign(localPoint.x) > 0 ? "Right" : "Left",
-        };
-      } else if (absY > absX && absY > absZ) {
-        return {
-          type: "face" as const,
-          direction: new THREE.Vector3(0, Math.sign(localPoint.y), 0),
-          description: Math.sign(localPoint.y) > 0 ? "Top" : "Bottom",
-        };
-      } else {
-        return {
-          type: "face" as const,
-          direction: new THREE.Vector3(0, 0, Math.sign(localPoint.z)),
-          description: Math.sign(localPoint.z) > 0 ? "Front" : "Back",
-        };
-      }
-    }
-  };
-
-  // Orientation cube removed - using OrientationCubePreview component instead
-
-  // Isometric view helper
-  const setIsometricView = () => {
-    if (!cameraRef.current || !controlsRef.current) return;
-
-    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
-    const distance = maxDim * 2;
-    const target = new THREE.Vector3(...boundingBox.center);
-
-    // Isometric angles: 45° horizontal, 35.264° vertical
-    const phi = Math.PI / 4; // 45°
-    const theta = Math.asin(Math.tan(Math.PI / 6)); // 35.264°
-
-    cameraRef.current.position.set(
-      target.x + distance * Math.sin(phi) * Math.cos(theta),
-      target.y + distance * Math.sin(theta),
-      target.z + distance * Math.cos(phi) * Math.cos(theta),
-    );
-
-    controlsRef.current.target.copy(target);
+    cameraRef.current.position.copy(newPosition);
+    controlsRef.current.target.set(...boundingBox.center);
     controlsRef.current.update();
   };
 
-  // Smooth camera orientation to any direction (face, edge, or corner)
-  const orientMainCameraToDirection = (direction: THREE.Vector3) => {
-    if (!cameraRef.current || !controlsRef.current) return;
+  const setIsometricView = useCallback(() => {
+    if (!controlsRef.current || !cameraRef.current) return;
 
-    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
-    const distance = maxDim * 2.5;
-    const target = new THREE.Vector3(...boundingBox.center);
+    const maxDimension = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+    const distance = maxDimension * 1.8;
+    const direction = new THREE.Vector3(1, 1, 1).normalize();
+    const newPosition = new THREE.Vector3(...boundingBox.center).add(direction.multiplyScalar(distance));
 
-    // INVERT direction: to look AT a face, camera must be OPPOSITE to it
-    const cameraDirection = direction.clone().normalize().multiplyScalar(-1);
+    cameraRef.current.position.copy(newPosition);
+    cameraRef.current.up.set(0, 0, 1);
+    controlsRef.current.target.set(...boundingBox.center);
+    controlsRef.current.update();
 
-    // Calculate new camera position
-    const newPosition = target.clone().add(cameraDirection.multiplyScalar(distance));
-
-    // Calculate target quaternion without forcing up vector
-    // Let TrackballControls maintain natural orientation
-    const lookDirection = target.clone().sub(newPosition).normalize();
-    const targetQuat = new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(0, 0, -1), // Camera default forward
-      lookDirection
-    );
-
-    // Smooth animation
-    const startPos = cameraRef.current.position.clone();
-    const startQuat = cameraRef.current.quaternion.clone();
-    const duration = 600;
-    const t0 = performance.now();
-
-    const animate = (t: number) => {
-      const elapsed = t - t0;
-      const k = Math.min(1, elapsed / duration);
-      const easedK = 1 - Math.pow(1 - k, 3); // Ease-out cubic
-
-      cameraRef.current.position.lerpVectors(startPos, newPosition, easedK);
-      cameraRef.current.quaternion.slerpQuaternions(startQuat, targetQuat, easedK);
-
-      controlsRef.current.target.copy(target);
-      controlsRef.current.update();
-
-      if (k < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-
-    requestAnimationFrame(animate);
-  };
-
-  // No-op: TrackballControls manages its own up vector for free rotation
-  const handleCubeUpVectorChange = (newUpVector: THREE.Vector3) => {
-    // Disabled to allow TrackballControls full freedom
-    // True CAD-style rotation doesn't constrain the up vector
-  };
-
-  const handleViewChange = (direction: "up" | "down" | "left" | "right") => {
-    const rotationMap = {
-      up: new THREE.Vector3(0, 1, 0),
-      down: new THREE.Vector3(0, -1, 0),
-      left: new THREE.Vector3(-1, 0, 0),
-      right: new THREE.Vector3(1, 0, 0),
-    };
-
-    const directionVector = rotationMap[direction];
-
-    // Rotate main camera
-    orientMainCameraToDirection(directionVector);
-
-    // Also rotate the orientation cube preview
     if (orientationCubeRef.current) {
-      orientationCubeRef.current.rotateCube(directionVector);
+      orientationCubeRef.current.updateFromCamera(cameraRef.current);
     }
-  };
+  }, [boundingBox]);
 
+  const orientMainCameraToDirection = useCallback(
+    (direction: THREE.Vector3) => {
+      if (!cameraRef.current || !controlsRef.current) return;
 
-  // Keyboard shortcuts
+      const maxDimension = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+      const distance = maxDimension * 1.8;
+      const newPosition = new THREE.Vector3(...boundingBox.center).add(direction.clone().multiplyScalar(distance));
+
+      cameraRef.current.position.copy(newPosition);
+      controlsRef.current.target.set(...boundingBox.center);
+      controlsRef.current.update();
+    },
+    [boundingBox],
+  );
+
+  const handleCubeUpVectorChange = useCallback((newUp: THREE.Vector3) => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    cameraRef.current.up.copy(newUp);
+    cameraRef.current.updateProjectionMatrix();
+    controlsRef.current.update();
+  }, []);
+
+  useEffect(() => {
+    if (controlsRef.current && orientationCubeRef.current) {
+      const controls = controlsRef.current;
+      const handleChange = () => {
+        if (cameraRef.current && orientationCubeRef.current) {
+          orientationCubeRef.current.updateFromCamera(cameraRef.current);
+        }
+      };
+      controls.addEventListener("change", handleChange);
+      return () => controls.removeEventListener("change", handleChange);
+    }
+  }, []);
+
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Ignore if typing in input fields
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      if (e.code === "Space") {
+      if (e.code === "KeyE" && !e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault();
-        handleFitView();
-      } else if (e.code === "KeyE") {
+        setShowEdges((prev) => !prev);
+      } else if (e.code === "KeyM" && !e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault();
-        setShowEdges(!showEdges);
-      } else if (e.code === "KeyM") {
-        e.preventDefault();
-        setMeasurementMode(measurementMode ? null : "distance");
+        setMeasurementMode((prev) => (prev === null ? "distance" : null));
       } else if (e.code === "Escape") {
         e.preventDefault();
         setMeasurementMode(null);
@@ -476,20 +349,38 @@ export function CADViewer({
               <Suspense fallback={null}>
                 {/* Clean white background */}
                 <color attach="background" args={["#f8f9fa"]} />
-                <fog attach="fog" args={["#f8f9fa", Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 10, Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 20]} />
+                <fog
+                  attach="fog"
+                  args={[
+                    "#f8f9fa",
+                    Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 10,
+                    Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 20,
+                  ]}
+                />
+
                 {/* Professional 5-light PBR setup with shadows */}
-                <LightingRig 
+                <LightingRig
                   shadowsEnabled={shadowsEnabled}
                   intensity={1.0}
                   modelBounds={{
                     min: boundingBox.min,
                     max: boundingBox.max,
                     center: boundingBox.centerVec,
-                    size: boundingBox.size
+                    size: boundingBox.size,
                   }}
                 />
+
                 {/* Subtle grid (light gray) */}
-                ...
+                <gridHelper
+                  args={[
+                    Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 4,
+                    20,
+                    "#e0e0e0",
+                    "#f0f0f0",
+                  ]}
+                  position={[boundingBox.center[0], boundingBox.min.y - 0.01, boundingBox.center[2]]}
+                />
+
                 {/* Auto-framed camera */}
                 <PerspectiveCamera
                   ref={cameraRef}
@@ -503,6 +394,7 @@ export function CADViewer({
                   near={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.01}
                   far={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 15}
                 />
+
                 {/* 3D Model */}
                 <MeshModel
                   ref={meshRef}
@@ -514,19 +406,18 @@ export function CADViewer({
                   displayStyle={displayStyle}
                   topologyColors={showTopologyColors}
                 />
+
                 {/* Dimension Annotations */}
                 {showDimensions && detectedFeatures && (
                   <DimensionAnnotations features={detectedFeatures} boundingBox={boundingBox} />
                 )}
+
                 {/* Measurement Tool */}
                 <MeasurementTool enabled={measurementMode !== null} mode={measurementMode} />
-                
+
                 {/* Visual effects (SSAO, Bloom, FXAA, Environment) */}
-                <VisualEffects 
-                  enabled={ssaoEnabled}
-                  quality={quality}
-                />
-                
+                <VisualEffects enabled={ssaoEnabled} quality={quality} />
+
                 {/* Camera controls with trackball rotation for CAD-style interaction */}
                 <TrackballControls
                   ref={controlsRef}
@@ -543,17 +434,17 @@ export function CADViewer({
                   noRotate={false}
                 />
               </Suspense>
-              
+
               {/* XYZ Axis Gizmo - Bottom Right */}
               <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
-                <GizmoViewport 
-                  axisColors={['#ff0000', '#00ff00', '#0000ff']} 
+                <GizmoViewport
+                  axisColors={["#ff0000", "#00ff00", "#0000ff"]}
                   labelColor="white"
-                  labels={['X', 'Y', 'Z']}
+                  labels={["X", "Y", "Z"]}
                 />
               </GizmoHelper>
             </Canvas>
-            
+
             {/* Performance Settings Panel */}
             <PerformanceSettingsPanel
               shadowsEnabled={shadowsEnabled}
