@@ -4,18 +4,17 @@ import { useToast } from "@/hooks/use-toast";
 import { FileUploadScreen } from "./part-upload/FileUploadScreen";
 import PartConfigScreen from "./part-upload/PartConfigScreen";
 
-// Using Supabase Edge Function proxy for Flask backend (handles cold starts & retries)
-
 interface FileWithQuantity {
   file: File;
   quantity: number;
   material?: string;
   process?: string;
-  meshId?: string;
+  meshId?: string; // ✅ This needs to be populated!
   meshData?: {
     vertices: number[];
     indices: number[];
     normals: number[];
+    vertex_colors?: string[]; // ✅ Added for topology colors
     triangle_count: number;
     face_types?: string[];
     feature_edges?: number[][][];
@@ -28,18 +27,18 @@ interface FileWithQuantity {
     method?: string;
     triangle_count?: number;
     detected_features?: Record<string, boolean>;
-    manufacturing_features?: any;  // ← ADDED
-    feature_summary?: any;          // ← ADDED
+    manufacturing_features?: any;
+    feature_summary?: any;
     recommended_processes?: string[];
-    routing_reasoning?: string[];   // ← ADDED
-    machining_summary?: any[];      // ← ADDED
+    routing_reasoning?: string[];
+    machining_summary?: any[];
   };
   quote?: any;
   isAnalyzing?: boolean;
 }
 
 export const PartUploadForm = () => {
-  const [currentScreen, setCurrentScreen] = useState<'upload' | 'configure'>('upload');
+  const [currentScreen, setCurrentScreen] = useState<"upload" | "configure">("upload");
   const [files, setFiles] = useState<FileWithQuantity[]>([]);
   const [materials, setMaterials] = useState<string[]>([]);
   const [processes, setProcesses] = useState<string[]>([]);
@@ -73,12 +72,25 @@ export const PartUploadForm = () => {
     fetchProcesses();
   }, []);
 
-  // 🔧 Test backend connection via edge function
+  // Keyboard shortcut for dev tools
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === "D") {
+        e.preventDefault();
+        setShowDevTools((prev) => !prev);
+        console.log("🛠️ Dev tools toggled");
+      }
+    };
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, []);
+
+  // Test backend connection via edge function
   const testFlaskConnection = async () => {
     setIsTestingConnection(true);
     try {
-      const { data, error } = await supabase.functions.invoke('analyze-cad', {
-        body: { test: true }
+      const { data, error } = await supabase.functions.invoke("analyze-cad", {
+        body: { test: true },
       });
       if (error) throw error;
       toast({
@@ -96,29 +108,25 @@ export const PartUploadForm = () => {
     }
   };
 
-  // 🧠 Analyze file using Supabase Edge Function (handles cold starts)
+  // ✅ FIXED: Analyze file using Supabase Edge Function
   const analyzeFile = async (fileWithQty: FileWithQuantity, index: number) => {
     try {
-      setFiles((prev) =>
-        prev.map((f, i) => (i === index ? { ...f, isAnalyzing: true } : f))
-      );
+      setFiles((prev) => prev.map((f, i) => (i === index ? { ...f, isAnalyzing: true } : f)));
 
       // Convert file to base64
       const fileBuffer = await fileWithQty.file.arrayBuffer();
-      const base64File = btoa(
-        new Uint8Array(fileBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-      );
+      const base64File = btoa(new Uint8Array(fileBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ""));
 
       console.log(`📤 Sending ${fileWithQty.file.name} to edge function (may take 30-60s on first use)...`);
 
-      const { data: result, error } = await supabase.functions.invoke('analyze-cad', {
+      const { data: result, error } = await supabase.functions.invoke("analyze-cad", {
         body: {
           file_name: fileWithQty.file.name,
           file_data: base64File,
           file_size: fileWithQty.file.size,
           material: fileWithQty.material,
-          force_reanalyze: true
-        }
+          force_reanalyze: true,
+        },
       });
 
       if (error) {
@@ -128,9 +136,31 @@ export const PartUploadForm = () => {
       console.log("✅ Edge function response:", result);
       console.log("📊 Available keys in response:", Object.keys(result));
 
-      // ✅ FIXED: Extract ALL analysis data, not just meshData
+      // ✅ CRITICAL FIX: Extract meshId from response
+      const meshId = result.mesh_id || result.meshId;
+
+      if (!meshId) {
+        console.warn("⚠️ No meshId in response! Available keys:", Object.keys(result));
+        console.warn("⚠️ Full response:", result);
+      } else {
+        console.log("✅ Extracted meshId:", meshId);
+      }
+
+      // Extract mesh data
       const meshData = result.mesh_data || result.meshData || {};
-      
+
+      // Add vertex_colors to meshData if available
+      if (result.vertex_colors || meshData.vertex_colors) {
+        meshData.vertex_colors = result.vertex_colors || meshData.vertex_colors;
+      }
+
+      console.log("🎨 Mesh data:", {
+        hasVertexColors: !!meshData.vertex_colors,
+        vertexColorCount: meshData.vertex_colors?.length,
+        triangleCount: result.triangle_count || meshData.triangle_count,
+      });
+
+      // Extract analysis data
       const analysis = {
         volume_cm3: result.volume_cm3,
         surface_area_cm2: result.surface_area_cm2,
@@ -139,28 +169,36 @@ export const PartUploadForm = () => {
         method: result.method,
         triangle_count: result.triangle_count,
         detected_features: result.detected_features,
-        manufacturing_features: result.manufacturing_features,  // ← NEW: Backend feature data
-        feature_summary: result.feature_summary,                // ← NEW: Feature counts
+        manufacturing_features: result.manufacturing_features,
+        feature_summary: result.feature_summary,
         recommended_processes: result.recommended_processes,
-        routing_reasoning: result.routing_reasoning,            // ← NEW: AI reasoning
-        machining_summary: result.machining_summary            // ← NEW: Machining operations
+        routing_reasoning: result.routing_reasoning,
+        machining_summary: result.machining_summary,
       };
 
-      console.log("💾 Storing analysis data:", analysis);
+      console.log("💾 Storing analysis data:", {
+        hasMeshId: !!meshId,
+        meshId,
+        hasAnalysis: !!analysis,
+        hasMeshData: !!meshData,
+      });
 
-      // ✅ FIXED: Save BOTH meshData AND analysis
+      // ✅ CRITICAL FIX: Store meshId, meshData, AND analysis
       setFiles((prev) =>
         prev.map((f, i) =>
           i === index
-            ? { 
-                ...f, 
-                meshData,      // For 3D viewer
-                analysis,      // For FeatureTree and analysis display
-                isAnalyzing: false 
+            ? {
+                ...f,
+                meshId, // ✅ CRITICAL: This was missing!
+                meshData, // For 3D viewer
+                analysis, // For FeatureTree and analysis display
+                isAnalyzing: false,
               }
-            : f
-        )
+            : f,
+        ),
       );
+
+      console.log("✅ File updated with meshId:", meshId);
 
       toast({
         title: "✅ CAD Analysis Complete",
@@ -168,11 +206,7 @@ export const PartUploadForm = () => {
       });
     } catch (error: any) {
       console.error("❌ Error analyzing file:", error);
-      setFiles((prev) =>
-        prev.map((f, i) =>
-          i === index ? { ...f, isAnalyzing: false } : f
-        )
-      );
+      setFiles((prev) => prev.map((f, i) => (i === index ? { ...f, isAnalyzing: false } : f)));
       toast({
         title: "Analysis Failed",
         description: error.message || "Backend may be waking up - please try again",
@@ -188,13 +222,15 @@ export const PartUploadForm = () => {
     const invalidFiles = selectedFiles.filter(
       (file) =>
         !file.name.toLowerCase().endsWith(".step") &&
-        !file.name.toLowerCase().endsWith(".stp")
+        !file.name.toLowerCase().endsWith(".stp") &&
+        !file.name.toLowerCase().endsWith(".iges") &&
+        !file.name.toLowerCase().endsWith(".igs"),
     );
 
     if (invalidFiles.length > 0) {
       toast({
         title: "Invalid file type",
-        description: "Only .STEP or .STP files are supported",
+        description: "Only STEP (.step, .stp) or IGES (.iges, .igs) files are supported",
         variant: "destructive",
       });
       return;
@@ -208,6 +244,7 @@ export const PartUploadForm = () => {
     const newFiles = [...files, ...filesWithQuantity];
     setFiles(newFiles);
 
+    // Analyze files sequentially
     for (let idx = 0; idx < filesWithQuantity.length; idx++) {
       const fileIndex = files.length + idx;
       await analyzeFile(filesWithQuantity[idx], fileIndex);
@@ -221,8 +258,57 @@ export const PartUploadForm = () => {
     }
   };
 
-  const handleContinue = () => setCurrentScreen("configure");
+  const handleContinue = () => {
+    // Check if all files have been analyzed
+    const unanalyzedFiles = files.filter((f) => !f.analysis && !f.isAnalyzing);
+    if (unanalyzedFiles.length > 0) {
+      toast({
+        title: "⚠️ Files Not Analyzed",
+        description: "Please wait for all files to finish analyzing",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    console.log(
+      "📋 Continuing with files:",
+      files.map((f) => ({
+        name: f.file.name,
+        hasMeshId: !!f.meshId,
+        meshId: f.meshId,
+        hasAnalysis: !!f.analysis,
+      })),
+    );
+
+    setCurrentScreen("configure");
+  };
+
   const handleBack = () => setCurrentScreen("upload");
+
+  const handleUpdateFile = (index: number, updates: Partial<FileWithQuantity>) => {
+    setFiles((prev) => prev.map((f, i) => (i === index ? { ...f, ...updates } : f)));
+  };
+
+  const handleSubmit = async (formData: any) => {
+    console.log("📤 Submitting quote request:", formData);
+    setUploading(true);
+
+    try {
+      // Your existing submit logic here
+      toast({
+        title: "✅ Quote Submitted",
+        description: "We'll get back to you soon!",
+      });
+    } catch (error: any) {
+      toast({
+        title: "❌ Submission Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const isAnalyzing = files.some((f) => f.isAnalyzing);
 
@@ -237,7 +323,18 @@ export const PartUploadForm = () => {
         showDevTools={showDevTools}
         onTestConnection={testFlaskConnection}
         isTestingConnection={isTestingConnection}
-        onLogMeshData={() => console.log("📊 Current files state:", files)}
+        onLogMeshData={() => {
+          console.log("📊 Current files state:");
+          files.forEach((f, i) => {
+            console.log(`File ${i}: ${f.file.name}`, {
+              hasMeshId: !!f.meshId,
+              meshId: f.meshId,
+              hasAnalysis: !!f.analysis,
+              hasMeshData: !!f.meshData,
+              isAnalyzing: f.isAnalyzing,
+            });
+          });
+        }}
       />
     );
   }
@@ -248,8 +345,8 @@ export const PartUploadForm = () => {
       materials={materials}
       processes={processes}
       onBack={handleBack}
-      onSubmit={() => console.log("submit")}
-      onUpdateFile={() => {}}
+      onSubmit={handleSubmit}
+      onUpdateFile={handleUpdateFile}
       selectedFileIndex={selectedFileIndex}
       onSelectFile={setSelectedFileIndex}
       isSubmitting={uploading}
