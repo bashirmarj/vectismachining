@@ -47,8 +47,7 @@ export function ProfessionalLighting({
         position={[5, 8, 5]}
         intensity={1.2 * intensity}
         castShadow={enableShadows}
-        shadow-mapSize-width={shadowMapSize}
-        shadow-mapSize-height={shadowMapSize}
+        shadow-mapSize={[shadowMapSize, shadowMapSize]}
         shadow-camera-left={-10}
         shadow-camera-right={10}
         shadow-camera-top={10}
@@ -70,8 +69,7 @@ export function ProfessionalLighting({
         position={[-5, 6, -5]}
         intensity={0.6 * intensity}
         castShadow={enableShadows && shadowQuality !== 'low'}
-        shadow-mapSize-width={shadowMapSize / 2}
-        shadow-mapSize-height={shadowMapSize / 2}
+        shadow-mapSize={[shadowMapSize / 2, shadowMapSize / 2]}
       />
 
       {/* Rim Light 2 - Edge definition (back-right-top) */}
