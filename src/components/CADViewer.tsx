@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { TrackballControls, PerspectiveCamera, ContactShadows, GizmoHelper, GizmoViewport } from "@react-three/drei";
+import { TrackballControls, PerspectiveCamera, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { Suspense, useMemo, useEffect, useState, useRef, useCallback } from "react";
 import { CardContent } from "@/components/ui/card";
 import { Loader2, Box } from "lucide-react";
@@ -11,7 +11,7 @@ import { DimensionAnnotations } from "./cad-viewer/DimensionAnnotations";
 import { OrientationCubePreview, OrientationCubeHandle } from "./cad-viewer/OrientationCubePreview";
 import { SceneEnhancementWrapper } from "./cad-viewer/enhancements/SceneEnhancementWrapper";
 import { VisualQualitySettings, DEFAULT_QUALITY_SETTINGS } from "./cad-viewer/enhancements/VisualQualityPanel";
-import PerformanceSettingsPanel from "./cad-viewer/PerformanceSettingsPanel";
+import { CameraTransitionHandler } from "./cad-viewer/CameraTransitionHandler";
 import { UnifiedCADToolbar } from "./cad-viewer/UnifiedCADToolbar";
 import { useMeasurementStore } from "@/stores/measurementStore";
 
@@ -47,9 +47,13 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
   // ✅ FIXED: Changed sectionPlane type to match MeshModel
   const [sectionPlane, setSectionPlane] = useState<"xy" | "xz" | "yz" | null>(null);
   const [sectionPosition, setSectionPosition] = useState(0);
-  
+
   // Visual quality settings for enhancements
   const [visualSettings, setVisualSettings] = useState<VisualQualitySettings>(DEFAULT_QUALITY_SETTINGS);
+
+  // Camera transition state for declarative updates
+  const [targetCameraPosition, setTargetCameraPosition] = useState<THREE.Vector3 | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   // Measurement store
   const {
@@ -118,35 +122,37 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
     loadMeshData();
   }, [meshId, fileUrl, onMeshLoaded]);
 
-  // Calculate bounding box
+  // Bounding box calculation
   const boundingBox = useMemo(() => {
-    if (!meshData || !meshData.vertices || meshData.vertices.length === 0) {
+    if (!meshData) {
       return {
-        min: new THREE.Vector3(-50, -50, -50),
-        max: new THREE.Vector3(50, 50, 50),
-        center: [0, 0, 0] as [number, number, number],
-        size: new THREE.Vector3(100, 100, 100),
-        width: 100,
-        height: 100,
-        depth: 100,
+        min: new THREE.Vector3(),
+        max: new THREE.Vector3(),
+        center: [0, 0, 0],
+        size: new THREE.Vector3(),
+        width: 0,
+        height: 0,
+        depth: 0,
       };
     }
 
-    const vertices = meshData.vertices;
     const min = new THREE.Vector3(Infinity, Infinity, Infinity);
     const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
 
-    for (let i = 0; i < vertices.length; i += 3) {
-      min.x = Math.min(min.x, vertices[i]);
-      min.y = Math.min(min.y, vertices[i + 1]);
-      min.z = Math.min(min.z, vertices[i + 2]);
-      max.x = Math.max(max.x, vertices[i]);
-      max.y = Math.max(max.y, vertices[i + 1]);
-      max.z = Math.max(max.z, vertices[i + 2]);
+    for (let i = 0; i < meshData.vertices.length; i += 3) {
+      const x = meshData.vertices[i];
+      const y = meshData.vertices[i + 1];
+      const z = meshData.vertices[i + 2];
+
+      min.x = Math.min(min.x, x);
+      min.y = Math.min(min.y, y);
+      min.z = Math.min(min.z, z);
+      max.x = Math.max(max.x, x);
+      max.y = Math.max(max.y, y);
+      max.z = Math.max(max.z, z);
     }
 
-    const center: [number, number, number] = [(min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2];
-
+    const center = [(min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2];
     const size = new THREE.Vector3(max.x - min.x, max.y - min.y, max.z - min.z);
 
     return {
@@ -182,86 +188,69 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
     );
   }, [boundingBox]);
 
-  // Camera view controls
+  // Camera view controls - DECLARATIVE approach
   const handleSetView = useCallback(
     (view: string) => {
-      if (!cameraRef.current || !controlsRef.current) {
-        console.error("❌ Camera or controls ref not available");
-        return;
-      }
-
-      const camera = cameraRef.current;
-      const controls = controlsRef.current;
       const target = new THREE.Vector3(...boundingBox.center);
       const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
       const distance = maxDim * 1.5;
 
-      let newPosition: THREE.Vector3;
-
+      let direction: THREE.Vector3;
       switch (view) {
         case "front":
-          newPosition = new THREE.Vector3(target.x, target.y, target.z + distance);
+          direction = new THREE.Vector3(0, 0, 1);
+          break;
+        case "back":
+          direction = new THREE.Vector3(0, 0, -1);
           break;
         case "top":
-          newPosition = new THREE.Vector3(target.x, target.y + distance, target.z);
+          direction = new THREE.Vector3(0, 1, 0);
+          break;
+        case "bottom":
+          direction = new THREE.Vector3(0, -1, 0);
+          break;
+        case "left":
+          direction = new THREE.Vector3(-1, 0, 0);
+          break;
+        case "right":
+          direction = new THREE.Vector3(1, 0, 0);
           break;
         case "isometric":
-          newPosition = new THREE.Vector3(
-            target.x + distance * 0.707,
-            target.y + distance * 0.707,
-            target.z + distance * 0.707,
-          );
+          direction = new THREE.Vector3(1, 1, 1).normalize();
           break;
         case "home":
-          newPosition = new THREE.Vector3(
-            target.x + distance * 0.707,
-            target.y + distance * 0.707,
-            target.z + distance * 0.707,
-          );
+          direction = new THREE.Vector3(1, 1, 1).normalize();
           break;
         default:
           return;
       }
 
-      camera.position.copy(newPosition);
-      camera.lookAt(target);
-      controls.target.copy(target);
-      controls.update();
+      const newPosition = target.clone().add(direction.multiplyScalar(distance));
+      setTargetCameraPosition(newPosition);
+      setIsTransitioning(true);
     },
     [boundingBox],
   );
 
   const handleFitView = useCallback(() => {
-    if (!cameraRef.current || !controlsRef.current) return;
-
-    const camera = cameraRef.current;
-    const controls = controlsRef.current;
-    const target = new THREE.Vector3(...boundingBox.center);
     const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
     const distance = maxDim * 1.5;
-    const currentPosition = camera.position.clone().sub(target).normalize();
-    const newPosition = target.clone().add(currentPosition.multiplyScalar(distance));
-
-    camera.position.copy(newPosition);
-    controls.target.copy(target);
-    controls.update();
+    const target = new THREE.Vector3(...boundingBox.center);
+    const currentDir =
+      cameraRef.current?.position.clone().sub(target).normalize() || new THREE.Vector3(1, 1, 1).normalize();
+    const newPosition = target.clone().add(currentDir.multiplyScalar(distance));
+    setTargetCameraPosition(newPosition);
+    setIsTransitioning(true);
   }, [boundingBox]);
 
   const handleCubeClick = useCallback(
     (direction: THREE.Vector3) => {
-      if (!cameraRef.current || !controlsRef.current) return;
-
-      const camera = cameraRef.current;
-      const controls = controlsRef.current;
       const target = new THREE.Vector3(...boundingBox.center);
       const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
       const distance = maxDim * 1.5;
-
       const newPosition = target.clone().add(direction.multiplyScalar(distance));
-
-      camera.position.copy(newPosition);
-      controls.target.copy(target);
-      controls.update();
+      setTargetCameraPosition(newPosition);
+      setIsTransitioning(true);
     },
     [boundingBox],
   );
@@ -285,49 +274,26 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
     }
   }, [fileUrl, fileName]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      if (e.code === "Space") {
-        e.preventDefault();
-        handleFitView();
-      } else if (e.code === "KeyE") {
-        e.preventDefault();
-        setShowEdges(!showEdges);
-      } else if (e.code === "Escape") {
-        e.preventDefault();
-        if (measurementMode) {
-          setMeasurementMode(null);
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyPress);
-    return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [handleFitView, showEdges, measurementMode, setMeasurementMode]);
-
-  if (isLoading) {
+  if (error) {
     return (
-      <CardContent className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading 3D model...</p>
+      <CardContent className="p-4">
+        <div className="flex flex-col items-center justify-center h-full gap-4 text-destructive">
+          <p className="font-semibold">Error Loading Model</p>
+          <p className="text-sm">{error}</p>
+          <Button variant="outline" onClick={() => window.location.reload()}>
+            Retry
+          </Button>
         </div>
       </CardContent>
     );
   }
 
-  if (error) {
+  if (isLoading) {
     return (
-      <CardContent className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center gap-4 text-center max-w-md">
-          <Box className="h-16 w-16 text-destructive" />
-          <div>
-            <p className="text-sm font-medium text-destructive mb-2">Failed to load 3D model</p>
-            <p className="text-xs text-muted-foreground">{error}</p>
-          </div>
+      <CardContent className="p-4">
+        <div className="flex flex-col items-center justify-center h-full gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading 3D model...</p>
         </div>
       </CardContent>
     );
@@ -389,6 +355,17 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
 
               <PerspectiveCamera ref={cameraRef} makeDefault position={initialCameraPosition} fov={50} />
 
+              <CameraTransitionHandler
+                targetPosition={targetCameraPosition}
+                isTransitioning={isTransitioning}
+                onTransitionComplete={() => {
+                  setTargetCameraPosition(null);
+                  setIsTransitioning(false);
+                }}
+                controlsRef={controlsRef}
+                target={new THREE.Vector3(...boundingBox.center)}
+              />
+
               <Suspense fallback={null}>
                 {/* Professional Enhancements: Lighting, Materials, Post-Processing */}
                 <SceneEnhancementWrapper
@@ -433,17 +410,6 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
                 />
               </GizmoHelper>
             </Canvas>
-
-            {/* ✅ FIXED: Pass correct quality type */}
-            <PerformanceSettingsPanel
-              shadowsEnabled={shadowsEnabled}
-              setShadowsEnabled={setShadowsEnabled}
-              ssaoEnabled={ssaoEnabled}
-              setSSAOEnabled={setSSAOEnabled}
-              quality={quality}
-              setQuality={setQuality}
-              triangleCount={meshData.triangle_count}
-            />
           </div>
         ) : isRenderableFormat ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
