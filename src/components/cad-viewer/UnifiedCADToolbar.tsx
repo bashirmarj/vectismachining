@@ -32,9 +32,10 @@ import {
   SunMedium,
   Sparkles,
   Gauge,
+  X, // ← FIXED: Added missing X icon
 } from "lucide-react";
 import { useMeasurementStore } from "@/stores/measurementStore";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface UnifiedCADToolbarProps {
   // View controls
@@ -63,6 +64,13 @@ interface UnifiedCADToolbarProps {
   setSSAOEnabled: (enabled: boolean) => void;
   quality: "low" | "medium" | "high";
   setQuality: (quality: "low" | "medium" | "high") => void;
+
+  // FIXED: Add boundingBox for proper section range
+  boundingBox?: {
+    min: { x: number; y: number; z: number };
+    max: { x: number; y: number; z: number };
+    center: { x: number; y: number; z: number };
+  };
 }
 
 /**
@@ -90,13 +98,44 @@ export function UnifiedCADToolbar({
   setSSAOEnabled,
   quality,
   setQuality,
+  boundingBox,
 }: UnifiedCADToolbarProps) {
   const { activeTool, setActiveTool } = useMeasurementStore();
-  const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
+
+  // FIXED: Calculate proper section range based on bounding box
+  const sectionRange = (() => {
+    if (!boundingBox) return { min: -1, max: 1 };
+
+    const { min, max } = boundingBox;
+    switch (sectionPlane) {
+      case "xy":
+        return { min: min.z, max: max.z };
+      case "xz":
+        return { min: min.y, max: max.y };
+      case "yz":
+        return { min: min.x, max: max.x };
+      default:
+        return { min: -1, max: 1 };
+    }
+  })();
+
+  // FIXED: Automatically center section plane when activated
+  useEffect(() => {
+    if (sectionPlane !== "none" && boundingBox) {
+      const center =
+        sectionPlane === "xy"
+          ? boundingBox.center.z
+          : sectionPlane === "xz"
+          ? boundingBox.center.y
+          : boundingBox.center.x;
+      setSectionPosition(center);
+    }
+  }, [sectionPlane, boundingBox]); // Only run when plane changes
 
   return (
     <TooltipProvider>
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-2">
+        {/* Main Toolbar */}
         <div className="bg-white/95 backdrop-blur-md rounded-lg shadow-xl border border-gray-200 px-3 py-2 flex items-center gap-1">
           {/* VIEW CONTROLS */}
           <DropdownMenu>
@@ -241,61 +280,22 @@ export function UnifiedCADToolbar({
 
           <Separator orientation="vertical" className="h-6" />
 
-          {/* SECTION PLANES */}
-          <DropdownMenu open={sectionMenuOpen} onOpenChange={setSectionMenuOpen}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant={sectionPlane !== "none" ? "secondary" : "ghost"}
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                  >
-                    <Scissors className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>Section Planes</p>
-              </TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel>Section Planes</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => setSectionPlane("none")}>
-                <SplitSquareVertical className="mr-2 h-4 w-4" />
-                None {sectionPlane === "none" && "✓"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSectionPlane("xy")}>
-                <Box className="mr-2 h-4 w-4" />
-                XY Plane {sectionPlane === "xy" && "✓"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSectionPlane("xz")}>
-                <Box className="mr-2 h-4 w-4" />
-                XZ Plane {sectionPlane === "xz" && "✓"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSectionPlane("yz")}>
-                <Box className="mr-2 h-4 w-4" />
-                YZ Plane {sectionPlane === "yz" && "✓"}
-              </DropdownMenuItem>
-
-              {sectionPlane !== "none" && (
-                <>
-                  <DropdownMenuSeparator />
-                  <div className="px-2 py-3">
-                    <div className="text-xs text-gray-600 mb-2">Position: {sectionPosition.toFixed(2)}</div>
-                    <Slider
-                      value={[sectionPosition]}
-                      onValueChange={(value) => setSectionPosition(value[0])}
-                      min={-1}
-                      max={1}
-                      step={0.01}
-                      className="w-full"
-                    />
-                  </div>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* SECTION PLANES - FIXED: Removed dropdown, direct buttons */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={sectionPlane !== "none" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => setSectionPlane(sectionPlane !== "none" ? "none" : "xy")}
+              >
+                <Scissors className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Section Planes</p>
+            </TooltipContent>
+          </Tooltip>
 
           <Separator orientation="vertical" className="h-6" />
 
@@ -341,9 +341,77 @@ export function UnifiedCADToolbar({
           </DropdownMenu>
         </div>
 
+        {/* FIXED: Section Control Panel (appears below toolbar when active) */}
+        {sectionPlane !== "none" && (
+          <div className="bg-white/95 backdrop-blur-md rounded-lg shadow-xl border border-gray-200 px-4 py-3 w-80">
+            <div className="space-y-3">
+              {/* Plane Selection */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-700">Section Plane:</span>
+                <div className="flex gap-1">
+                  <Button
+                    variant={sectionPlane === "xy" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSectionPlane("xy")}
+                    className="h-7 px-3 text-xs"
+                  >
+                    XY
+                  </Button>
+                  <Button
+                    variant={sectionPlane === "xz" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSectionPlane("xz")}
+                    className="h-7 px-3 text-xs"
+                  >
+                    XZ
+                  </Button>
+                  <Button
+                    variant={sectionPlane === "yz" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSectionPlane("yz")}
+                    className="h-7 px-3 text-xs"
+                  >
+                    YZ
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSectionPlane("none")}
+                    className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Position Slider */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-700">Position:</span>
+                  <span className="text-xs text-gray-500 font-mono">
+                    {sectionPosition.toFixed(2)} mm
+                  </span>
+                </div>
+                <Slider
+                  value={[sectionPosition]}
+                  onValueChange={(value) => setSectionPosition(value[0])}
+                  min={sectionRange.min}
+                  max={sectionRange.max}
+                  step={(sectionRange.max - sectionRange.min) / 100}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>{sectionRange.min.toFixed(1)}</span>
+                  <span>{sectionRange.max.toFixed(1)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Active Tool Indicator */}
         {activeTool && (
-          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 shadow-sm">
+          <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 shadow-sm">
             <p className="text-xs text-blue-700 font-medium">
               <span className="capitalize">{activeTool}</span> Tool Active • Click{" "}
               {activeTool === "distance" ? "2" : "3"} points • ESC to cancel
