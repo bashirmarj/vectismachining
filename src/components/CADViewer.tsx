@@ -388,7 +388,7 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
                 <TrackballControls
                   ref={controlsRef}
                   makeDefault
-                  target={new THREE.Vector3(boundingBox.center[0], boundingBox.center[1], boundingBox.center[2])} // ✅ FIXED
+                  target={new THREE.Vector3(boundingBox.center[0], boundingBox.center[1], boundingBox.center[2])}
                   dynamicDampingFactor={0.2}
                   minDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.01}
                   maxDistance={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 5}
