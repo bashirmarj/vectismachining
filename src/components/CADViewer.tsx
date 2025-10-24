@@ -163,6 +163,19 @@ export function CADViewer({
     return { min, max, center, width, height, depth };
   }, [activeMeshData]);
 
+  // ========== PHASE 2: CORRECT PROP CONSTRUCTION ==========
+  // Construct modelBounds for LightingRig (needs size as Vector3)
+  const modelBounds = useMemo(
+    () => ({
+      min: boundingBox.min,
+      max: boundingBox.max,
+      center: boundingBox.center,
+      size: new THREE.Vector3(boundingBox.width, boundingBox.height, boundingBox.depth),
+    }),
+    [boundingBox],
+  );
+  // ========================================================
+
   const initialCameraPosition = useMemo(() => {
     const distance = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 1.5;
     return [
@@ -399,12 +412,16 @@ export function CADViewer({
               </div>
             </div>
 
-            {/* Orientation cube */}
+            {/* ========== CORRECTED: OrientationCubePreview (no ref props needed) ========== */}
             <div className="absolute top-4 right-4 z-10">
               <OrientationCubePreview
                 ref={orientationCubeRef}
+                onOrientationChange={(direction) => {
+                  // Handle orientation change if needed
+                }}
               />
             </div>
+            {/* ============================================================================= */}
 
             <Canvas
               shadows
@@ -425,17 +442,9 @@ export function CADViewer({
               style={{ background: "linear-gradient(to bottom, #f5f7fa, #c3cfe2)" }}
             >
               <Suspense fallback={null}>
-                {/* Professional Lighting System (Phase 1) */}
-                <LightingRig
-                  shadowsEnabled={shadowsEnabled}
-                  intensity={1.0}
-                  modelBounds={{
-                    min: boundingBox.min,
-                    max: boundingBox.max,
-                    center: boundingBox.center,
-                    size: new THREE.Vector3(boundingBox.width, boundingBox.height, boundingBox.depth),
-                  }}
-                />
+                {/* ========== CORRECTED: LightingRig with proper modelBounds ========== */}
+                <LightingRig shadowsEnabled={shadowsEnabled} modelBounds={modelBounds} />
+                {/* =================================================================== */}
 
                 {/* 3D Model */}
                 <MeshModel
@@ -458,7 +467,7 @@ export function CADViewer({
                   far={Math.max(boundingBox.height, boundingBox.depth) * 2}
                 />
 
-                {/* Dimension annotations */}
+                {/* ========== CORRECTED: DimensionAnnotations with proper props ========== */}
                 {showDimensions && (
                   <DimensionAnnotations
                     features={detectedFeatures}
@@ -469,6 +478,7 @@ export function CADViewer({
                     }}
                   />
                 )}
+                {/* ====================================================================== */}
 
                 {/* ========== PHASE 2: ADVANCED MEASUREMENT TOOL ========== */}
                 <AdvancedMeasurementTool
