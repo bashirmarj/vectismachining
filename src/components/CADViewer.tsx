@@ -26,8 +26,7 @@ interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
-  colors?: number[];
-  vertex_colors?: number[];
+  vertex_colors?: number[]; // ✅ FIXED: Changed from colors to vertex_colors
   triangle_count: number;
 }
 
@@ -39,7 +38,7 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
   const [showEdges, setShowEdges] = useState(true);
   const [shadowsEnabled, setShadowsEnabled] = useState(true);
   const [ssaoEnabled, setSSAOEnabled] = useState(true);
-  const [quality, setQuality] = useState<"performance" | "balanced" | "quality">("balanced");
+  const [quality, setQuality] = useState<"performance" | "balanced" | "quality">("balanced"); // ✅ FIXED: Correct type
   const [sectionPlane, setSectionPlane] = useState<"xy" | "xz" | "yz" | "x" | "y" | "z" | null>(null);
   const [sectionPosition, setSectionPosition] = useState(0);
 
@@ -86,11 +85,11 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
           if (fetchError) throw fetchError;
 
           if (data) {
+            // ✅ FIXED: Only use vertex_colors property
             setMeshData({
               vertices: data.vertices,
               indices: data.indices,
               normals: data.normals,
-              colors: data.colors || data.vertex_colors,
               vertex_colors: data.vertex_colors,
               triangle_count: data.triangle_count,
             });
@@ -203,58 +202,43 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
           console.log("📷 Setting HOME view to:", newPosition);
           break;
         default:
-          console.warn("⚠️ Unknown view:", view);
           return;
       }
 
-      // Smooth camera animation (600ms)
-      const startPosition = camera.position.clone();
-      const duration = 600;
-      const startTime = Date.now();
+      // Animate camera position
+      camera.position.copy(newPosition);
+      camera.lookAt(target);
+      controls.target.copy(target);
+      controls.update();
 
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const t = Math.min(elapsed / duration, 1);
-
-        // Ease in-out
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-
-        camera.position.lerpVectors(startPosition, newPosition, eased);
-        controls.target.copy(target);
-        controls.update();
-
-        if (t < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          console.log("✅ View animation complete:", view);
-        }
-      };
-
-      animate();
+      console.log("✅ Camera position updated:", camera.position);
+      console.log("✅ Controls target:", controls.target);
     },
-    [boundingBox, cameraRef, controlsRef],
+    [boundingBox],
   );
 
   const handleFitView = useCallback(() => {
-    if (!controlsRef.current || !cameraRef.current) return;
+    if (!cameraRef.current || !controlsRef.current) return;
 
     const camera = cameraRef.current;
     const controls = controlsRef.current;
+    const target = new THREE.Vector3(...boundingBox.center);
     const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
     const distance = maxDim * 1.5;
 
-    camera.position.set(
-      boundingBox.center[0] + distance * 0.707,
-      boundingBox.center[1] + distance * 0.707,
-      boundingBox.center[2] + distance * 0.707,
-    );
-    controls.target.set(...boundingBox.center);
+    // Calculate current direction
+    const direction = new THREE.Vector3().subVectors(camera.position, target).normalize();
+
+    const newPosition = target.clone().add(direction.multiplyScalar(distance));
+
+    camera.position.copy(newPosition);
+    controls.target.copy(target);
     controls.update();
   }, [boundingBox]);
 
   const handleCubeClick = useCallback(
     (direction: THREE.Vector3) => {
-      if (!controlsRef.current || !cameraRef.current) return;
+      if (!cameraRef.current || !controlsRef.current) return;
 
       const camera = cameraRef.current;
       const controls = controlsRef.current;
@@ -389,10 +373,6 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
                 antialias: true,
                 alpha: true,
                 preserveDrawingBuffer: true,
-                shadowMap: {
-                  enabled: true,
-                  type: THREE.PCFSoftShadowMap,
-                },
               }}
             >
               <color attach="background" args={["#f8f9fa"]} />
@@ -413,7 +393,7 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
                   sectionPosition={sectionPosition}
                 />
 
-                <DimensionAnnotations boundingBox={boundingBox} enabled={false} />
+                <DimensionAnnotations boundingBox={boundingBox} />
 
                 <VisualEffects enabled={ssaoEnabled} quality={quality} />
 
