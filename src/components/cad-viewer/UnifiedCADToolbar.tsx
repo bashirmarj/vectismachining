@@ -8,7 +8,7 @@ import {
   ChevronDown,
   Box,
   Grid3x3,
-  Cube,
+  Package, // ✅ FIXED: Replaced Cube with Package (valid icon)
   Circle,
   Move,
   RotateCcw,
@@ -207,7 +207,7 @@ export function UnifiedCADToolbar({
                 Top View
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onIsometricView}>
-                <Cube className="mr-2 h-4 w-4" />
+                <Package className="mr-2 h-4 w-4" /> {/* ✅ FIXED: Changed from Cube to Package */}
                 Isometric View
               </DropdownMenuItem>
               <DropdownMenuSeparator />
