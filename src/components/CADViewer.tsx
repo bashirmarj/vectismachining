@@ -355,8 +355,16 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
                 attach="fog" 
                 args={[
                   "#f8f9fa", 
-                  Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 2,
-                  Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 8
+                  Math.max(
+                    boundingBox.max[0] - boundingBox.min[0],
+                    boundingBox.max[1] - boundingBox.min[1],
+                    boundingBox.max[2] - boundingBox.min[2]
+                  ) * 2,
+                  Math.max(
+                    boundingBox.max[0] - boundingBox.min[0],
+                    boundingBox.max[1] - boundingBox.min[1],
+                    boundingBox.max[2] - boundingBox.min[2]
+                  ) * 8
                 ]} 
               />
 
