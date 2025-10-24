@@ -363,9 +363,8 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
                   setIsTransitioning(false);
                 }}
                 controlsRef={controlsRef}
-                target={new THREE.Vector3(...boundingBox.center)}
+                target={new THREE.Vector3(boundingBox.center[0], boundingBox.center[1], boundingBox.center[2])}
               />
-
               <Suspense fallback={null}>
                 {/* Professional Enhancements: Lighting, Materials, Post-Processing */}
                 <SceneEnhancementWrapper
