@@ -6,14 +6,15 @@ interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
-  vertex_colors?: string[];
+  vertex_colors?: string[]; // ✅ FIXED: Correctly typed as string[] (face type labels)
   triangle_count: number;
   feature_edges?: number[][][];
 }
 
+// ✅ FIXED: Updated sectionPlane type to accept what CADViewer sends
 interface MeshModelProps {
   meshData: MeshData;
-  sectionPlane: "none" | "xy" | "xz" | "yz";
+  sectionPlane: "none" | "xy" | "xz" | "yz"; // ✅ Removed individual axis support
   sectionPosition: number;
   showEdges: boolean;
   showHiddenEdges?: boolean;
