@@ -18,33 +18,10 @@ interface MeshModelProps {
   showEdges: boolean;
   showHiddenEdges?: boolean;
   displayStyle?: "solid" | "wireframe" | "translucent";
-  topologyColors?: boolean;
 }
 
-const SOLID_COLOR = "#CCCCCC";
-
-const TOPOLOGY_COLORS = {
-  internal: "#FF6B6B",
-  cylindrical: "#4ECDC4",
-  planar: "#95E1D3",
-  external: "#FFD93D",
-  through: "#A8E6CF",
-  default: "#CCCCCC",
-};
-
 export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
-  (
-    {
-      meshData,
-      sectionPlane,
-      sectionPosition,
-      showEdges,
-      showHiddenEdges = false,
-      displayStyle = "solid",
-      topologyColors = true,
-    },
-    ref,
-  ) => {
+  ({ meshData, sectionPlane, sectionPosition, showEdges, showHiddenEdges = false, displayStyle = "solid" }, ref) => {
     const { camera } = useThree();
     const internalMeshRef = useRef<THREE.Mesh>(null);
     const meshRef = (ref as React.RefObject<THREE.Mesh>) || internalMeshRef;
@@ -53,93 +30,13 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
-
-      if (!topologyColors) {
-        geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
-        geo.setIndex(meshData.indices);
-        geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
-        geo.computeVertexNormals();
-        geo.normalizeNormals();
-      } else {
-        const triangleCount = meshData.indices.length / 3;
-        const positions = new Float32Array(triangleCount * 9);
-
-        for (let i = 0; i < triangleCount; i++) {
-          const idx0 = meshData.indices[i * 3];
-          const idx1 = meshData.indices[i * 3 + 1];
-          const idx2 = meshData.indices[i * 3 + 2];
-
-          positions[i * 9 + 0] = meshData.vertices[idx0 * 3];
-          positions[i * 9 + 1] = meshData.vertices[idx0 * 3 + 1];
-          positions[i * 9 + 2] = meshData.vertices[idx0 * 3 + 2];
-
-          positions[i * 9 + 3] = meshData.vertices[idx1 * 3];
-          positions[i * 9 + 4] = meshData.vertices[idx1 * 3 + 1];
-          positions[i * 9 + 5] = meshData.vertices[idx1 * 3 + 2];
-
-          positions[i * 9 + 6] = meshData.vertices[idx2 * 3];
-          positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
-          positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
-        }
-
-        geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-      }
-
-      geo.computeBoundingSphere();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
+      geo.setIndex(meshData.indices);
+      geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
+      geo.computeVertexNormals();
+      geo.normalizeNormals();
       return geo;
-    }, [meshData, topologyColors]);
-
-    useEffect(() => {
-      if (!geometry) return;
-
-      if (topologyColors) {
-        if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
-          const triangleCount = meshData.indices.length / 3;
-          const colors = new Float32Array(triangleCount * 9);
-
-          console.log("🎨 Applying topology colors:", {
-            triangleCount,
-            vertexColorsLength: meshData.vertex_colors.length,
-            sampleColors: meshData.vertex_colors.slice(0, 10),
-          });
-
-          for (let triIdx = 0; triIdx < triangleCount; triIdx++) {
-            const faceType = meshData.vertex_colors[triIdx] || "default";
-            const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
-            const color = new THREE.Color(colorHex);
-
-            for (let v = 0; v < 3; v++) {
-              colors[triIdx * 9 + v * 3 + 0] = color.r;
-              colors[triIdx * 9 + v * 3 + 1] = color.g;
-              colors[triIdx * 9 + v * 3 + 2] = color.b;
-            }
-          }
-
-          geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-          geometry.attributes.color.needsUpdate = true;
-
-          console.log("✅ Topology colors applied successfully");
-        } else {
-          console.warn("⚠️ No vertex_colors data, using default silver");
-          const triangleCount = meshData.indices.length / 3;
-          const colors = new Float32Array(triangleCount * 9);
-          const silverColor = new THREE.Color("#CCCCCC");
-
-          for (let i = 0; i < triangleCount * 3; i++) {
-            colors[i * 3] = silverColor.r;
-            colors[i * 3 + 1] = silverColor.g;
-            colors[i * 3 + 2] = silverColor.b;
-          }
-
-          geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-          geometry.attributes.color.needsUpdate = true;
-        }
-      } else {
-        if (geometry.attributes.color) {
-          geometry.deleteAttribute("color");
-        }
-      }
-    }, [geometry, topologyColors, meshData]);
+    }, [meshData.vertices, meshData.indices, meshData.normals]);
 
     const edgeMap = useMemo(() => {
       const map = new Map<
@@ -340,7 +237,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     const materialProps = useMemo(() => {
       const base = {
-        color: "#5b9bd5",
+        color: "#5b9bd5", // Professional blue-gray
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
@@ -361,13 +258,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     return (
       <group>
         <mesh ref={meshRef} geometry={geometry} castShadow receiveShadow>
-          <meshStandardMaterial
-            {...materialProps}
-            color={topologyColors ? "#ffffff" : SOLID_COLOR}
-            vertexColors={topologyColors}
-            flatShading={false}
-            toneMapped={false}
-          />
+          <meshStandardMaterial {...materialProps} flatShading={false} toneMapped={false} />
         </mesh>
 
         {displayStyle !== "wireframe" && <group ref={dynamicEdgesRef} />}
