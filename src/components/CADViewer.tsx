@@ -9,8 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { MeshModel } from "./cad-viewer/MeshModel";
 import { DimensionAnnotations } from "./cad-viewer/DimensionAnnotations";
 import { OrientationCubePreview, OrientationCubeHandle } from "./cad-viewer/OrientationCubePreview";
-import LightingRig from "./cad-viewer/LightingRig";
-import VisualEffects from "./cad-viewer/VisualEffects";
+import { SceneEnhancementWrapper } from "./cad-viewer/enhancements/SceneEnhancementWrapper";
+import { VisualQualitySettings, DEFAULT_QUALITY_SETTINGS } from "./cad-viewer/enhancements/VisualQualityPanel";
 import PerformanceSettingsPanel from "./cad-viewer/PerformanceSettingsPanel";
 import { UnifiedCADToolbar } from "./cad-viewer/UnifiedCADToolbar";
 import { useMeasurementStore } from "@/stores/measurementStore";
@@ -47,6 +47,9 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
   // ✅ FIXED: Changed sectionPlane type to match MeshModel
   const [sectionPlane, setSectionPlane] = useState<"xy" | "xz" | "yz" | null>(null);
   const [sectionPosition, setSectionPosition] = useState(0);
+  
+  // Visual quality settings for enhancements
+  const [visualSettings, setVisualSettings] = useState<VisualQualitySettings>(DEFAULT_QUALITY_SETTINGS);
 
   // Measurement store
   const {
@@ -387,23 +390,24 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
               <PerspectiveCamera ref={cameraRef} makeDefault position={initialCameraPosition} fov={50} />
 
               <Suspense fallback={null}>
-                {/* ✅ FIXED: Pass modelBounds instead of quality */}
-                <LightingRig shadowsEnabled={shadowsEnabled} modelBounds={modelBounds} />
+                {/* Professional Enhancements: Lighting, Materials, Post-Processing */}
+                <SceneEnhancementWrapper
+                  showSettingsPanel={false}
+                  defaultSettings={visualSettings}
+                  onSettingsChange={setVisualSettings}
+                >
+                  {/* ✅ FIXED: Pass displayMode prop to MeshModel */}
+                  <MeshModel
+                    ref={meshRef}
+                    meshData={meshData}
+                    displayStyle={displayMode}
+                    showEdges={showEdges}
+                    sectionPlane={sectionPlane || "none"}
+                    sectionPosition={sectionPosition}
+                  />
 
-                {/* ✅ FIXED: Pass displayMode prop to MeshModel */}
-                <MeshModel
-                  ref={meshRef}
-                  meshData={meshData}
-                  displayStyle={displayMode}
-                  showEdges={showEdges}
-                  sectionPlane={sectionPlane || "none"}
-                  sectionPosition={sectionPosition}
-                />
-
-                <DimensionAnnotations boundingBox={boundingBox} />
-
-                {/* ✅ FIXED: Pass correct quality type */}
-                <VisualEffects enabled={ssaoEnabled} quality={quality} />
+                  <DimensionAnnotations boundingBox={boundingBox} />
+                </SceneEnhancementWrapper>
 
                 <TrackballControls
                   ref={controlsRef}

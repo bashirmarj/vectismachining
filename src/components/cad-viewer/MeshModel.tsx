@@ -344,9 +344,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
-        metalness: 0,
+        metalness: 0.3,
         roughness: 0.8,
-        envMapIntensity: 0,
+        envMapIntensity: 0.5,
       };
 
       if (displayStyle === "wireframe") {
@@ -365,7 +365,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
             {...materialProps}
             color={topologyColors ? "#ffffff" : SOLID_COLOR}
             vertexColors={topologyColors}
-            flatShading={topologyColors}
+            flatShading={false}
             toneMapped={false}
           />
         </mesh>
