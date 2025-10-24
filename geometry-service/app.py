@@ -5,7 +5,6 @@ import tempfile
 import numpy as np
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from supabase import create_client, Client
 
 # === OCC imports ===
 from OCC.Core.STEPControl import STEPControl_Reader
@@ -37,10 +36,6 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("app")
 
-# === Supabase setup ===
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --------------------------------------------------
 # === Geometry Utilities ===
@@ -869,40 +864,8 @@ def analyze_cad():
 
         logger.info(f"✅ Analysis complete: {mesh_data['triangle_count']} triangles, {len(feature_edges)} edges")
 
-        # ==========================================
-        # Store mesh in database
-        # ==========================================
-        try:
-            logger.info("💾 Storing mesh data in database...")
-            mesh_insert = {
-                'file_name': filename,
-                'vertices': mesh_data['vertices'],
-                'indices': mesh_data['indices'],
-                'normals': mesh_data['normals'],
-                'vertex_colors': mesh_data['vertex_colors'],
-                'feature_edges': feature_edges,
-                'triangle_count': mesh_data['triangle_count'],
-                'face_types': mesh_data['vertex_colors'],
-            }
-
-            result = supabase.table('cad_meshes').insert(mesh_insert).execute()
-
-            if result.data and len(result.data) > 0:
-                mesh_id = result.data[0]['id']
-                logger.info(f"✅ Mesh stored successfully with ID: {mesh_id}")
-            else:
-                logger.error("❌ Failed to store mesh - no data returned")
-                mesh_id = None
-
-        except Exception as db_error:
-            logger.error(f"❌ Database error storing mesh: {db_error}")
-            import traceback
-            logger.error(traceback.format_exc())
-            mesh_id = None
-        # ==========================================
-
+        # Return mesh data for edge function to store (mesh_id will be added by edge function)
         return jsonify({
-            'mesh_id': mesh_id,
             'exact_volume': exact_props['volume'],
             'exact_surface_area': exact_props['surface_area'],
             'center_of_mass': exact_props['center_of_mass'],

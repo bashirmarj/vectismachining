@@ -608,6 +608,19 @@ async function analyzeSTEPViaService(
       },
     });
 
+    // 💾 Store mesh data in database (Render service no longer does this)
+    let mesh_id: string | undefined;
+    if (data.mesh_data && data.mesh_data.vertices && data.mesh_data.vertices.length > 0) {
+      console.log(`💾 Storing mesh data from Flask response: ${data.mesh_data.triangle_count} triangles`);
+      mesh_id = await storeMeshData(data.mesh_data, fileName, fileData, forceReanalyze);
+      if (mesh_id) {
+        console.log(`✅ Geometry service analysis successful with mesh_id: ${mesh_id}`);
+        console.log(`📐 Mesh includes ${(data.mesh_data.feature_edges || []).length} feature edges`);
+      }
+    } else {
+      console.log(`⚠️ No mesh data in Flask response to store`);
+    }
+
     // Map service response to our result format with BREP data
     const detected_features: DetectedFeatures = {
       is_cylindrical:
@@ -654,17 +667,6 @@ async function analyzeSTEPViaService(
 
     // Build feature tree organized by orientation
     const feature_tree: FeatureTree | undefined = detailed_features ? buildFeatureTree(detailed_features) : undefined;
-
-    // Store mesh data in database if available
-    let mesh_id: string | undefined;
-    if (data.mesh_data && data.mesh_data.vertices && data.mesh_data.vertices.length > 0) {
-      console.log(`💾 Storing mesh data: ${data.mesh_data.triangle_count} triangles`);
-      mesh_id = await storeMeshData(data.mesh_data, fileName, fileData, forceReanalyze);
-      console.log(`✅ Mesh stored with ID: ${mesh_id}`);
-      console.log(`📐 Mesh includes ${(data.mesh_data.feature_edges || []).length} feature edges`);
-    } else {
-      console.log(`⚠️ No mesh data available to store`);
-    }
 
     return {
       // Use exact BREP-based calculations for quotation
