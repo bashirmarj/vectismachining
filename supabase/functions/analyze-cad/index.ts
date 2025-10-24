@@ -741,6 +741,22 @@ async function storeMeshData(
     
     if (error) {
       console.error('Error storing mesh data:', error);
+      
+      // If duplicate key error, fetch existing mesh ID
+      if (error.code === '23505') {
+        console.log(`🔄 Duplicate detected, fetching existing mesh for hash: ${fileHash}`);
+        const { data: existingMesh } = await supabase
+          .from('cad_meshes')
+          .select('id')
+          .eq('file_hash', fileHash)
+          .maybeSingle();
+        
+        if (existingMesh) {
+          console.log(`✅ Using existing mesh ID: ${existingMesh.id}`);
+          return existingMesh.id;
+        }
+      }
+      
       return undefined;
     }
     
