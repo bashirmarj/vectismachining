@@ -8,424 +8,415 @@ import * as THREE from "three";
 import { supabase } from "@/integrations/supabase/client";
 import { MeshModel } from "./cad-viewer/MeshModel";
 import { DimensionAnnotations } from "./cad-viewer/DimensionAnnotations";
-import { MeasurementTool } from "./cad-viewer/MeasurementTool"; // Keep as backup
 import { OrientationCubePreview, OrientationCubeHandle } from "./cad-viewer/OrientationCubePreview";
 import LightingRig from "./cad-viewer/LightingRig";
 import VisualEffects from "./cad-viewer/VisualEffects";
 import PerformanceSettingsPanel from "./cad-viewer/PerformanceSettingsPanel";
-// ========== PHASE 2: NEW IMPORTS ==========
-import { AdvancedMeasurementTool } from "./cad-viewer/AdvancedMeasurementTool";
-import { MeasurementPanel } from "./cad-viewer/MeasurementPanel";
-// ========== PHASE 2.5: UNIFIED TOOLBAR ==========
 import { UnifiedCADToolbar } from "./cad-viewer/UnifiedCADToolbar";
-// ==========================================
+import { useMeasurementStore } from "@/stores/measurementStore";
 
 interface CADViewerProps {
-  file?: File;
-  fileUrl?: string;
-  fileName: string;
   meshId?: string;
-  meshData?: MeshData;
-  detectedFeatures?: any;
-  usePhase1Enhancement?: boolean;
+  fileUrl?: string;
+  fileName?: string;
+  onMeshLoaded?: (data: any) => void;
 }
 
 interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
-  face_types?: string[];
+  colors?: number[];
+  vertex_colors?: number[];
   triangle_count: number;
-  feature_edges?: number[][][];
 }
 
-export function CADViewer({
-  file,
-  fileUrl,
-  fileName,
-  meshId,
-  meshData: propMeshData,
-  detectedFeatures,
-  usePhase1Enhancement = false,
-}: CADViewerProps) {
-  const [isLoading, setIsLoading] = useState(false);
+export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewerProps) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [meshData, setMeshData] = useState<MeshData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [fetchedMeshData, setFetchedMeshData] = useState<MeshData | null>(null);
-
-  // Professional viewer controls
-  const [sectionPlane, setSectionPlane] = useState<"none" | "xy" | "xz" | "yz">("none");
-  const [sectionPosition, setSectionPosition] = useState(0);
+  const [displayMode, setDisplayMode] = useState<"solid" | "wireframe" | "translucent">("solid");
   const [showEdges, setShowEdges] = useState(true);
-  const [showHiddenEdges, setShowHiddenEdges] = useState(false);
-  const [showDimensions, setShowDimensions] = useState(false);
-  const [measurementMode, setMeasurementMode] = useState<"distance" | "angle" | "radius" | null>(null);
-  const [displayStyle, setDisplayStyle] = useState<"solid" | "wireframe" | "translucent">("solid");
-  const showTopologyColors = true; // Always use Fusion 360 topology colors
-  const controlsRef = useRef<any>(null);
-  const cameraRef = useRef<any>(null);
-  const orientationCubeRef = useRef<OrientationCubeHandle>(null);
-
-  // Mesh ref for model access
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  // Performance settings for professional visual quality
   const [shadowsEnabled, setShadowsEnabled] = useState(true);
   const [ssaoEnabled, setSSAOEnabled] = useState(true);
-  const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
+  const [quality, setQuality] = useState<"performance" | "balanced" | "quality">("balanced");
+  const [sectionPlane, setSectionPlane] = useState<"xy" | "xz" | "yz" | "x" | "y" | "z" | null>(null);
+  const [sectionPosition, setSectionPosition] = useState(0);
 
-  const fileExtension = fileName.split(".").pop()?.toLowerCase() || "";
-  const isSTEP = ["step", "stp"].includes(fileExtension);
-  const isIGES = ["iges", "igs"].includes(fileExtension);
-  const isRenderableFormat = ["stl", "step", "stp", "iges", "igs"].includes(fileExtension);
+  // Measurement store
+  const {
+    activeTool: measurementMode,
+    measurements,
+    setActiveTool: setMeasurementMode,
+    clearAllMeasurements,
+  } = useMeasurementStore();
 
-  // Fetch mesh data from database when meshId is provided
+  const meshRef = useRef<THREE.Mesh>(null);
+  const controlsRef = useRef<any>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const orientationCubeRef = useRef<OrientationCubeHandle>(null);
+
+  // ✅ FIX #3: Camera ref for view controls
+  const cameraRef = useRef<THREE.PerspectiveCamera>(null);
+
+  const fileExtension = useMemo(() => {
+    if (!fileName) return "";
+    return fileName.split(".").pop()?.toLowerCase() || "";
+  }, [fileName]);
+
+  const isRenderableFormat = useMemo(() => {
+    return ["step", "stp", "iges", "igs", "stl"].includes(fileExtension);
+  }, [fileExtension]);
+
+  // Load mesh data
   useEffect(() => {
-    if (propMeshData) {
-      console.log("✅ Mesh data received from backend:", {
-        vertices: propMeshData.vertices.length,
-        triangles: propMeshData.triangle_count,
-        hasFeatureEdges: !!propMeshData.feature_edges,
-      });
-      setFetchedMeshData(propMeshData);
+    if (!meshId && !fileUrl) {
+      setIsLoading(false);
       return;
     }
 
-    if (!meshId) {
-      console.log("⚠️ No mesh data available (no propMeshData or meshId)");
-      return;
-    }
-
-    if (fetchedMeshData) return;
-
-    const fetchMesh = async () => {
-      setIsLoading(true);
+    const loadMeshData = async () => {
       try {
-        console.log("🔍 Fetching mesh data for ID:", meshId);
-        const { data, error: fetchError } = await supabase.from("cad_meshes").select("*").eq("id", meshId).single();
+        setIsLoading(true);
+        setError(null);
 
-        if (fetchError) throw fetchError;
-        if (!data) throw new Error("No mesh data found");
+        if (meshId) {
+          const { data, error: fetchError } = await supabase.from("cad_meshes").select("*").eq("id", meshId).single();
 
-        console.log("✅ Mesh data loaded from database:", {
-          vertices: data.vertices.length,
-          triangles: data.triangle_count,
-          hasFeatureEdges: !!data.feature_edges,
-        });
+          if (fetchError) throw fetchError;
 
-        setFetchedMeshData(data as MeshData);
-      } catch (err) {
-        console.error("❌ Error fetching mesh:", err);
-        setError(err instanceof Error ? err.message : "Failed to load mesh data");
+          if (data) {
+            setMeshData({
+              vertices: data.vertices,
+              indices: data.indices,
+              normals: data.normals,
+              colors: data.colors || data.vertex_colors,
+              vertex_colors: data.vertex_colors,
+              triangle_count: data.triangle_count,
+            });
+            onMeshLoaded?.(data);
+          }
+        }
+      } catch (err: any) {
+        console.error("Error loading mesh:", err);
+        setError(err.message || "Failed to load 3D model");
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchMesh();
-  }, [meshId, propMeshData, fetchedMeshData]);
+    loadMeshData();
+  }, [meshId, fileUrl, onMeshLoaded]);
 
-  const activeMeshData = propMeshData || fetchedMeshData;
-
+  // Calculate bounding box
   const boundingBox = useMemo(() => {
-    if (!activeMeshData || !activeMeshData.vertices || activeMeshData.vertices.length === 0) {
+    if (!meshData || !meshData.vertices || meshData.vertices.length === 0) {
       return {
-        min: new THREE.Vector3(-10, -10, -10),
-        max: new THREE.Vector3(10, 10, 10),
-        center: new THREE.Vector3(0, 0, 0),
-        width: 20,
-        height: 20,
-        depth: 20,
+        min: new THREE.Vector3(-50, -50, -50),
+        max: new THREE.Vector3(50, 50, 50),
+        center: [0, 0, 0] as [number, number, number],
+        size: new THREE.Vector3(100, 100, 100),
+        width: 100,
+        height: 100,
+        depth: 100,
       };
     }
 
-    const vertices = activeMeshData.vertices;
-    let minX = Infinity,
-      minY = Infinity,
-      minZ = Infinity;
-    let maxX = -Infinity,
-      maxY = -Infinity,
-      maxZ = -Infinity;
+    const vertices = meshData.vertices;
+    const min = new THREE.Vector3(Infinity, Infinity, Infinity);
+    const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
 
     for (let i = 0; i < vertices.length; i += 3) {
-      const x = vertices[i];
-      const y = vertices[i + 1];
-      const z = vertices[i + 2];
-      minX = Math.min(minX, x);
-      maxX = Math.max(maxX, x);
-      minY = Math.min(minY, y);
-      maxY = Math.max(maxY, y);
-      minZ = Math.min(minZ, z);
-      maxZ = Math.max(maxZ, z);
+      min.x = Math.min(min.x, vertices[i]);
+      min.y = Math.min(min.y, vertices[i + 1]);
+      min.z = Math.min(min.z, vertices[i + 2]);
+      max.x = Math.max(max.x, vertices[i]);
+      max.y = Math.max(max.y, vertices[i + 1]);
+      max.z = Math.max(max.z, vertices[i + 2]);
     }
 
-    const min = new THREE.Vector3(minX, minY, minZ);
-    const max = new THREE.Vector3(maxX, maxY, maxZ);
-    const center = new THREE.Vector3((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
+    const center: [number, number, number] = [(min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2];
+
+    const size = new THREE.Vector3(max.x - min.x, max.y - min.y, max.z - min.z);
 
     return {
       min,
       max,
       center,
-      width: maxX - minX,
-      height: maxY - minY,
-      depth: maxZ - minZ,
+      size,
+      width: size.x,
+      height: size.y,
+      depth: size.z,
     };
-  }, [activeMeshData]);
+  }, [meshData]);
 
-  const modelBounds = useMemo(
-    () => ({
-      min: boundingBox.min,
-      max: boundingBox.max,
-      size: new THREE.Vector3(boundingBox.width, boundingBox.height, boundingBox.depth),
-    }),
-    [boundingBox],
-  );
-
-  const initialCameraPosition: [number, number, number] = useMemo(() => {
-    const distance = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 1.5;
-    return [
-      boundingBox.center.x + distance * 0.5,
-      boundingBox.center.y + distance * 0.5,
-      boundingBox.center.z + distance * 0.5,
-    ];
+  // Calculate initial camera position
+  const initialCameraPosition = useMemo(() => {
+    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+    const distance = maxDim * 1.5;
+    return new THREE.Vector3(
+      boundingBox.center[0] + distance * 0.707,
+      boundingBox.center[1] + distance * 0.707,
+      boundingBox.center[2] + distance * 0.707,
+    );
   }, [boundingBox]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setMeasurementMode(null);
-        setShowDimensions(false);
-      }
-      if (e.key === " " || e.code === "Space") {
-        e.preventDefault();
-        handleFitToView();
-      }
-      if (e.key === "e" || e.key === "E") {
-        setShowEdges(!showEdges);
-      }
-      if (e.key === "m" || e.key === "M") {
-        setMeasurementMode(measurementMode === "distance" ? null : "distance");
-      }
-      if (e.key === "1") {
-        setSectionPlane(sectionPlane === "xy" ? "none" : "xy");
-      }
-      if (e.key === "2") {
-        setSectionPlane(sectionPlane === "xz" ? "none" : "xz");
-      }
-      if (e.key === "3") {
-        setSectionPlane(sectionPlane === "yz" ? "none" : "yz");
-      }
-      if (e.key === "s" || e.key === "S") {
-        setDisplayStyle((prev) => {
-          if (prev === "solid") return "wireframe";
-          if (prev === "wireframe") return "translucent";
-          return "solid";
-        });
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyPress);
-    return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [showEdges, showHiddenEdges, showDimensions, measurementMode, sectionPlane, displayStyle]);
-
+  // ✅ FIX #3: Fixed handleSetView with proper camera animation
   const handleSetView = useCallback(
     (view: string) => {
+      if (!cameraRef.current || !controlsRef.current) {
+        console.error("❌ Camera or controls ref not available");
+        return;
+      }
+
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+      const target = new THREE.Vector3(...boundingBox.center);
+      const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+      const distance = maxDim * 1.5;
+
+      let newPosition: THREE.Vector3;
+
+      switch (view) {
+        case "front":
+          newPosition = new THREE.Vector3(target.x, target.y, target.z + distance);
+          console.log("📷 Setting FRONT view to:", newPosition);
+          break;
+        case "top":
+          newPosition = new THREE.Vector3(target.x, target.y + distance, target.z);
+          console.log("📷 Setting TOP view to:", newPosition);
+          break;
+        case "isometric":
+          newPosition = new THREE.Vector3(
+            target.x + distance * 0.707,
+            target.y + distance * 0.707,
+            target.z + distance * 0.707,
+          );
+          console.log("📷 Setting ISOMETRIC view to:", newPosition);
+          break;
+        case "home":
+          newPosition = new THREE.Vector3(
+            target.x + distance * 0.707,
+            target.y + distance * 0.707,
+            target.z + distance * 0.707,
+          );
+          console.log("📷 Setting HOME view to:", newPosition);
+          break;
+        default:
+          console.warn("⚠️ Unknown view:", view);
+          return;
+      }
+
+      // Smooth camera animation (600ms)
+      const startPosition = camera.position.clone();
+      const duration = 600;
+      const startTime = Date.now();
+
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const t = Math.min(elapsed / duration, 1);
+
+        // Ease in-out
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+        camera.position.lerpVectors(startPosition, newPosition, eased);
+        controls.target.copy(target);
+        controls.update();
+
+        if (t < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          console.log("✅ View animation complete:", view);
+        }
+      };
+
+      animate();
+    },
+    [boundingBox, cameraRef, controlsRef],
+  );
+
+  const handleFitView = useCallback(() => {
+    if (!controlsRef.current || !cameraRef.current) return;
+
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+    const distance = maxDim * 1.5;
+
+    camera.position.set(
+      boundingBox.center[0] + distance * 0.707,
+      boundingBox.center[1] + distance * 0.707,
+      boundingBox.center[2] + distance * 0.707,
+    );
+    controls.target.set(...boundingBox.center);
+    controls.update();
+  }, [boundingBox]);
+
+  const handleCubeClick = useCallback(
+    (direction: THREE.Vector3) => {
       if (!controlsRef.current || !cameraRef.current) return;
 
       const camera = cameraRef.current;
       const controls = controlsRef.current;
-      const distance = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 1.5;
+      const target = new THREE.Vector3(...boundingBox.center);
+      const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
+      const distance = maxDim * 1.5;
 
-      let newPosition: [number, number, number];
+      const newPosition = target.clone().add(direction.multiplyScalar(distance));
 
-      switch (view) {
-        case "front":
-          newPosition = [boundingBox.center.x, boundingBox.center.y, boundingBox.center.z + distance];
-          break;
-        case "back":
-          newPosition = [boundingBox.center.x, boundingBox.center.y, boundingBox.center.z - distance];
-          break;
-        case "top":
-          newPosition = [boundingBox.center.x, boundingBox.center.y + distance, boundingBox.center.z];
-          break;
-        case "bottom":
-          newPosition = [boundingBox.center.x, boundingBox.center.y - distance, boundingBox.center.z];
-          break;
-        case "left":
-          newPosition = [boundingBox.center.x - distance, boundingBox.center.y, boundingBox.center.z];
-          break;
-        case "right":
-          newPosition = [boundingBox.center.x + distance, boundingBox.center.y, boundingBox.center.z];
-          break;
-        case "isometric":
-          newPosition = [
-            boundingBox.center.x + distance * 0.5,
-            boundingBox.center.y + distance * 0.5,
-            boundingBox.center.z + distance * 0.5,
-          ];
-          break;
-        default:
-          return;
-      }
-
-      camera.position.set(...newPosition);
-      controls.target.copy(boundingBox.center);
+      camera.position.copy(newPosition);
+      controls.target.copy(target);
       controls.update();
     },
     [boundingBox],
   );
 
-  const handleFitToView = useCallback(() => {
-    if (!controlsRef.current || !cameraRef.current) return;
-    handleSetView("isometric");
-  }, [handleSetView]);
+  const handleDownload = useCallback(async () => {
+    if (!fileUrl) return;
 
-  const handleDownload = () => {
-    if (fileUrl) {
+    try {
+      const response = await fetch(fileUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = fileUrl;
-      link.download = fileName;
+      link.href = url;
+      link.download = fileName || "model";
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download failed:", error);
     }
-  };
+  }, [fileUrl, fileName]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        handleFitView();
+      } else if (e.code === "KeyE") {
+        e.preventDefault();
+        setShowEdges(!showEdges);
+      } else if (e.code === "Escape") {
+        e.preventDefault();
+        if (measurementMode) {
+          setMeasurementMode(null);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, [handleFitView, showEdges, measurementMode, setMeasurementMode]);
+
+  const activeMeshData = meshData;
 
   if (isLoading) {
     return (
-      <div className="w-full h-full min-h-[600px] bg-muted/10 rounded-lg">
-        <CardContent className="h-full">
-          <div className="flex items-center justify-center h-full">
-            <div className="flex flex-col items-center gap-4">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Loading 3D model...</p>
-            </div>
-          </div>
-        </CardContent>
-      </div>
+      <CardContent className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading 3D model...</p>
+        </div>
+      </CardContent>
     );
   }
 
   if (error) {
     return (
-      <div className="w-full h-full min-h-[600px] bg-muted/10 rounded-lg">
-        <CardContent className="h-full">
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <p className="text-destructive font-semibold mb-2">Error loading 3D model</p>
-              <p className="text-sm text-muted-foreground">{error}</p>
-            </div>
+      <CardContent className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-4 text-center max-w-md">
+          <Box className="h-16 w-16 text-destructive" />
+          <div>
+            <p className="text-sm font-medium text-destructive mb-2">Failed to load 3D model</p>
+            <p className="text-xs text-muted-foreground">{error}</p>
           </div>
-        </CardContent>
-      </div>
+        </div>
+      </CardContent>
     );
   }
 
   return (
-    <div className="w-full h-full min-h-[600px] bg-background rounded-lg border relative">
-      <CardContent className="h-full p-0 relative">
-        {activeMeshData ? (
-          <div className="relative w-full h-full">
-            {/* ========== UNIFIED CAD TOOLBAR (NEW) ========== */}
+    <div className="relative h-full overflow-hidden">
+      <CardContent className="p-0 h-full">
+        {activeMeshData && isRenderableFormat ? (
+          <div ref={canvasRef} className="relative h-full" style={{ background: "#f8f9fa" }}>
+            {/* ✅ Unified CAD Toolbar - Top of viewport */}
             <UnifiedCADToolbar
-              onHomeView={() => handleSetView("isometric")}
+              onHomeView={() => handleSetView("home")}
               onFrontView={() => handleSetView("front")}
               onTopView={() => handleSetView("top")}
               onIsometricView={() => handleSetView("isometric")}
-              onFitView={handleFitToView}
-              displayStyle={displayStyle}
-              setDisplayStyle={setDisplayStyle}
+              onFitView={handleFitView}
+              displayMode={displayMode}
+              onDisplayModeChange={setDisplayMode}
               showEdges={showEdges}
-              setShowEdges={setShowEdges}
+              onToggleEdges={() => setShowEdges(!showEdges)}
+              measurementMode={measurementMode}
+              onMeasurementModeChange={setMeasurementMode}
+              measurementCount={measurements.length}
+              onClearMeasurements={clearAllMeasurements}
               sectionPlane={sectionPlane}
-              setSectionPlane={setSectionPlane}
+              onSectionPlaneChange={setSectionPlane}
               sectionPosition={sectionPosition}
-              setSectionPosition={setSectionPosition}
+              onSectionPositionChange={setSectionPosition}
               shadowsEnabled={shadowsEnabled}
-              setShadowsEnabled={setShadowsEnabled}
+              onToggleShadows={() => setShadowsEnabled(!shadowsEnabled)}
               ssaoEnabled={ssaoEnabled}
-              setSSAOEnabled={setSSAOEnabled}
-              quality={quality}
-              setQuality={setQuality}
+              onToggleSSAO={() => setSSAOEnabled(!ssaoEnabled)}
+              boundingBox={{
+                min: { x: boundingBox.min.x, y: boundingBox.min.y, z: boundingBox.min.z },
+                max: { x: boundingBox.max.x, y: boundingBox.max.y, z: boundingBox.max.z },
+                center: { x: boundingBox.center[0], y: boundingBox.center[1], z: boundingBox.center[2] },
+              }}
             />
-            {/* =============================================== */}
 
-            {/* ========== ORIENTATION CUBE (PRESERVED) ========== */}
-            <div className="absolute top-4 right-4 z-10">
-              <OrientationCubePreview
-                ref={orientationCubeRef}
-                onOrientationChange={(direction) => {
-                  // Handle orientation change if needed
-                }}
-              />
-            </div>
-            {/* ================================================= */}
+            {/* Orientation Cube - Top Right */}
+            <OrientationCubePreview
+              ref={orientationCubeRef}
+              onCubeClick={handleCubeClick}
+              displayMode={displayMode}
+              onDisplayModeChange={setDisplayMode}
+            />
 
             <Canvas
               shadows
-              camera={{
-                fov: 50,
-                near: 0.1,
-                far: Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 10,
-                position: initialCameraPosition,
-              }}
               gl={{
                 antialias: true,
                 alpha: true,
-                powerPreference: "high-performance",
-                toneMapping: THREE.ACESFilmicToneMapping,
-                toneMappingExposure: 1.0,
-                outputColorSpace: THREE.SRGBColorSpace,
+                preserveDrawingBuffer: true,
+                shadowMap: {
+                  enabled: true,
+                  type: THREE.PCFSoftShadowMap,
+                },
               }}
-              style={{ background: "linear-gradient(to bottom, #f5f7fa, #c3cfe2)" }}
             >
-              <Suspense fallback={null}>
-                {/* ========== LIGHTING RIG ========== */}
-                <LightingRig shadowsEnabled={shadowsEnabled} modelBounds={modelBounds} />
+              <color attach="background" args={["#f8f9fa"]} />
+              <fog attach="fog" args={["#f8f9fa", 100, 500]} />
 
-                {/* 3D Model */}
+              {/* ✅ FIX #3: Camera with ref */}
+              <PerspectiveCamera ref={cameraRef} makeDefault position={initialCameraPosition} fov={50} />
+
+              <Suspense fallback={null}>
+                <LightingRig quality={quality} shadowsEnabled={shadowsEnabled} />
+
                 <MeshModel
                   ref={meshRef}
                   meshData={activeMeshData}
+                  displayMode={displayMode}
+                  showEdges={showEdges}
                   sectionPlane={sectionPlane}
                   sectionPosition={sectionPosition}
-                  showEdges={showEdges}
-                  showHiddenEdges={showHiddenEdges}
-                  displayStyle={displayStyle}
-                  topologyColors={showTopologyColors}
                 />
 
-                {/* Ground plane with shadows */}
-                <ContactShadows
-                  position={[0, boundingBox.min.y - 0.1, 0]}
-                  opacity={0.3}
-                  scale={Math.max(boundingBox.width, boundingBox.depth) * 2}
-                  blur={2}
-                  far={Math.max(boundingBox.height, boundingBox.depth) * 2}
-                />
+                <DimensionAnnotations boundingBox={boundingBox} enabled={false} />
 
-                {/* Dimension Annotations */}
-                {showDimensions && (
-                  <DimensionAnnotations
-                    features={detectedFeatures}
-                    boundingBox={{
-                      width: boundingBox.width,
-                      height: boundingBox.height,
-                      depth: boundingBox.depth,
-                    }}
-                  />
-                )}
-
-                {/* ========== PHASE 2: ADVANCED MEASUREMENT TOOL ========== */}
-                <AdvancedMeasurementTool
-                  meshData={activeMeshData}
-                  meshRef={meshRef}
-                  enabled={measurementMode !== null}
-                />
-
-                {/* Visual effects (SSAO, Bloom, FXAA, Environment) */}
                 <VisualEffects enabled={ssaoEnabled} quality={quality} />
 
-                {/* Camera controls with trackball rotation for CAD-style interaction */}
                 <TrackballControls
                   ref={controlsRef}
                   makeDefault
@@ -442,7 +433,6 @@ export function CADViewer({
                 />
               </Suspense>
 
-              {/* XYZ Axis Gizmo - Bottom Right */}
               <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
                 <GizmoViewport
                   axisColors={["#ff0000", "#00ff00", "#0000ff"]}
@@ -452,11 +442,10 @@ export function CADViewer({
               </GizmoHelper>
             </Canvas>
 
-            {/* ========== PHASE 2: MEASUREMENT PANEL (PRESERVED) ========== */}
-            <MeasurementPanel />
-            {/* ============================================================ */}
+            {/* ✅ FIX #2: MeasurementPanel REMOVED - now in toolbar only */}
+            {/* All measurement UI handled by UnifiedCADToolbar */}
 
-            {/* ========== PERFORMANCE SETTINGS PANEL (PRESERVED) ========== */}
+            {/* Performance Settings Panel */}
             <PerformanceSettingsPanel
               shadowsEnabled={shadowsEnabled}
               setShadowsEnabled={setShadowsEnabled}
@@ -466,7 +455,6 @@ export function CADViewer({
               setQuality={setQuality}
               triangleCount={activeMeshData.triangle_count}
             />
-            {/* ============================================================ */}
           </div>
         ) : isRenderableFormat ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
