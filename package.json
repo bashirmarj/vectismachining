@@ -9,11 +9,6 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview"
-    ```json
-{
-  "zustand": "^5.0.2"
-}
-```
   },
   "dependencies": {
     "@react-three/postprocessing": "^2.15.0",
