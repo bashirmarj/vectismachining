@@ -386,8 +386,11 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
               <TabsContent value="3d-model" className="h-full m-0 p-6">
                 <div className="h-full min-h-[600px]">
                   <CADViewer
+                    file={selectedFile.file}
                     fileName={selectedFile.file.name}
                     meshId={selectedFile.meshId}
+                    meshData={selectedFile.meshData}
+                    detectedFeatures={selectedFile.analysis?.detected_features}
                   />
                 </div>
               </TabsContent>

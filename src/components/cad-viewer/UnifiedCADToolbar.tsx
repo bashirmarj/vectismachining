@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Box,
   Grid3x3,
+  Cube,
   Circle,
   Move,
   RotateCcw,
@@ -45,14 +46,14 @@ interface UnifiedCADToolbarProps {
   onToggleEdges: () => void;
 
   // Measurement
-  measurementMode: "distance" | "angle" | "radius" | "diameter" | null;
-  onMeasurementModeChange: (mode: "distance" | "angle" | "radius" | "diameter" | null) => void;
+  measurementMode: "distance" | "angle" | "radius" | null;
+  onMeasurementModeChange: (mode: "distance" | "angle" | "radius" | null) => void;
   measurementCount?: number;
   onClearMeasurements?: () => void;
 
   // Section Planes
-  sectionPlane: "none" | "xy" | "xz" | "yz" | null;
-  onSectionPlaneChange: (plane: "none" | "xy" | "xz" | "yz" | null) => void;
+  sectionPlane: "xy" | "xz" | "yz" | "x" | "y" | "z" | null;
+  onSectionPlaneChange: (plane: "xy" | "xz" | "yz" | "x" | "y" | "z" | null) => void;
   sectionPosition?: number;
   onSectionPositionChange?: (position: number) => void;
 
@@ -116,16 +117,19 @@ export function UnifiedCADToolbar({
 
     switch (sectionPlane) {
       case "xy":
+      case "z":
         rangeMin = min.z;
         rangeMax = max.z;
         rangeCenter = center.z;
         break;
       case "xz":
+      case "y":
         rangeMin = min.y;
         rangeMax = max.y;
         rangeCenter = center.y;
         break;
       case "yz":
+      case "x":
         rangeMin = min.x;
         rangeMax = max.x;
         rangeCenter = center.x;
@@ -168,7 +172,7 @@ export function UnifiedCADToolbar({
     }
   };
 
-  const handleSectionPlaneSelect = (plane: "xy" | "xz" | "yz") => {
+  const handleSectionPlaneSelect = (plane: "xy" | "xz" | "yz" | "x" | "y" | "z") => {
     onSectionPlaneChange(plane);
   };
 
@@ -203,7 +207,7 @@ export function UnifiedCADToolbar({
                 Top View
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onIsometricView}>
-                <Box className="mr-2 h-4 w-4" />
+                <Cube className="mr-2 h-4 w-4" />
                 Isometric View
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -390,6 +394,14 @@ export function UnifiedCADToolbar({
                 className="flex-1"
               >
                 YZ Plane
+              </Button>
+              <Button
+                variant={sectionPlane === "x" ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleSectionPlaneSelect("x")}
+                className="flex-1"
+              >
+                X
               </Button>
             </div>
 
