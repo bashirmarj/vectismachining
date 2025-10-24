@@ -268,12 +268,13 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
 
           // Highlight edges on hover
           const highlightLine = cubeRef.current.children.find(
-            (child) =>
+            (child): child is THREE.LineSegments =>
               child instanceof THREE.LineSegments &&
-              (child.material as THREE.LineBasicMaterial).color.getHex() === 0x2563eb,
+              child.material instanceof THREE.LineBasicMaterial &&
+              child.material.color.getHex() === 0x2563eb,
           );
-          if (highlightLine) {
-            (highlightLine.material as THREE.LineBasicMaterial).opacity = 0.8;
+          if (highlightLine && highlightLine.material instanceof THREE.LineBasicMaterial) {
+            highlightLine.material.opacity = 0.8;
           }
         } else {
           setHoveredRegion(null);
@@ -282,12 +283,13 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
           // Hide highlight
           if (cubeRef.current) {
             const highlightLine = cubeRef.current.children.find(
-              (child) =>
+              (child): child is THREE.LineSegments =>
                 child instanceof THREE.LineSegments &&
-                (child.material as THREE.LineBasicMaterial).color.getHex() === 0x2563eb,
+                child.material instanceof THREE.LineBasicMaterial &&
+                child.material.color.getHex() === 0x2563eb,
             );
-            if (highlightLine) {
-              (highlightLine.material as THREE.LineBasicMaterial).opacity = 0;
+            if (highlightLine && highlightLine.material instanceof THREE.LineBasicMaterial) {
+              highlightLine.material.opacity = 0;
             }
           }
         }

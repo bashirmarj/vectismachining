@@ -184,10 +184,8 @@ export function PartDetailCustomer({
                   compact
                 />
                 <CADViewer 
-                  file={file.file}
                   fileName={file.file.name}
                   meshId={file.meshId}
-                  detectedFeatures={file.analysis?.detected_features}
                 />
               </div>
             </TabsContent>

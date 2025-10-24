@@ -26,8 +26,7 @@ interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
-  colors?: number[];
-  vertex_colors?: number[];
+  vertex_colors?: string[];
   triangle_count: number;
 }
 
@@ -39,8 +38,8 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
   const [showEdges, setShowEdges] = useState(true);
   const [shadowsEnabled, setShadowsEnabled] = useState(true);
   const [ssaoEnabled, setSSAOEnabled] = useState(true);
-  const [quality, setQuality] = useState<"performance" | "balanced" | "quality">("balanced");
-  const [sectionPlane, setSectionPlane] = useState<"xy" | "xz" | "yz" | "x" | "y" | "z" | null>(null);
+  const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
+  const [sectionPlane, setSectionPlane] = useState<"none" | "xy" | "xz" | "yz" | null>(null);
   const [sectionPosition, setSectionPosition] = useState(0);
 
   // Measurement store
@@ -90,7 +89,6 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
               vertices: data.vertices,
               indices: data.indices,
               normals: data.normals,
-              colors: data.colors || data.vertex_colors,
               vertex_colors: data.vertex_colors,
               triangle_count: data.triangle_count,
             });
@@ -389,10 +387,6 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
                 antialias: true,
                 alpha: true,
                 preserveDrawingBuffer: true,
-                shadowMap: {
-                  enabled: true,
-                  type: THREE.PCFSoftShadowMap,
-                },
               }}
             >
               <color attach="background" args={["#f8f9fa"]} />
@@ -402,18 +396,32 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
               <PerspectiveCamera ref={cameraRef} makeDefault position={initialCameraPosition} fov={50} />
 
               <Suspense fallback={null}>
-                <LightingRig quality={quality} shadowsEnabled={shadowsEnabled} />
+                <LightingRig
+                  shadowsEnabled={shadowsEnabled}
+                  modelBounds={{
+                    min: boundingBox.min,
+                    max: boundingBox.max,
+                    center: new THREE.Vector3(...boundingBox.center),
+                    size: boundingBox.size,
+                  }}
+                />
 
                 <MeshModel
                   ref={meshRef}
                   meshData={activeMeshData}
-                  displayMode={displayMode}
+                  displayStyle={displayMode}
                   showEdges={showEdges}
-                  sectionPlane={sectionPlane}
+                  sectionPlane={sectionPlane || "none"}
                   sectionPosition={sectionPosition}
                 />
 
-                <DimensionAnnotations boundingBox={boundingBox} enabled={false} />
+                <DimensionAnnotations
+                  boundingBox={{
+                    width: boundingBox.width,
+                    height: boundingBox.height,
+                    depth: boundingBox.depth,
+                  }}
+                />
 
                 <VisualEffects enabled={ssaoEnabled} quality={quality} />
 
