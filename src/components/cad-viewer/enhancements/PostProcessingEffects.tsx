@@ -49,16 +49,16 @@ export function PostProcessingEffects({
         <SSAO
           blendFunction={BlendFunction.MULTIPLY}
           samples={ssaoSamples}
-          radius={ssaoRadius}
-          intensity={ssaoIntensity * 30}
+          rings={4}
+          distanceThreshold={1.0}
+          distanceFalloff={0.0}
+          rangeThreshold={0.5}
+          rangeFalloff={0.1}
           luminanceInfluence={0.6}
-          color={new THREE.Color('black')}
+          radius={ssaoRadius}
+          intensity={ssaoIntensity}
           bias={0.01}
-          distanceScaling={true}
-          distanceThreshold={0.5}
-          distanceFalloff={0.1}
-          rangeThreshold={0.001}
-          rangeFalloff={0.001}
+          color={new THREE.Color('black')}
           worldDistanceThreshold={0.5}
           worldDistanceFalloff={0.1}
           worldProximityThreshold={0.001}
