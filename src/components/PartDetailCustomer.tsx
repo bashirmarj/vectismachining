@@ -4,16 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CADViewer } from "./CADViewer";
 import FeatureTree from "./FeatureTree";
-import { 
-  Package, 
-  Layers, 
-  DollarSign, 
-  Loader2, 
-  CheckCircle2,
-  AlertCircle,
-  Zap,
-  X
-} from "lucide-react";
+import { Package, Layers, DollarSign, Loader2, CheckCircle2, AlertCircle, Zap, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -76,29 +67,28 @@ interface PartDetailCustomerProps {
   onRemove: () => void;
 }
 
-export function PartDetailCustomer({ 
-  file, 
+export function PartDetailCustomer({
+  file,
   materials,
-  onUpdateMaterial, 
-  onAnalyze, 
-  onRemove 
+  onUpdateMaterial,
+  onAnalyze,
+  onRemove,
 }: PartDetailCustomerProps) {
   const hasAnalysis = !!file.analysis;
-  const hasFeatures = hasAnalysis && (
-    file.analysis.manufacturing_features || 
-    file.analysis.feature_tree || 
-    file.analysis.detected_features
-  );
+  const hasFeatures =
+    hasAnalysis &&
+    (file.analysis.manufacturing_features || file.analysis.feature_tree || file.analysis.detected_features);
   const hasQuote = !!file.quote;
-  
+
   // Calculate feature count from either old or new structure
-  const featureCount = hasFeatures 
-    ? (file.analysis.feature_tree?.oriented_sections?.reduce((sum, s) => sum + s.features.length, 0) || 
-       (file.analysis.feature_summary ? 
-         (file.analysis.feature_summary.through_holes || 0) +
-         (file.analysis.feature_summary.blind_holes || 0) +
-         (file.analysis.feature_summary.bores || 0) +
-         (file.analysis.feature_summary.bosses || 0) : 0))
+  const featureCount = hasFeatures
+    ? file.analysis.feature_tree?.oriented_sections?.reduce((sum, s) => sum + s.features.length, 0) ||
+      (file.analysis.feature_summary
+        ? (file.analysis.feature_summary.through_holes || 0) +
+          (file.analysis.feature_summary.blind_holes || 0) +
+          (file.analysis.feature_summary.bores || 0) +
+          (file.analysis.feature_summary.bosses || 0)
+        : 0)
     : 0;
 
   return (
@@ -125,16 +115,8 @@ export function PartDetailCustomer({
       <CardContent>
         {!hasAnalysis ? (
           <div className="space-y-4">
-            <MaterialSelector
-              value={file.material}
-              materials={materials}
-              onSelect={onUpdateMaterial}
-            />
-            <Button 
-              onClick={onAnalyze} 
-              disabled={file.isAnalyzing || !file.material}
-              className="w-full"
-            >
+            <MaterialSelector value={file.material} materials={materials} onSelect={onUpdateMaterial} />
+            <Button onClick={onAnalyze} disabled={file.isAnalyzing || !file.material} className="w-full">
               {file.isAnalyzing ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -148,9 +130,7 @@ export function PartDetailCustomer({
               )}
             </Button>
             {!file.material && (
-              <p className="text-xs text-muted-foreground text-center">
-                Select a material to enable analysis
-              </p>
+              <p className="text-xs text-muted-foreground text-center">Select a material to enable analysis</p>
             )}
           </div>
         ) : (
@@ -177,18 +157,9 @@ export function PartDetailCustomer({
 
             <TabsContent value="model" className="mt-4">
               <div className="space-y-4">
-                <MaterialSelector
-                  value={file.material}
-                  materials={materials}
-                  onSelect={onUpdateMaterial}
-                  compact
-                />
-                <CADViewer 
-                  file={file.file}
-                  fileName={file.file.name}
-                  meshId={file.meshId}
-                  detectedFeatures={file.analysis?.detected_features}
-                />
+                <MaterialSelector value={file.material} materials={materials} onSelect={onUpdateMaterial} compact />
+                {/* ✅ FIXED: Removed invalid props (file and detectedFeatures) */}
+                <CADViewer fileName={file.file.name} meshId={file.meshId} />
               </div>
             </TabsContent>
 
@@ -196,18 +167,9 @@ export function PartDetailCustomer({
               {hasAnalysis ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-3">
-                    <StatCard 
-                      label="Volume" 
-                      value={`${file.analysis.volume_cm3.toFixed(1)} cm³`}
-                    />
-                    <StatCard 
-                      label="Surface Area" 
-                      value={`${file.analysis.surface_area_cm2.toFixed(1)} cm²`}
-                    />
-                    <StatCard 
-                      label="Complexity" 
-                      value={file.analysis.complexity_score.toString()}
-                    />
+                    <StatCard label="Volume" value={`${file.analysis.volume_cm3.toFixed(1)} cm³`} />
+                    <StatCard label="Surface Area" value={`${file.analysis.surface_area_cm2.toFixed(1)} cm²`} />
+                    <StatCard label="Complexity" value={file.analysis.complexity_score.toString()} />
                   </div>
 
                   {file.analysis.routing_reasoning && file.analysis.routing_reasoning.length > 0 && (
@@ -230,9 +192,9 @@ export function PartDetailCustomer({
                       </CardContent>
                     </Card>
                   )}
-                  
+
                   {hasFeatures ? (
-                    <FeatureTree 
+                    <FeatureTree
                       features={file.analysis?.manufacturing_features || file.analysis?.detected_features}
                       featureSummary={file.analysis?.feature_summary || file.analysis?.feature_tree}
                     />
@@ -240,9 +202,7 @@ export function PartDetailCustomer({
                     <Card className="border-dashed">
                       <CardContent className="pt-6 text-center">
                         <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
-                        <p className="text-sm font-medium mb-1">
-                          Advanced feature detection unavailable
-                        </p>
+                        <p className="text-sm font-medium mb-1">Advanced feature detection unavailable</p>
                         <p className="text-xs text-muted-foreground">
                           Submit your file for detailed manual engineering review.
                         </p>
@@ -253,21 +213,14 @@ export function PartDetailCustomer({
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <AlertCircle className="h-12 w-12 text-muted-foreground mb-3" />
-                  <p className="text-sm text-muted-foreground">
-                    No analysis available yet
-                  </p>
+                  <p className="text-sm text-muted-foreground">No analysis available yet</p>
                 </div>
               )}
             </TabsContent>
 
             <TabsContent value="quote" className="mt-4">
               <div className="space-y-4">
-                <MaterialSelector
-                  value={file.material}
-                  materials={materials}
-                  onSelect={onUpdateMaterial}
-                  compact
-                />
+                <MaterialSelector value={file.material} materials={materials} onSelect={onUpdateMaterial} compact />
 
                 {hasQuote ? (
                   <div className="space-y-4">
@@ -285,7 +238,7 @@ export function PartDetailCustomer({
                                 High Confidence
                               </>
                             ) : (
-                              'Estimated'
+                              "Estimated"
                             )}
                           </Badge>
                         )}
@@ -315,7 +268,9 @@ export function PartDetailCustomer({
                               <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-md">
                                 <div>
                                   <div className="font-medium text-sm">{op.routing}</div>
-                                  <div className="text-xs text-muted-foreground">{op.machining_time_min.toFixed(1)} minutes</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {op.machining_time_min.toFixed(1)} minutes
+                                  </div>
                                 </div>
                                 <div className="text-sm font-semibold">${op.machining_cost.toFixed(2)}</div>
                               </div>
@@ -323,7 +278,9 @@ export function PartDetailCustomer({
                             {file.analysis.estimated_total_cost_usd && (
                               <div className="pt-2 border-t flex justify-between items-center">
                                 <span className="text-sm font-semibold">Total Machining Cost</span>
-                                <span className="text-base font-bold text-purple-600">${file.analysis.estimated_total_cost_usd.toFixed(2)}</span>
+                                <span className="text-base font-bold text-purple-600">
+                                  ${file.analysis.estimated_total_cost_usd.toFixed(2)}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -375,9 +332,7 @@ export function PartDetailCustomer({
                 ) : (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <DollarSign className="h-12 w-12 text-muted-foreground mb-3" />
-                    <p className="text-sm text-muted-foreground mb-3">
-                      No pricing available yet
-                    </p>
+                    <p className="text-sm text-muted-foreground mb-3">No pricing available yet</p>
                     <Button onClick={onAnalyze} disabled={file.isAnalyzing || !file.material}>
                       {file.isAnalyzing ? (
                         <>
@@ -420,13 +375,13 @@ function CostRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-function MaterialSelector({ 
-  value, 
-  materials, 
+function MaterialSelector({
+  value,
+  materials,
   onSelect,
-  compact = false 
-}: { 
-  value?: string; 
+  compact = false,
+}: {
+  value?: string;
   materials: string[];
   onSelect: (material: string) => void;
   compact?: boolean;
@@ -438,12 +393,7 @@ function MaterialSelector({
       {!compact && <label className="text-sm font-medium">Material</label>}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={open}
-            className="w-full justify-between"
-          >
+          <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between">
             {value || "Select material..."}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
@@ -463,12 +413,7 @@ function MaterialSelector({
                       setOpen(false);
                     }}
                   >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        value === material ? "opacity-100" : "opacity-0"
-                      )}
-                    />
+                    <Check className={cn("mr-2 h-4 w-4", value === material ? "opacity-100" : "opacity-0")} />
                     {material}
                   </CommandItem>
                 ))}
