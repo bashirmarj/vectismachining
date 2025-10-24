@@ -77,6 +77,7 @@ export function SceneEnhancementWrapper({
   quality={settings.shadowQuality}
 />
 */}
+    </>
   );
 }
 
