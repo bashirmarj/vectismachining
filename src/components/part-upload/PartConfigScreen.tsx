@@ -21,7 +21,7 @@ interface FileWithData {
     vertices: number[];
     indices: number[];
     normals: number[];
-    vertex_colors?: string[]; // ✅ FIXED: Changed from number[] to string[]
+    vertex_colors?: string[];
     triangle_count: number;
     face_types?: string[];
     feature_edges?: number[][][];
@@ -78,6 +78,17 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
 
   const selectedFile = files[selectedFileIndex];
 
+  // ✅ Debug logging on mount and file selection
+  React.useEffect(() => {
+    console.log("🔍 Selected file debug:", {
+      fileName: selectedFile.file.name,
+      hasMeshId: !!selectedFile.meshId,
+      meshId: selectedFile.meshId,
+      isAnalyzing: selectedFile.isAnalyzing,
+      hasAnalysis: !!selectedFile.analysis,
+    });
+  }, [selectedFile]);
+
   const handleSubmit = () => {
     onSubmit({
       files: files,
@@ -93,9 +104,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
   };
 
   const isFormValid = () => {
-    // Check if all files have material and quantity
     const filesValid = files.every((f) => f.material && f.quantity > 0);
-    // Check if contact info is filled
     const contactValid = contactInfo.name && contactInfo.email && contactInfo.phone;
     return filesValid && contactValid;
   };
@@ -131,6 +140,8 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                     <div className="font-medium text-sm truncate">{file.file.name}</div>
                     <div className="text-xs text-gray-500 mt-1">
                       Qty: {file.quantity} | {file.material || "No material"}
+                      {/* ✅ Debug indicator */}
+                      {file.meshId && <span className="ml-2 text-green-600">● 3D Ready</span>}
                     </div>
                   </button>
                 ))}
@@ -348,41 +359,58 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              {/* ✅ FIXED: 3D Model Tab with correct CADViewer props */}
+              {/* ✅ 3D Model Tab with improved debugging */}
               <TabsContent value="3d-model" className="h-full m-0 p-6">
                 <div className="h-full min-h-[600px]">
                   {selectedFile.meshId ? (
-                    <CADViewer
-                      meshId={selectedFile.meshId}
-                      fileName={selectedFile.file.name}
-                      onMeshLoaded={(meshData) => {
-                        console.log("✅ Mesh loaded:", meshData.triangle_count, "triangles");
-                        // Optionally update state with mesh info
-                        if (!selectedFile.meshData) {
-                          onUpdateFile(selectedFileIndex, { meshData });
-                        }
-                      }}
-                    />
+                    <>
+                      {console.log("✅ Rendering CADViewer with meshId:", selectedFile.meshId)}
+                      <CADViewer
+                        meshId={selectedFile.meshId}
+                        fileName={selectedFile.file.name}
+                        onMeshLoaded={(meshData) => {
+                          console.log("✅ Mesh loaded successfully:", {
+                            triangles: meshData.triangle_count,
+                            hasColors: !!meshData.vertex_colors,
+                            colorCount: meshData.vertex_colors?.length,
+                          });
+                          if (!selectedFile.meshData) {
+                            onUpdateFile(selectedFileIndex, { meshData });
+                          }
+                        }}
+                      />
+                    </>
                   ) : (
-                    <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
-                      <div className="text-muted-foreground">
-                        {selectedFile.isAnalyzing ? (
-                          <>
-                            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-                            <p className="text-sm font-medium">Analyzing CAD file...</p>
-                            <p className="text-xs mt-2">Generating 3D mesh and extracting features</p>
-                            <p className="text-xs text-gray-400 mt-1">This may take 30-60 seconds</p>
-                          </>
-                        ) : (
-                          <>
-                            <div className="text-6xl mb-4">📦</div>
-                            <p className="text-sm font-medium">3D preview not yet available</p>
-                            <p className="text-xs mt-2 text-gray-500">{selectedFile.file.name}</p>
-                            <p className="text-xs mt-1 text-gray-400">The file is being processed in the background</p>
-                          </>
-                        )}
+                    <>
+                      {console.log("⚠️ No meshId available:", {
+                        fileName: selectedFile.file.name,
+                        isAnalyzing: selectedFile.isAnalyzing,
+                        hasAnalysis: !!selectedFile.analysis,
+                      })}
+                      <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+                        <div className="text-muted-foreground">
+                          {selectedFile.isAnalyzing ? (
+                            <>
+                              <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+                              <p className="text-sm font-medium">Analyzing CAD file...</p>
+                              <p className="text-xs mt-2">Generating 3D mesh and extracting features</p>
+                              <p className="text-xs text-gray-400 mt-1">This may take 30-60 seconds</p>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-6xl mb-4">📦</div>
+                              <p className="text-sm font-medium">3D preview not yet available</p>
+                              <p className="text-xs mt-2 text-gray-500">{selectedFile.file.name}</p>
+                              <p className="text-xs mt-1 text-gray-400">
+                                {selectedFile.analysis
+                                  ? "Analysis complete but mesh data not loaded - check console logs"
+                                  : "The file is being processed in the background"}
+                              </p>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </>
                   )}
                 </div>
               </TabsContent>
