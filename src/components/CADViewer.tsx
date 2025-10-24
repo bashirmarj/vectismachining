@@ -8,13 +8,15 @@ import * as THREE from "three";
 import { supabase } from "@/integrations/supabase/client";
 import { MeshModel } from "./cad-viewer/MeshModel";
 import { DimensionAnnotations } from "./cad-viewer/DimensionAnnotations";
-import { MeasurementTool } from "./cad-viewer/MeasurementTool";
+import { MeasurementTool } from "./cad-viewer/MeasurementTool"; // Keep as backup
 import { OrientationCubePreview, OrientationCubeHandle } from "./cad-viewer/OrientationCubePreview";
 import LightingRig from "./cad-viewer/LightingRig";
 import VisualEffects from "./cad-viewer/VisualEffects";
 import PerformanceSettingsPanel from "./cad-viewer/PerformanceSettingsPanel";
-// Phase 1 Enhancement (Optional) - Only import if you created the enhancements folder
-// import { SceneEnhancementWrapper } from "./cad-viewer/enhancements/SceneEnhancementWrapper";
+// ========== PHASE 2: NEW IMPORTS ==========
+import { AdvancedMeasurementTool } from "./cad-viewer/AdvancedMeasurementTool";
+import { MeasurementPanel } from "./cad-viewer/MeasurementPanel";
+// ==========================================
 
 interface CADViewerProps {
   file?: File;
@@ -23,7 +25,7 @@ interface CADViewerProps {
   meshId?: string;
   meshData?: MeshData;
   detectedFeatures?: any;
-  usePhase1Enhancement?: boolean; // NEW: Toggle Phase 1 enhancements (requires enhancements folder)
+  usePhase1Enhancement?: boolean;
 }
 
 interface MeshData {
@@ -42,7 +44,7 @@ export function CADViewer({
   meshId,
   meshData: propMeshData,
   detectedFeatures,
-  usePhase1Enhancement = false, // NEW: Default to false (use existing LightingRig/VisualEffects)
+  usePhase1Enhancement = false,
 }: CADViewerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,23 +99,20 @@ export function CADViewer({
       setIsLoading(true);
       try {
         console.log(`📥 Fetching mesh from database: ${meshId}`);
-        const { data, error } = await supabase
-          .from("cad_meshes")
-          .select("vertices, indices, normals, face_types, triangle_count, feature_edges")
-          .eq("id", meshId)
-          .single();
+        const { data, error } = await supabase.from("cad_meshes").select("*").eq("id", meshId).single();
 
         if (error) throw error;
+
         if (data) {
-          console.log("✅ Mesh data fetched from database:", {
+          console.log("✅ Mesh fetched successfully:", {
             vertices: data.vertices.length,
             triangles: data.triangle_count,
           });
           setFetchedMeshData(data as MeshData);
         }
-      } catch (err: any) {
+      } catch (err) {
         console.error("❌ Error fetching mesh:", err);
-        setError(err.message);
+        setError(err instanceof Error ? err.message : "Failed to load mesh");
       } finally {
         setIsLoading(false);
       }
@@ -124,20 +123,20 @@ export function CADViewer({
 
   const activeMeshData = propMeshData || fetchedMeshData;
 
-  // Calculate bounding box for camera and annotations
+  // Calculate bounding box and camera position
   const boundingBox = useMemo(() => {
-    if (!activeMeshData || !activeMeshData.vertices || activeMeshData.vertices.length === 0) {
+    if (!activeMeshData) {
       return {
+        min: new THREE.Vector3(-50, -50, -50),
+        max: new THREE.Vector3(50, 50, 50),
+        center: new THREE.Vector3(0, 0, 0),
         width: 100,
         height: 100,
         depth: 100,
-        center: [0, 0, 0] as [number, number, number],
-        min: new THREE.Vector3(-50, -50, -50),
-        max: new THREE.Vector3(50, 50, 50),
-        size: new THREE.Vector3(100, 100, 100),
       };
     }
 
+    const positions = new Float32Array(activeMeshData.vertices);
     let minX = Infinity,
       minY = Infinity,
       minZ = Infinity;
@@ -145,244 +144,300 @@ export function CADViewer({
       maxY = -Infinity,
       maxZ = -Infinity;
 
-    for (let i = 0; i < activeMeshData.vertices.length; i += 3) {
-      minX = Math.min(minX, activeMeshData.vertices[i]);
-      maxX = Math.max(maxX, activeMeshData.vertices[i]);
-      minY = Math.min(minY, activeMeshData.vertices[i + 1]);
-      maxY = Math.max(maxY, activeMeshData.vertices[i + 1]);
-      minZ = Math.min(minZ, activeMeshData.vertices[i + 2]);
-      maxZ = Math.max(maxZ, activeMeshData.vertices[i + 2]);
+    for (let i = 0; i < positions.length; i += 3) {
+      minX = Math.min(minX, positions[i]);
+      minY = Math.min(minY, positions[i + 1]);
+      minZ = Math.min(minZ, positions[i + 2]);
+      maxX = Math.max(maxX, positions[i]);
+      maxY = Math.max(maxY, positions[i + 1]);
+      maxZ = Math.max(maxZ, positions[i + 2]);
     }
 
+    const min = new THREE.Vector3(minX, minY, minZ);
+    const max = new THREE.Vector3(maxX, maxY, maxZ);
+    const center = new THREE.Vector3((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
     const width = maxX - minX;
     const height = maxY - minY;
     const depth = maxZ - minZ;
-    const centerTuple: [number, number, number] = [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2];
-    const min = new THREE.Vector3(minX, minY, minZ);
-    const max = new THREE.Vector3(maxX, maxY, maxZ);
-    const center = new THREE.Vector3(...centerTuple);
-    const size = new THREE.Vector3(width, height, depth);
 
-    return { width, height, depth, center: centerTuple, min, max, size, centerVec: center };
+    return { min, max, center, width, height, depth };
   }, [activeMeshData]);
 
-  const hasValidModel = activeMeshData && activeMeshData.vertices && activeMeshData.vertices.length > 0;
-
-  const objectUrl = useMemo(() => {
-    if (file) {
-      return URL.createObjectURL(file);
-    }
-    return fileUrl;
-  }, [file, fileUrl]);
-
-  useEffect(() => {
-    return () => {
-      if (file && objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [file, objectUrl]);
-
-  const handleDownload = () => {
-    if (objectUrl) {
-      window.open(objectUrl, "_blank");
-    }
-  };
-
-  const handleFitView = () => {
-    if (!controlsRef.current || !cameraRef.current) return;
-
-    const maxDimension = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
-    const distance = maxDimension * 2.5;
-    const direction = new THREE.Vector3(1, 1, 1).normalize();
-    const newPosition = new THREE.Vector3(...boundingBox.center).add(direction.multiplyScalar(distance));
-
-    cameraRef.current.position.copy(newPosition);
-    controlsRef.current.target.set(...boundingBox.center);
-    controlsRef.current.update();
-  };
-
-  const setIsometricView = useCallback(() => {
-    if (!controlsRef.current || !cameraRef.current) return;
-
-    const maxDimension = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
-    const distance = maxDimension * 1.8;
-    const direction = new THREE.Vector3(1, 1, 1).normalize();
-    const newPosition = new THREE.Vector3(...boundingBox.center).add(direction.multiplyScalar(distance));
-
-    cameraRef.current.position.copy(newPosition);
-    cameraRef.current.up.set(0, 0, 1);
-    controlsRef.current.target.set(...boundingBox.center);
-    controlsRef.current.update();
+  const initialCameraPosition = useMemo(() => {
+    const distance = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 1.5;
+    return [
+      boundingBox.center.x + distance * 0.5,
+      boundingBox.center.y + distance * 0.5,
+      boundingBox.center.z + distance * 0.5,
+    ] as [number, number, number];
   }, [boundingBox]);
 
-  const orientMainCameraToDirection = useCallback(
-    (direction: THREE.Vector3) => {
-      if (!cameraRef.current || !controlsRef.current) return;
-
-      const maxDimension = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
-      const distance = maxDimension * 1.8;
-      const newPosition = new THREE.Vector3(...boundingBox.center).add(direction.clone().multiplyScalar(distance));
-
-      cameraRef.current.position.copy(newPosition);
-      controlsRef.current.target.set(...boundingBox.center);
-      controlsRef.current.update();
-    },
-    [boundingBox],
-  );
-
-  const handleCubeUpVectorChange = useCallback((newUp: THREE.Vector3) => {
-    if (!cameraRef.current || !controlsRef.current) return;
-    cameraRef.current.up.copy(newUp);
-    cameraRef.current.updateProjectionMatrix();
-    controlsRef.current.update();
-  }, []);
-
-
+  // Keyboard controls
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.code === "KeyE" && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        e.preventDefault();
-        setShowEdges((prev) => !prev);
-      } else if (e.code === "KeyM" && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        e.preventDefault();
-        setMeasurementMode((prev) => (prev === null ? "distance" : null));
-      } else if (e.code === "Escape") {
-        e.preventDefault();
-        setMeasurementMode(null);
+      if (e.key === "e" || e.key === "E") {
+        setShowEdges(!showEdges);
+      }
+      if (e.key === "h" || e.key === "H") {
+        setShowHiddenEdges(!showHiddenEdges);
+      }
+      if (e.key === "d" || e.key === "D") {
+        setShowDimensions(!showDimensions);
+      }
+      if (e.key === "m" || e.key === "M") {
+        setMeasurementMode(measurementMode === "distance" ? null : "distance");
+      }
+      if (e.key === "1") {
+        setSectionPlane(sectionPlane === "xy" ? "none" : "xy");
+      }
+      if (e.key === "2") {
+        setSectionPlane(sectionPlane === "xz" ? "none" : "xz");
+      }
+      if (e.key === "3") {
+        setSectionPlane(sectionPlane === "yz" ? "none" : "yz");
+      }
+      if (e.key === "s" || e.key === "S") {
+        setDisplayStyle((prev) => {
+          if (prev === "solid") return "wireframe";
+          if (prev === "wireframe") return "translucent";
+          return "solid";
+        });
       }
     };
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [showEdges, measurementMode]);
+  }, [showEdges, showHiddenEdges, showDimensions, measurementMode, sectionPlane, displayStyle]);
+
+  const handleSetView = useCallback(
+    (view: string) => {
+      if (!controlsRef.current || !cameraRef.current) return;
+
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+      const distance = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 1.5;
+
+      let newPosition: [number, number, number];
+
+      switch (view) {
+        case "front":
+          newPosition = [boundingBox.center.x, boundingBox.center.y, boundingBox.center.z + distance];
+          break;
+        case "back":
+          newPosition = [boundingBox.center.x, boundingBox.center.y, boundingBox.center.z - distance];
+          break;
+        case "top":
+          newPosition = [boundingBox.center.x, boundingBox.center.y + distance, boundingBox.center.z];
+          break;
+        case "bottom":
+          newPosition = [boundingBox.center.x, boundingBox.center.y - distance, boundingBox.center.z];
+          break;
+        case "left":
+          newPosition = [boundingBox.center.x - distance, boundingBox.center.y, boundingBox.center.z];
+          break;
+        case "right":
+          newPosition = [boundingBox.center.x + distance, boundingBox.center.y, boundingBox.center.z];
+          break;
+        case "isometric":
+          newPosition = [
+            boundingBox.center.x + distance * 0.5,
+            boundingBox.center.y + distance * 0.5,
+            boundingBox.center.z + distance * 0.5,
+          ];
+          break;
+        default:
+          return;
+      }
+
+      camera.position.set(...newPosition);
+      controls.target.copy(boundingBox.center);
+      controls.update();
+    },
+    [boundingBox],
+  );
+
+  const handleFitToView = useCallback(() => {
+    if (!controlsRef.current || !cameraRef.current) return;
+    handleSetView("isometric");
+  }, [handleSetView]);
+
+  const handleDownload = () => {
+    if (fileUrl) {
+      const link = document.createElement("a");
+      link.href = fileUrl;
+      link.download = fileName;
+      link.click();
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="w-full h-full min-h-[600px] bg-muted/10 rounded-lg">
+        <CardContent className="h-full">
+          <div className="flex items-center justify-center h-full">
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Loading 3D model...</p>
+            </div>
+          </div>
+        </CardContent>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-full h-full min-h-[600px] bg-muted/10 rounded-lg">
+        <CardContent className="h-full">
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <p className="text-destructive font-semibold mb-2">Error loading 3D model</p>
+              <p className="text-sm text-muted-foreground">{error}</p>
+            </div>
+          </div>
+        </CardContent>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full bg-white rounded-lg overflow-hidden">
-      <CardContent className="h-full p-0">
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">
-              {isSTEP || isIGES
-                ? `Processing ${fileExtension.toUpperCase()} geometry on server...`
-                : "Loading 3D model..."}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {isSTEP || isIGES ? "This may take 5-10 seconds for complex parts" : "This may take a few seconds"}
-            </p>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <Box className="h-16 w-16 text-destructive" />
-            <p className="text-sm text-destructive text-center">Failed to load 3D preview</p>
-            <p className="text-xs text-muted-foreground text-center max-w-md">{error}</p>
-            <Button variant="outline" onClick={handleDownload}>
-              Download File
-            </Button>
-          </div>
-        ) : hasValidModel ? (
-          <div className="relative h-full" style={{ background: "#f8f9fa" }}>
-            {/* Isometric Reset Button - Top Left */}
-            <button
-              onClick={setIsometricView}
-              className="absolute top-5 left-5 z-30 p-2 hover:bg-gray-100 rounded-lg transition-all"
-              style={{
-                background: "rgba(255, 255, 255, 0.95)",
-                backdropFilter: "blur(8px)",
-                border: "1px solid rgba(0, 0, 0, 0.1)",
-              }}
-              title="Isometric View"
-            >
-              <Box className="w-4 h-4 text-gray-700 hover:text-gray-900" />
-            </button>
+    <div className="w-full h-full min-h-[600px] bg-background rounded-lg border relative">
+      <CardContent className="h-full p-0 relative">
+        {activeMeshData ? (
+          <div className="relative w-full h-full">
+            {/* Professional view controls panel */}
+            <div className="absolute top-4 left-4 z-20 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg p-3 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleSetView("front")} title="Front View">
+                  Front
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleSetView("top")} title="Top View">
+                  Top
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleSetView("right")} title="Right View">
+                  Right
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleSetView("isometric")} title="Isometric View">
+                  Isometric
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleFitToView} title="Fit to View">
+                  Fit
+                </Button>
+              </div>
 
-            {/* Orientation Cube - Top Right */}
-            <div className="absolute top-5 right-5 z-30">
-              <OrientationCubePreview
-                ref={orientationCubeRef}
-                onOrientationChange={orientMainCameraToDirection}
-                onUpVectorChange={handleCubeUpVectorChange}
-                onDisplayStyleChange={setDisplayStyle}
-              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={displayStyle === "solid" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDisplayStyle("solid")}
+                  title="Solid (S key)"
+                >
+                  Solid
+                </Button>
+                <Button
+                  variant={displayStyle === "wireframe" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDisplayStyle("wireframe")}
+                  title="Wireframe (S key)"
+                >
+                  Wireframe
+                </Button>
+                <Button
+                  variant={displayStyle === "translucent" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDisplayStyle("translucent")}
+                  title="Translucent (S key)"
+                >
+                  Translucent
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={showEdges ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowEdges(!showEdges)}
+                  title="Toggle Edges (E key)"
+                >
+                  Edges
+                </Button>
+                <Button
+                  variant={measurementMode === "distance" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setMeasurementMode(measurementMode === "distance" ? null : "distance")}
+                  title="Measure Distance (M key)"
+                >
+                  Measure
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={sectionPlane === "xy" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSectionPlane(sectionPlane === "xy" ? "none" : "xy")}
+                  title="XY Section (1 key)"
+                >
+                  XY
+                </Button>
+                <Button
+                  variant={sectionPlane === "xz" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSectionPlane(sectionPlane === "xz" ? "none" : "xz")}
+                  title="XZ Section (2 key)"
+                >
+                  XZ
+                </Button>
+                <Button
+                  variant={sectionPlane === "yz" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSectionPlane(sectionPlane === "yz" ? "none" : "yz")}
+                  title="YZ Section (3 key)"
+                >
+                  YZ
+                </Button>
+              </div>
             </div>
 
-            {/* Vectis Manufacturing Watermark */}
-            <div className="absolute bottom-4 left-4 z-10 text-xs text-black/30 font-medium">
-              Vectis Manufacturing | Automating Precision
+            {/* Orientation cube */}
+            <div className="absolute top-4 right-4 z-10">
+              <OrientationCubePreview
+                ref={orientationCubeRef}
+                mainControlsRef={controlsRef}
+                mainCameraRef={cameraRef}
+                onViewChange={handleSetView}
+              />
             </div>
 
             <Canvas
               shadows
-              camera={{ position: [150, 150, 150], fov: 45 }}
+              camera={{
+                fov: 50,
+                near: 0.1,
+                far: Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 10,
+                position: initialCameraPosition,
+              }}
               gl={{
                 antialias: true,
-                alpha: false,
-                preserveDrawingBuffer: true,
+                alpha: true,
                 powerPreference: "high-performance",
-                localClippingEnabled: true,
-                toneMapping: THREE.NoToneMapping,
-                sortObjects: true,
+                toneMapping: THREE.ACESFilmicToneMapping,
+                toneMappingExposure: 1.0,
+                outputColorSpace: THREE.SRGBColorSpace,
               }}
-              onCreated={({ gl }) => {
-                gl.shadowMap.enabled = shadowsEnabled;
-                gl.shadowMap.type = THREE.PCFSoftShadowMap;
-              }}
-              dpr={[1, 2]}
+              style={{ background: "linear-gradient(to bottom, #f5f7fa, #c3cfe2)" }}
             >
               <Suspense fallback={null}>
-                {/* Clean white background */}
-                <color attach="background" args={["#f8f9fa"]} />
-                <fog
-                  attach="fog"
-                  args={[
-                    "#f8f9fa",
-                    Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 10,
-                    Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 20,
-                  ]}
-                />
-
-                {/* Professional 5-light PBR setup with shadows */}
+                {/* Professional Lighting System (Phase 1) */}
                 <LightingRig
-                  shadowsEnabled={shadowsEnabled}
-                  intensity={1.0}
-                  modelBounds={{
-                    min: boundingBox.min,
-                    max: boundingBox.max,
-                    center: boundingBox.centerVec,
-                    size: boundingBox.size,
-                  }}
-                />
-
-                {/* Subtle grid (light gray) */}
-                <gridHelper
-                  args={[
-                    Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 4,
-                    20,
-                    "#e0e0e0",
-                    "#f0f0f0",
-                  ]}
-                  position={[boundingBox.center[0], boundingBox.min.y - 0.01, boundingBox.center[2]]}
-                />
-
-                {/* Auto-framed camera */}
-                <PerspectiveCamera
-                  ref={cameraRef}
-                  makeDefault
-                  position={[
-                    boundingBox.center[0] + boundingBox.width * 1.5,
-                    boundingBox.center[1] + boundingBox.height * 1.5,
-                    boundingBox.center[2] + boundingBox.depth * 1.5,
-                  ]}
-                  fov={45}
-                  near={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 0.01}
-                  far={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 15}
+                  modelCenter={boundingBox.center}
+                  modelSize={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth)}
                 />
 
                 {/* 3D Model */}
                 <MeshModel
                   ref={meshRef}
-                  meshData={activeMeshData!}
+                  meshData={activeMeshData}
                   sectionPlane={sectionPlane}
                   sectionPosition={sectionPosition}
                   showEdges={showEdges}
@@ -391,13 +446,25 @@ export function CADViewer({
                   topologyColors={showTopologyColors}
                 />
 
-                {/* Dimension Annotations */}
-                {showDimensions && detectedFeatures && (
-                  <DimensionAnnotations features={detectedFeatures} boundingBox={boundingBox} />
-                )}
+                {/* Ground plane with shadows */}
+                <ContactShadows
+                  position={[0, boundingBox.min.y - 0.1, 0]}
+                  opacity={0.3}
+                  scale={Math.max(boundingBox.width, boundingBox.depth) * 2}
+                  blur={2}
+                  far={Math.max(boundingBox.height, boundingBox.depth) * 2}
+                />
 
-                {/* Measurement Tool */}
-                <MeasurementTool enabled={measurementMode !== null} mode={measurementMode} />
+                {/* Dimension annotations */}
+                {showDimensions && <DimensionAnnotations meshData={activeMeshData} />}
+
+                {/* ========== PHASE 2: ADVANCED MEASUREMENT TOOL ========== */}
+                <AdvancedMeasurementTool
+                  meshData={activeMeshData}
+                  meshRef={meshRef}
+                  enabled={measurementMode !== null}
+                />
+                {/* ======================================================== */}
 
                 {/* Visual effects (SSAO, Bloom, FXAA, Environment) */}
                 <VisualEffects enabled={ssaoEnabled} quality={quality} />
@@ -428,6 +495,10 @@ export function CADViewer({
                 />
               </GizmoHelper>
             </Canvas>
+
+            {/* ========== PHASE 2: MEASUREMENT PANEL ========== */}
+            <MeasurementPanel />
+            {/* =============================================== */}
 
             {/* Performance Settings Panel */}
             <PerformanceSettingsPanel
