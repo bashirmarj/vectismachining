@@ -25,14 +25,14 @@ interface MeshModelProps {
 // Professional solid color for CAD rendering
 const SOLID_COLOR = "#CCCCCC"; // Light gray
 
-// Fusion 360 Analysis colors
+// ✅ FIXED: Fusion 360-style Analysis colors with proper differentiation
 const TOPOLOGY_COLORS = {
-  internal: "#FF6B6B",
-  cylindrical: "#FF6B6B",
-  planar: "#FF6B6B",
-  external: "#FF6B6B",
-  through: "#FF6B6B",
-  default: "#FF6B6B",
+  internal: "#FF6B6B",      // Red - internal features
+  cylindrical: "#4ECDC4",   // ✅ Teal - cylindrical surfaces
+  planar: "#95E1D3",        // ✅ Light green - planar surfaces
+  external: "#FFD93D",      // ✅ Yellow - external features
+  through: "#A8E6CF",       // ✅ Mint green - through holes
+  default: "#CCCCCC",       // ✅ Gray - default/unknown
 };
 
 export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
@@ -93,7 +93,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       return geo;
     }, [meshData, topologyColors]);
 
-    // Apply vertex colors
+    // ✅ FIXED: Apply vertex colors with CORRECT indexing
     useEffect(() => {
       if (!geometry) return;
 
@@ -102,12 +102,19 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           const triangleCount = meshData.indices.length / 3;
           const colors = new Float32Array(triangleCount * 9);
 
+          console.log("🎨 Applying topology colors:", {
+            triangleCount,
+            vertexColorsLength: meshData.vertex_colors.length,
+            sampleColors: meshData.vertex_colors.slice(0, 10),
+          });
+
           for (let triIdx = 0; triIdx < triangleCount; triIdx++) {
-            const vertexIdx = meshData.indices[triIdx * 3];
-            const faceType = meshData.vertex_colors[vertexIdx] || "default";
+            // ✅ FIXED: Index by triangle, not by vertex!
+            const faceType = meshData.vertex_colors[triIdx] || "default";
             const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
             const color = new THREE.Color(colorHex);
 
+            // Apply same color to all 3 vertices of this triangle
             for (let v = 0; v < 3; v++) {
               colors[triIdx * 9 + v * 3 + 0] = color.r;
               colors[triIdx * 9 + v * 3 + 1] = color.g;
@@ -117,7 +124,10 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
           geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
           geometry.attributes.color.needsUpdate = true;
+
+          console.log("✅ Topology colors applied successfully");
         } else {
+          console.warn("⚠️ No vertex_colors data, using default silver");
           const triangleCount = meshData.indices.length / 3;
           const colors = new Float32Array(triangleCount * 9);
           const silverColor = new THREE.Color("#CCCCCC");
@@ -140,7 +150,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     // Pre-compute edge connectivity for ALL edges (used by both modes)
     const edgeMap = useMemo(() => {
-      const map = new Map<
+      const map = new Map
         string,
         {
           v1: THREE.Vector3;
