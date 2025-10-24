@@ -6,15 +6,14 @@ interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
-  vertex_colors?: string[]; // ✅ FIXED: Correctly typed as string[] (face type labels)
+  vertex_colors?: string[];
   triangle_count: number;
   feature_edges?: number[][][];
 }
 
-// ✅ FIXED: Updated sectionPlane type to accept what CADViewer sends
 interface MeshModelProps {
   meshData: MeshData;
-  sectionPlane: "none" | "xy" | "xz" | "yz"; // ✅ Removed individual axis support
+  sectionPlane: "none" | "xy" | "xz" | "yz";
   sectionPosition: number;
   showEdges: boolean;
   showHiddenEdges?: boolean;
@@ -22,17 +21,15 @@ interface MeshModelProps {
   topologyColors?: boolean;
 }
 
-// Professional solid color for CAD rendering
-const SOLID_COLOR = "#CCCCCC"; // Light gray
+const SOLID_COLOR = "#CCCCCC";
 
-// ✅ FIXED: Fusion 360-style Analysis colors with proper differentiation
 const TOPOLOGY_COLORS = {
-  internal: "#FF6B6B",      // Red - internal features
-  cylindrical: "#4ECDC4",   // ✅ Teal - cylindrical surfaces
-  planar: "#95E1D3",        // ✅ Light green - planar surfaces
-  external: "#FFD93D",      // ✅ Yellow - external features
-  through: "#A8E6CF",       // ✅ Mint green - through holes
-  default: "#CCCCCC",       // ✅ Gray - default/unknown
+  internal: "#FF6B6B",
+  cylindrical: "#4ECDC4",
+  planar: "#95E1D3",
+  external: "#FFD93D",
+  through: "#A8E6CF",
+  default: "#CCCCCC",
 };
 
 export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
@@ -54,7 +51,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     const dynamicEdgesRef = useRef<THREE.Group>(null);
     const wireframeEdgesRef = useRef<THREE.Group>(null);
 
-    // Create single unified geometry for professional solid rendering
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
 
@@ -93,7 +89,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       return geo;
     }, [meshData, topologyColors]);
 
-    // ✅ FIXED: Apply vertex colors with CORRECT indexing
     useEffect(() => {
       if (!geometry) return;
 
@@ -109,12 +104,10 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           });
 
           for (let triIdx = 0; triIdx < triangleCount; triIdx++) {
-            // ✅ FIXED: Index by triangle, not by vertex!
             const faceType = meshData.vertex_colors[triIdx] || "default";
             const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
             const color = new THREE.Color(colorHex);
 
-            // Apply same color to all 3 vertices of this triangle
             for (let v = 0; v < 3; v++) {
               colors[triIdx * 9 + v * 3 + 0] = color.r;
               colors[triIdx * 9 + v * 3 + 1] = color.g;
@@ -148,14 +141,13 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       }
     }, [geometry, topologyColors, meshData]);
 
-    // Pre-compute edge connectivity for ALL edges (used by both modes)
     const edgeMap = useMemo(() => {
-      const map = new Map
+      const map = new Map<
         string,
         {
-          v1: THREE.Vector3,  // ✅ FIXED: Changed semicolon to comma
-          v2: THREE.Vector3,  // ✅ FIXED: Changed semicolon to comma
-          normals: THREE.Vector3[]
+          v1: THREE.Vector3;
+          v2: THREE.Vector3;
+          normals: THREE.Vector3[];
         }
       >();
 
@@ -210,7 +202,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       return map;
     }, [meshData.vertices, meshData.indices]);
 
-    // Dynamic edge rendering for BOTH solid and wireframe modes
     useFrame(() => {
       if (!edgeMap || !meshRef.current) return;
 
@@ -224,12 +215,10 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       const visibleEdges: number[] = [];
       const hiddenEdges: number[] = [];
 
-      // Check each edge for visibility
       edgeMap.forEach((edgeData) => {
         const v1World = edgeData.v1.clone().applyMatrix4(mesh.matrixWorld);
         const v2World = edgeData.v2.clone().applyMatrix4(mesh.matrixWorld);
 
-        // Boundary edges (only 1 face) - always important
         if (edgeData.normals.length === 1) {
           const n = edgeData.normals[0];
           const edgeMidpoint = new THREE.Vector3().addVectors(edgeData.v1, edgeData.v2).multiplyScalar(0.5);
@@ -243,7 +232,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           return;
         }
 
-        // Silhouette edges (2 adjacent faces with opposite facing)
         if (edgeData.normals.length === 2) {
           const n1 = edgeData.normals[0];
           const n2 = edgeData.normals[1];
@@ -254,16 +242,13 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           const dot1 = n1.dot(viewDir);
           const dot2 = n2.dot(viewDir);
 
-          // Silhouette: one face visible, one hidden
           if ((dot1 > 0.01 && dot2 < -0.01) || (dot1 < -0.01 && dot2 > 0.01)) {
             visibleEdges.push(v1World.x, v1World.y, v1World.z, v2World.x, v2World.y, v2World.z);
           }
         }
       });
 
-      // Update visible edges (solid lines)
       if (displayStyle === "solid" && showEdges && dynamicEdgesRef.current) {
-        // Clear existing
         while (dynamicEdgesRef.current.children.length > 0) {
           const child = dynamicEdgesRef.current.children[0];
           dynamicEdgesRef.current.remove(child);
@@ -287,9 +272,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         }
       }
 
-      // Update wireframe edges (visible + hidden)
       if (displayStyle === "wireframe" && wireframeEdgesRef.current) {
-        // Clear existing
         while (wireframeEdgesRef.current.children.length > 0) {
           const child = wireframeEdgesRef.current.children[0];
           wireframeEdgesRef.current.remove(child);
@@ -299,7 +282,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           }
         }
 
-        // Visible edges - solid lines
         if (visibleEdges.length > 0) {
           const geo = new THREE.BufferGeometry();
           geo.setAttribute("position", new THREE.Float32BufferAttribute(visibleEdges, 3));
@@ -311,7 +293,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           wireframeEdgesRef.current.add(new THREE.LineSegments(geo, mat));
         }
 
-        // Hidden edges - dashed lines
         if (showHiddenEdges && hiddenEdges.length > 0) {
           const geo = new THREE.BufferGeometry();
           geo.setAttribute("position", new THREE.Float32BufferAttribute(hiddenEdges, 3));
@@ -323,13 +304,12 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
             toneMapped: false,
           });
           const lines = new THREE.LineSegments(geo, mat);
-          lines.computeLineDistances(); // Required for dashed lines
+          lines.computeLineDistances();
           wireframeEdgesRef.current.add(lines);
         }
       }
     });
 
-    // Section plane
     const clippingPlane = useMemo(() => {
       if (sectionPlane === "none") return undefined;
 
@@ -370,7 +350,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       };
 
       if (displayStyle === "wireframe") {
-        // In wireframe mode, hide the mesh surface completely
         return { ...base, opacity: 0, transparent: true, wireframe: false };
       } else if (displayStyle === "translucent") {
         return { ...base, transparent: true, opacity: 0.4, wireframe: false };
@@ -381,7 +360,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     return (
       <group>
-        {/* Mesh surface (hidden in wireframe mode) */}
         <mesh ref={meshRef} geometry={geometry} castShadow receiveShadow>
           <meshStandardMaterial
             {...materialProps}
@@ -392,10 +370,8 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           />
         </mesh>
 
-        {/* Dynamic edges for solid mode */}
         {displayStyle !== "wireframe" && <group ref={dynamicEdgesRef} />}
 
-        {/* Clean wireframe edges (visible + hidden dashed) */}
         {displayStyle === "wireframe" && <group ref={wireframeEdgesRef} />}
       </group>
     );
