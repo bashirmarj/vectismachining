@@ -16,6 +16,8 @@ import PerformanceSettingsPanel from "./cad-viewer/PerformanceSettingsPanel";
 // ========== PHASE 2: NEW IMPORTS ==========
 import { AdvancedMeasurementTool } from "./cad-viewer/AdvancedMeasurementTool";
 import { MeasurementPanel } from "./cad-viewer/MeasurementPanel";
+// ========== PHASE 2.5: UNIFIED TOOLBAR ==========
+import { UnifiedCADToolbar } from "./cad-viewer/UnifiedCADToolbar";
 // ==========================================
 
 interface CADViewerProps {
@@ -98,21 +100,22 @@ export function CADViewer({
     const fetchMesh = async () => {
       setIsLoading(true);
       try {
-        console.log(`📥 Fetching mesh from database: ${meshId}`);
-        const { data, error } = await supabase.from("cad_meshes").select("*").eq("id", meshId).single();
+        console.log("🔍 Fetching mesh data for ID:", meshId);
+        const { data, error: fetchError } = await supabase.from("cad_meshes").select("*").eq("id", meshId).single();
 
-        if (error) throw error;
+        if (fetchError) throw fetchError;
+        if (!data) throw new Error("No mesh data found");
 
-        if (data) {
-          console.log("✅ Mesh fetched successfully:", {
-            vertices: data.vertices.length,
-            triangles: data.triangle_count,
-          });
-          setFetchedMeshData(data as MeshData);
-        }
+        console.log("✅ Mesh data loaded from database:", {
+          vertices: data.vertices.length,
+          triangles: data.triangle_count,
+          hasFeatureEdges: !!data.feature_edges,
+        });
+
+        setFetchedMeshData(data as MeshData);
       } catch (err) {
         console.error("❌ Error fetching mesh:", err);
-        setError(err instanceof Error ? err.message : "Failed to load mesh");
+        setError(err instanceof Error ? err.message : "Failed to load mesh data");
       } finally {
         setIsLoading(false);
       }
@@ -123,20 +126,19 @@ export function CADViewer({
 
   const activeMeshData = propMeshData || fetchedMeshData;
 
-  // Calculate bounding box and camera position
   const boundingBox = useMemo(() => {
-    if (!activeMeshData) {
+    if (!activeMeshData || !activeMeshData.vertices || activeMeshData.vertices.length === 0) {
       return {
-        min: new THREE.Vector3(-50, -50, -50),
-        max: new THREE.Vector3(50, 50, 50),
+        min: new THREE.Vector3(-10, -10, -10),
+        max: new THREE.Vector3(10, 10, 10),
         center: new THREE.Vector3(0, 0, 0),
-        width: 100,
-        height: 100,
-        depth: 100,
+        width: 20,
+        height: 20,
+        depth: 20,
       };
     }
 
-    const positions = new Float32Array(activeMeshData.vertices);
+    const vertices = activeMeshData.vertices;
     let minX = Infinity,
       minY = Infinity,
       minZ = Infinity;
@@ -144,58 +146,63 @@ export function CADViewer({
       maxY = -Infinity,
       maxZ = -Infinity;
 
-    for (let i = 0; i < positions.length; i += 3) {
-      minX = Math.min(minX, positions[i]);
-      minY = Math.min(minY, positions[i + 1]);
-      minZ = Math.min(minZ, positions[i + 2]);
-      maxX = Math.max(maxX, positions[i]);
-      maxY = Math.max(maxY, positions[i + 1]);
-      maxZ = Math.max(maxZ, positions[i + 2]);
+    for (let i = 0; i < vertices.length; i += 3) {
+      const x = vertices[i];
+      const y = vertices[i + 1];
+      const z = vertices[i + 2];
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      minZ = Math.min(minZ, z);
+      maxZ = Math.max(maxZ, z);
     }
 
     const min = new THREE.Vector3(minX, minY, minZ);
     const max = new THREE.Vector3(maxX, maxY, maxZ);
     const center = new THREE.Vector3((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
-    const width = maxX - minX;
-    const height = maxY - minY;
-    const depth = maxZ - minZ;
 
-    return { min, max, center, width, height, depth };
+    return {
+      min,
+      max,
+      center,
+      width: maxX - minX,
+      height: maxY - minY,
+      depth: maxZ - minZ,
+    };
   }, [activeMeshData]);
 
-  // ========== PHASE 2: CORRECT PROP CONSTRUCTION ==========
-  // Construct modelBounds for LightingRig (needs size as Vector3)
   const modelBounds = useMemo(
     () => ({
       min: boundingBox.min,
       max: boundingBox.max,
-      center: boundingBox.center,
       size: new THREE.Vector3(boundingBox.width, boundingBox.height, boundingBox.depth),
     }),
     [boundingBox],
   );
-  // ========================================================
 
-  const initialCameraPosition = useMemo(() => {
+  const initialCameraPosition: [number, number, number] = useMemo(() => {
     const distance = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) * 1.5;
     return [
       boundingBox.center.x + distance * 0.5,
       boundingBox.center.y + distance * 0.5,
       boundingBox.center.z + distance * 0.5,
-    ] as [number, number, number];
+    ];
   }, [boundingBox]);
 
-  // Keyboard controls
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMeasurementMode(null);
+        setShowDimensions(false);
+      }
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        handleFitToView();
+      }
       if (e.key === "e" || e.key === "E") {
         setShowEdges(!showEdges);
-      }
-      if (e.key === "h" || e.key === "H") {
-        setShowHiddenEdges(!showHiddenEdges);
-      }
-      if (e.key === "d" || e.key === "D") {
-        setShowDimensions(!showDimensions);
       }
       if (e.key === "m" || e.key === "M") {
         setMeasurementMode(measurementMode === "distance" ? null : "distance");
@@ -318,101 +325,31 @@ export function CADViewer({
       <CardContent className="h-full p-0 relative">
         {activeMeshData ? (
           <div className="relative w-full h-full">
-            {/* Professional view controls panel */}
-            <div className="absolute top-4 left-4 z-20 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg p-3 space-y-2">
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => handleSetView("front")} title="Front View">
-                  Front
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handleSetView("top")} title="Top View">
-                  Top
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handleSetView("right")} title="Right View">
-                  Right
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handleSetView("isometric")} title="Isometric View">
-                  Isometric
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleFitToView} title="Fit to View">
-                  Fit
-                </Button>
-              </div>
+            {/* ========== UNIFIED CAD TOOLBAR (NEW) ========== */}
+            <UnifiedCADToolbar
+              onHomeView={() => handleSetView("isometric")}
+              onFrontView={() => handleSetView("front")}
+              onTopView={() => handleSetView("top")}
+              onIsometricView={() => handleSetView("isometric")}
+              onFitView={handleFitToView}
+              displayStyle={displayStyle}
+              setDisplayStyle={setDisplayStyle}
+              showEdges={showEdges}
+              setShowEdges={setShowEdges}
+              sectionPlane={sectionPlane}
+              setSectionPlane={setSectionPlane}
+              sectionPosition={sectionPosition}
+              setSectionPosition={setSectionPosition}
+              shadowsEnabled={shadowsEnabled}
+              setShadowsEnabled={setShadowsEnabled}
+              ssaoEnabled={ssaoEnabled}
+              setSSAOEnabled={setSSAOEnabled}
+              quality={quality}
+              setQuality={setQuality}
+            />
+            {/* =============================================== */}
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={displayStyle === "solid" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDisplayStyle("solid")}
-                  title="Solid (S key)"
-                >
-                  Solid
-                </Button>
-                <Button
-                  variant={displayStyle === "wireframe" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDisplayStyle("wireframe")}
-                  title="Wireframe (S key)"
-                >
-                  Wireframe
-                </Button>
-                <Button
-                  variant={displayStyle === "translucent" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDisplayStyle("translucent")}
-                  title="Translucent (S key)"
-                >
-                  Translucent
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={showEdges ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setShowEdges(!showEdges)}
-                  title="Toggle Edges (E key)"
-                >
-                  Edges
-                </Button>
-                <Button
-                  variant={measurementMode === "distance" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setMeasurementMode(measurementMode === "distance" ? null : "distance")}
-                  title="Measure Distance (M key)"
-                >
-                  Measure
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={sectionPlane === "xy" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSectionPlane(sectionPlane === "xy" ? "none" : "xy")}
-                  title="XY Section (1 key)"
-                >
-                  XY
-                </Button>
-                <Button
-                  variant={sectionPlane === "xz" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSectionPlane(sectionPlane === "xz" ? "none" : "xz")}
-                  title="XZ Section (2 key)"
-                >
-                  XZ
-                </Button>
-                <Button
-                  variant={sectionPlane === "yz" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSectionPlane(sectionPlane === "yz" ? "none" : "yz")}
-                  title="YZ Section (3 key)"
-                >
-                  YZ
-                </Button>
-              </div>
-            </div>
-
-            {/* ========== CORRECTED: OrientationCubePreview (no ref props needed) ========== */}
+            {/* ========== ORIENTATION CUBE (PRESERVED) ========== */}
             <div className="absolute top-4 right-4 z-10">
               <OrientationCubePreview
                 ref={orientationCubeRef}
@@ -421,7 +358,7 @@ export function CADViewer({
                 }}
               />
             </div>
-            {/* ============================================================================= */}
+            {/* ================================================= */}
 
             <Canvas
               shadows
@@ -442,9 +379,8 @@ export function CADViewer({
               style={{ background: "linear-gradient(to bottom, #f5f7fa, #c3cfe2)" }}
             >
               <Suspense fallback={null}>
-                {/* ========== CORRECTED: LightingRig with proper modelBounds ========== */}
+                {/* ========== LIGHTING RIG ========== */}
                 <LightingRig shadowsEnabled={shadowsEnabled} modelBounds={modelBounds} />
-                {/* =================================================================== */}
 
                 {/* 3D Model */}
                 <MeshModel
@@ -467,7 +403,7 @@ export function CADViewer({
                   far={Math.max(boundingBox.height, boundingBox.depth) * 2}
                 />
 
-                {/* ========== CORRECTED: DimensionAnnotations with proper props ========== */}
+                {/* Dimension Annotations */}
                 {showDimensions && (
                   <DimensionAnnotations
                     features={detectedFeatures}
@@ -478,7 +414,6 @@ export function CADViewer({
                     }}
                   />
                 )}
-                {/* ====================================================================== */}
 
                 {/* ========== PHASE 2: ADVANCED MEASUREMENT TOOL ========== */}
                 <AdvancedMeasurementTool
@@ -486,7 +421,6 @@ export function CADViewer({
                   meshRef={meshRef}
                   enabled={measurementMode !== null}
                 />
-                {/* ======================================================== */}
 
                 {/* Visual effects (SSAO, Bloom, FXAA, Environment) */}
                 <VisualEffects enabled={ssaoEnabled} quality={quality} />
@@ -518,11 +452,11 @@ export function CADViewer({
               </GizmoHelper>
             </Canvas>
 
-            {/* ========== PHASE 2: MEASUREMENT PANEL ========== */}
+            {/* ========== PHASE 2: MEASUREMENT PANEL (PRESERVED) ========== */}
             <MeasurementPanel />
-            {/* =============================================== */}
+            {/* ============================================================ */}
 
-            {/* Performance Settings Panel */}
+            {/* ========== PERFORMANCE SETTINGS PANEL (PRESERVED) ========== */}
             <PerformanceSettingsPanel
               shadowsEnabled={shadowsEnabled}
               setShadowsEnabled={setShadowsEnabled}
@@ -532,6 +466,7 @@ export function CADViewer({
               setQuality={setQuality}
               triangleCount={activeMeshData.triangle_count}
             />
+            {/* ============================================================ */}
           </div>
         ) : isRenderableFormat ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
