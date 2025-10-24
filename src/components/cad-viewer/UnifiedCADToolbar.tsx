@@ -8,7 +8,7 @@ import {
   ChevronDown,
   Box,
   Grid3x3,
-  Package, // ✅ FIXED: Replaced Cube with Package (valid icon)
+  Package,
   Circle,
   Move,
   RotateCcw,
@@ -45,15 +45,15 @@ interface UnifiedCADToolbarProps {
   showEdges: boolean;
   onToggleEdges: () => void;
 
-  // Measurement
-  measurementMode: "distance" | "angle" | "radius" | null;
-  onMeasurementModeChange: (mode: "distance" | "angle" | "radius" | null) => void;
+  // Measurement - ✅ FIXED: Added "diameter" to type
+  measurementMode: "distance" | "angle" | "radius" | "diameter" | null;
+  onMeasurementModeChange: (mode: "distance" | "angle" | "radius" | "diameter" | null) => void;
   measurementCount?: number;
   onClearMeasurements?: () => void;
 
-  // Section Planes
-  sectionPlane: "xy" | "xz" | "yz" | "x" | "y" | "z" | null;
-  onSectionPlaneChange: (plane: "xy" | "xz" | "yz" | "x" | "y" | "z" | null) => void;
+  // Section Planes - ✅ FIXED: Removed individual axes ("x", "y", "z")
+  sectionPlane: "xy" | "xz" | "yz" | null;
+  onSectionPlaneChange: (plane: "xy" | "xz" | "yz" | null) => void;
   sectionPosition?: number;
   onSectionPositionChange?: (position: number) => void;
 
@@ -106,7 +106,7 @@ export function UnifiedCADToolbar({
     }
   }, [sectionPlane]);
 
-  // ✅ FIX #1: Calculate proportional slider range and step size
+  // ✅ FIXED: Calculate proportional slider range and step size (removed individual axis cases)
   const getSectionRange = () => {
     if (!boundingBox) return { min: -50, max: 50, center: 0, step: 1 };
 
@@ -117,19 +117,16 @@ export function UnifiedCADToolbar({
 
     switch (sectionPlane) {
       case "xy":
-      case "z":
         rangeMin = min.z;
         rangeMax = max.z;
         rangeCenter = center.z;
         break;
       case "xz":
-      case "y":
         rangeMin = min.y;
         rangeMax = max.y;
         rangeCenter = center.y;
         break;
       case "yz":
-      case "x":
         rangeMin = min.x;
         rangeMax = max.x;
         rangeCenter = center.x;
@@ -140,7 +137,7 @@ export function UnifiedCADToolbar({
         rangeCenter = 0;
     }
 
-    // ✅ FIX #1: Calculate step size as 0.5% of total dimension
+    // Calculate step size as 0.5% of total dimension
     // This ensures smooth movement regardless of part size
     const totalDimension = Math.abs(rangeMax - rangeMin);
     const step = Math.max(0.1, totalDimension * 0.005); // 0.5% of dimension, min 0.1mm
@@ -172,7 +169,8 @@ export function UnifiedCADToolbar({
     }
   };
 
-  const handleSectionPlaneSelect = (plane: "xy" | "xz" | "yz" | "x" | "y" | "z") => {
+  // ✅ FIXED: Updated function signature to only accept plane types
+  const handleSectionPlaneSelect = (plane: "xy" | "xz" | "yz") => {
     onSectionPlaneChange(plane);
   };
 
@@ -207,7 +205,7 @@ export function UnifiedCADToolbar({
                 Top View
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onIsometricView}>
-                <Package className="mr-2 h-4 w-4" /> {/* ✅ FIXED: Changed from Cube to Package */}
+                <Package className="mr-2 h-4 w-4" />
                 Isometric View
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -301,6 +299,14 @@ export function UnifiedCADToolbar({
                 <Circle className="mr-2 h-4 w-4" />
                 Radius
               </DropdownMenuItem>
+              {/* ✅ FIXED: Added diameter measurement option */}
+              <DropdownMenuItem
+                onClick={() => onMeasurementModeChange(measurementMode === "diameter" ? null : "diameter")}
+                className={cn(measurementMode === "diameter" && "bg-accent")}
+              >
+                <Circle className="mr-2 h-4 w-4" />
+                Diameter
+              </DropdownMenuItem>
               {measurementMode && (
                 <>
                   <DropdownMenuSeparator />
@@ -369,7 +375,7 @@ export function UnifiedCADToolbar({
               </Button>
             </div>
 
-            {/* Plane Selection */}
+            {/* ✅ FIXED: Plane Selection - Removed individual X button */}
             <div className="flex gap-2 mb-4">
               <Button
                 variant={sectionPlane === "xy" ? "default" : "outline"}
@@ -395,17 +401,9 @@ export function UnifiedCADToolbar({
               >
                 YZ Plane
               </Button>
-              <Button
-                variant={sectionPlane === "x" ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleSectionPlaneSelect("x")}
-                className="flex-1"
-              >
-                X
-              </Button>
             </div>
 
-            {/* Position Slider - ✅ FIX #1: Now uses proportional steps */}
+            {/* Position Slider - Uses proportional steps */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>Position</span>
@@ -417,7 +415,7 @@ export function UnifiedCADToolbar({
                 onValueChange={(values) => onSectionPositionChange?.(values[0])}
                 min={sectionRange.min}
                 max={sectionRange.max}
-                step={sectionRange.step} // ✅ FIX #1: Dynamic step size (0.5% of dimension)
+                step={sectionRange.step}
                 className="w-full"
               />
 
