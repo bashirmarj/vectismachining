@@ -23,12 +23,12 @@ interface CADViewerProps {
   onMeshLoaded?: (data: MeshData) => void;
 }
 
-// ✅ FIXED: Proper MeshData interface with vertex_colors
+// ✅ FIXED: Proper MeshData interface matching database schema
 interface MeshData {
   vertices: number[];
   indices: number[];
   normals: number[];
-  vertex_colors?: number[]; // ✅ FIXED: Changed from colors to vertex_colors
+  vertex_colors?: string[]; // ✅ Face type labels from database
   triangle_count: number;
   face_types?: string[];
   feature_edges?: number[][][];
@@ -42,8 +42,10 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
   const [showEdges, setShowEdges] = useState(true);
   const [shadowsEnabled, setShadowsEnabled] = useState(true);
   const [ssaoEnabled, setSSAOEnabled] = useState(true);
-  const [quality, setQuality] = useState<"performance" | "balanced" | "quality">("balanced"); // ✅ FIXED: Correct type
-  const [sectionPlane, setSectionPlane] = useState<"xy" | "xz" | "yz" | "x" | "y" | "z" | null>(null);
+  // ✅ FIXED: Changed quality type to match child components
+  const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
+  // ✅ FIXED: Changed sectionPlane type to match MeshModel
+  const [sectionPlane, setSectionPlane] = useState<"xy" | "xz" | "yz" | null>(null);
   const [sectionPosition, setSectionPosition] = useState(0);
 
   // Measurement store
@@ -93,10 +95,10 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
               vertices: data.vertices,
               indices: data.indices,
               normals: data.normals,
-              vertex_colors: data.vertex_colors, // ✅ FIXED: Use vertex_colors
+              vertex_colors: data.vertex_colors as string[], // ✅ Cast Json to string[]
               triangle_count: data.triangle_count,
-              face_types: data.face_types,
-              feature_edges: data.feature_edges,
+              face_types: data.face_types as string[],
+              feature_edges: data.feature_edges as number[][][], // ✅ Cast Json to number[][][]
             };
             setMeshData(meshDataTyped);
             onMeshLoaded?.(meshDataTyped);
@@ -154,6 +156,17 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
       depth: size.z,
     };
   }, [meshData]);
+
+  // ✅ FIXED: Create modelBounds in correct format for LightingRig
+  const modelBounds = useMemo(
+    () => ({
+      min: boundingBox.min,
+      max: boundingBox.max,
+      center: new THREE.Vector3(...boundingBox.center),
+      size: boundingBox.size,
+    }),
+    [boundingBox],
+  );
 
   // Calculate initial camera position
   const initialCameraPosition = useMemo(() => {
@@ -223,10 +236,8 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
     const target = new THREE.Vector3(...boundingBox.center);
     const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth);
     const distance = maxDim * 1.5;
-
-    const direction = new THREE.Vector3().subVectors(camera.position, target).normalize();
-
-    const newPosition = target.clone().add(direction.multiplyScalar(distance));
+    const currentPosition = camera.position.clone().sub(target).normalize();
+    const newPosition = target.clone().add(currentPosition.multiplyScalar(distance));
 
     camera.position.copy(newPosition);
     controls.target.copy(target);
@@ -376,19 +387,22 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
               <PerspectiveCamera ref={cameraRef} makeDefault position={initialCameraPosition} fov={50} />
 
               <Suspense fallback={null}>
-                <LightingRig quality={quality} shadowsEnabled={shadowsEnabled} />
+                {/* ✅ FIXED: Pass modelBounds instead of quality */}
+                <LightingRig shadowsEnabled={shadowsEnabled} modelBounds={modelBounds} />
 
+                {/* ✅ FIXED: Pass displayMode prop to MeshModel */}
                 <MeshModel
                   ref={meshRef}
                   meshData={meshData}
-                  displayMode={displayMode}
+                  displayStyle={displayMode}
                   showEdges={showEdges}
-                  sectionPlane={sectionPlane}
+                  sectionPlane={sectionPlane || "none"}
                   sectionPosition={sectionPosition}
                 />
 
                 <DimensionAnnotations boundingBox={boundingBox} />
 
+                {/* ✅ FIXED: Pass correct quality type */}
                 <VisualEffects enabled={ssaoEnabled} quality={quality} />
 
                 <TrackballControls
@@ -416,7 +430,7 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
               </GizmoHelper>
             </Canvas>
 
-            {/* Performance Settings Panel */}
+            {/* ✅ FIXED: Pass correct quality type */}
             <PerformanceSettingsPanel
               shadowsEnabled={shadowsEnabled}
               setShadowsEnabled={setShadowsEnabled}
