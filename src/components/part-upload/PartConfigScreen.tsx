@@ -21,7 +21,7 @@ interface FileWithData {
     vertices: number[];
     indices: number[];
     normals: number[];
-    vertex_colors?: number[];
+    vertex_colors?: string[]; // ✅ FIXED: Changed from number[] to string[]
     triangle_count: number;
     face_types?: string[];
     feature_edges?: number[][][];
@@ -200,34 +200,14 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
               </CardContent>
             </Card>
 
-            {/* Routing Editor */}
-            {selectedFile.analysis?.recommended_processes && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Process Routing</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <RoutingEditor
-                    routings={selectedFile.analysis.recommended_processes}
-                    onRoutingsChange={(routings) =>
-                      onUpdateFile(selectedFileIndex, {
-                        analysis: { ...selectedFile.analysis, recommended_processes: routings },
-                      })
-                    }
-                    analysisReasoning={selectedFile.analysis.routing_reasoning?.join("\n")}
-                  />
-                </CardContent>
-              </Card>
-            )}
-
             {/* Analysis Results */}
             {selectedFile.analysis && (
               <Card>
                 <CardHeader>
                   <CardTitle>Analysis Results</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2">
                     <div className="p-2 bg-gray-50 rounded">
                       <div className="text-xs text-gray-500">Volume</div>
                       <div className="font-medium">{selectedFile.analysis.volume_cm3?.toFixed(2) || "N/A"} cm³</div>
