@@ -403,9 +403,6 @@ export function CADViewer({
             <div className="absolute top-4 right-4 z-10">
               <OrientationCubePreview
                 ref={orientationCubeRef}
-                mainControlsRef={controlsRef}
-                mainCameraRef={cameraRef}
-                onViewChange={handleSetView}
               />
             </div>
 
@@ -430,8 +427,14 @@ export function CADViewer({
               <Suspense fallback={null}>
                 {/* Professional Lighting System (Phase 1) */}
                 <LightingRig
-                  modelCenter={boundingBox.center}
-                  modelSize={Math.max(boundingBox.width, boundingBox.height, boundingBox.depth)}
+                  shadowsEnabled={shadowsEnabled}
+                  intensity={1.0}
+                  modelBounds={{
+                    min: boundingBox.min,
+                    max: boundingBox.max,
+                    center: boundingBox.center,
+                    size: new THREE.Vector3(boundingBox.width, boundingBox.height, boundingBox.depth),
+                  }}
                 />
 
                 {/* 3D Model */}
@@ -456,7 +459,16 @@ export function CADViewer({
                 />
 
                 {/* Dimension annotations */}
-                {showDimensions && <DimensionAnnotations meshData={activeMeshData} />}
+                {showDimensions && (
+                  <DimensionAnnotations
+                    features={detectedFeatures}
+                    boundingBox={{
+                      width: boundingBox.width,
+                      height: boundingBox.height,
+                      depth: boundingBox.depth,
+                    }}
+                  />
+                )}
 
                 {/* ========== PHASE 2: ADVANCED MEASUREMENT TOOL ========== */}
                 <AdvancedMeasurementTool
