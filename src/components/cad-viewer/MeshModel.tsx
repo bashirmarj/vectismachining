@@ -153,9 +153,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       const map = new Map
         string,
         {
-          v1: THREE.Vector3;
-          v2: THREE.Vector3;
-          normals: THREE.Vector3[];
+          v1: THREE.Vector3,  // ✅ FIXED: Changed semicolon to comma
+          v2: THREE.Vector3,  // ✅ FIXED: Changed semicolon to comma
+          normals: THREE.Vector3[]
         }
       >();
 
