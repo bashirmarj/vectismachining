@@ -120,7 +120,7 @@ export function CADViewer({ meshId, fileUrl, fileName, onMeshLoaded }: CADViewer
     };
 
     loadMeshData();
-  }, [meshId, fileUrl, onMeshLoaded]);
+  }, [meshId, fileUrl]);
 
   // Bounding box calculation
   const boundingBox = useMemo(() => {
