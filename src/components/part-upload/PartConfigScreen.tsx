@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
-import { ChevronLeft, ChevronDown, ChevronUp, Mail, Phone, Building2, MapPin, User } from 'lucide-react';
-import { CADViewer } from '@/components/CADViewer';
-import FeatureTree from '@/components/FeatureTree';
-import { RoutingEditor } from './RoutingEditor';
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { ChevronLeft, ChevronDown, ChevronUp, Mail, Phone, Building2, MapPin, User, Loader2 } from "lucide-react";
+import { CADViewer } from "@/components/CADViewer";
+import FeatureTree from "@/components/FeatureTree";
+import { RoutingEditor } from "./RoutingEditor";
 
 interface FileWithData {
   file: File;
@@ -68,12 +68,12 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
 }) => {
   const [contactFormExpanded, setContactFormExpanded] = useState(false);
   const [contactInfo, setContactInfo] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    company: '',
-    address: '',
-    message: '',
+    name: "",
+    email: "",
+    phone: "",
+    company: "",
+    address: "",
+    message: "",
   });
 
   const selectedFile = files[selectedFileIndex];
@@ -86,7 +86,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
   };
 
   const handleContactInfoChange = (field: string, value: string) => {
-    setContactInfo(prev => ({
+    setContactInfo((prev) => ({
       ...prev,
       [field]: value,
     }));
@@ -94,7 +94,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
 
   const isFormValid = () => {
     // Check if all files have material and quantity
-    const filesValid = files.every(f => f.material && f.quantity > 0);
+    const filesValid = files.every((f) => f.material && f.quantity > 0);
     // Check if contact info is filled
     const contactValid = contactInfo.name && contactInfo.email && contactInfo.phone;
     return filesValid && contactValid;
@@ -107,11 +107,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
         <div className="w-[30%] bg-white border-r overflow-y-auto">
           <div className="p-6 space-y-6">
             {/* Back Button */}
-            <Button
-              variant="ghost"
-              onClick={onBack}
-              className="w-full justify-start"
-            >
+            <Button variant="ghost" onClick={onBack} className="w-full justify-start">
               <ChevronLeft className="w-4 h-4 mr-2" />
               Back to Upload
             </Button>
@@ -128,15 +124,13 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                     onClick={() => onSelectFile(index)}
                     className={`w-full p-3 text-left rounded-lg border transition-colors ${
                       index === selectedFileIndex
-                        ? 'bg-blue-50 border-blue-500'
-                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                        ? "bg-blue-50 border-blue-500"
+                        : "bg-gray-50 border-gray-200 hover:bg-gray-100"
                     }`}
                   >
-                    <div className="font-medium text-sm truncate">
-                      {file.file.name}
-                    </div>
+                    <div className="font-medium text-sm truncate">{file.file.name}</div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Qty: {file.quantity} | {file.material || 'No material'}
+                      Qty: {file.quantity} | {file.material || "No material"}
                     </div>
                   </button>
                 ))}
@@ -153,7 +147,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                 <div className="space-y-2">
                   <Label htmlFor="material">Material *</Label>
                   <Select
-                    value={selectedFile.material || ''}
+                    value={selectedFile.material || ""}
                     onValueChange={(value) => onUpdateFile(selectedFileIndex, { material: value })}
                   >
                     <SelectTrigger id="material">
@@ -185,8 +179,10 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                 <div className="space-y-2">
                   <Label htmlFor="process">Preferred Process (Optional)</Label>
                   <Select
-                    value={selectedFile.process || 'auto'}
-                    onValueChange={(value) => onUpdateFile(selectedFileIndex, { process: value === 'auto' ? undefined : value })}
+                    value={selectedFile.process || "auto"}
+                    onValueChange={(value) =>
+                      onUpdateFile(selectedFileIndex, { process: value === "auto" ? undefined : value })
+                    }
                   >
                     <SelectTrigger id="process">
                       <SelectValue placeholder="Auto-select (recommended)" />
@@ -213,10 +209,12 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                 <CardContent>
                   <RoutingEditor
                     routings={selectedFile.analysis.recommended_processes}
-                    onRoutingsChange={(routings) => onUpdateFile(selectedFileIndex, { 
-                      analysis: { ...selectedFile.analysis, recommended_processes: routings }
-                    })}
-                    analysisReasoning={selectedFile.analysis.routing_reasoning?.join('\n')}
+                    onRoutingsChange={(routings) =>
+                      onUpdateFile(selectedFileIndex, {
+                        analysis: { ...selectedFile.analysis, recommended_processes: routings },
+                      })
+                    }
+                    analysisReasoning={selectedFile.analysis.routing_reasoning?.join("\n")}
                   />
                 </CardContent>
               </Card>
@@ -232,26 +230,23 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-2 bg-gray-50 rounded">
                       <div className="text-xs text-gray-500">Volume</div>
-                      <div className="font-medium">
-                        {selectedFile.analysis.volume_cm3.toFixed(2)} cm³
-                      </div>
+                      <div className="font-medium">{selectedFile.analysis.volume_cm3?.toFixed(2) || "N/A"} cm³</div>
                     </div>
                     <div className="p-2 bg-gray-50 rounded">
                       <div className="text-xs text-gray-500">Surface Area</div>
                       <div className="font-medium">
-                        {selectedFile.analysis.surface_area_cm2.toFixed(2)} cm²
+                        {selectedFile.analysis.surface_area_cm2?.toFixed(2) || "N/A"} cm²
                       </div>
                     </div>
                     <div className="p-2 bg-gray-50 rounded">
                       <div className="text-xs text-gray-500">Complexity</div>
-                      <div className="font-medium">
-                        {selectedFile.analysis.complexity_score}/10
-                      </div>
+                      <div className="font-medium">{selectedFile.analysis.complexity_score || "N/A"}/10</div>
                     </div>
                     <div className="p-2 bg-gray-50 rounded">
                       <div className="text-xs text-gray-500">Confidence</div>
                       <div className="font-medium">
-                        {(selectedFile.analysis.confidence * 100).toFixed(0)}%
+                        {selectedFile.analysis.confidence ? (selectedFile.analysis.confidence * 100).toFixed(0) : "N/A"}
+                        %
                       </div>
                     </div>
                   </div>
@@ -264,11 +259,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
               <CardHeader className="cursor-pointer" onClick={() => setContactFormExpanded(!contactFormExpanded)}>
                 <div className="flex items-center justify-between">
                   <CardTitle>Contact Information *</CardTitle>
-                  {contactFormExpanded ? (
-                    <ChevronUp className="w-5 h-5" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5" />
-                  )}
+                  {contactFormExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                 </div>
               </CardHeader>
               {contactFormExpanded && (
@@ -281,7 +272,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                     <Input
                       id="name"
                       value={contactInfo.name}
-                      onChange={(e) => handleContactInfoChange('name', e.target.value)}
+                      onChange={(e) => handleContactInfoChange("name", e.target.value)}
                       placeholder="John Doe"
                     />
                   </div>
@@ -295,7 +286,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                       id="email"
                       type="email"
                       value={contactInfo.email}
-                      onChange={(e) => handleContactInfoChange('email', e.target.value)}
+                      onChange={(e) => handleContactInfoChange("email", e.target.value)}
                       placeholder="john@example.com"
                     />
                   </div>
@@ -309,7 +300,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                       id="phone"
                       type="tel"
                       value={contactInfo.phone}
-                      onChange={(e) => handleContactInfoChange('phone', e.target.value)}
+                      onChange={(e) => handleContactInfoChange("phone", e.target.value)}
                       placeholder="+1 (555) 123-4567"
                     />
                   </div>
@@ -322,7 +313,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                     <Input
                       id="company"
                       value={contactInfo.company}
-                      onChange={(e) => handleContactInfoChange('company', e.target.value)}
+                      onChange={(e) => handleContactInfoChange("company", e.target.value)}
                       placeholder="Acme Corp"
                     />
                   </div>
@@ -335,7 +326,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                     <Textarea
                       id="address"
                       value={contactInfo.address}
-                      onChange={(e) => handleContactInfoChange('address', e.target.value)}
+                      onChange={(e) => handleContactInfoChange("address", e.target.value)}
                       placeholder="123 Main St, City, State, ZIP"
                       rows={3}
                     />
@@ -346,7 +337,7 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
                     <Textarea
                       id="message"
                       value={contactInfo.message}
-                      onChange={(e) => handleContactInfoChange('message', e.target.value)}
+                      onChange={(e) => handleContactInfoChange("message", e.target.value)}
                       placeholder="Any special requirements or notes..."
                       rows={3}
                     />
@@ -356,13 +347,8 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
             </Card>
 
             {/* Submit Button */}
-            <Button
-              onClick={handleSubmit}
-              disabled={!isFormValid() || isSubmitting}
-              className="w-full"
-              size="lg"
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit Quote Request'}
+            <Button onClick={handleSubmit} disabled={!isFormValid() || isSubmitting} className="w-full" size="lg">
+              {isSubmitting ? "Submitting..." : "Submit Quote Request"}
             </Button>
           </div>
         </div>
@@ -382,25 +368,61 @@ const PartConfigScreen: React.FC<PartConfigScreenProps> = ({
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              {/* 3D Model Tab */}
+              {/* ✅ FIXED: 3D Model Tab with correct CADViewer props */}
               <TabsContent value="3d-model" className="h-full m-0 p-6">
                 <div className="h-full min-h-[600px]">
-                  <CADViewer
-                    file={selectedFile.file}
-                    fileName={selectedFile.file.name}
-                    meshId={selectedFile.meshId}
-                    meshData={selectedFile.meshData}
-                    detectedFeatures={selectedFile.analysis?.detected_features}
-                  />
+                  {selectedFile.meshId ? (
+                    <CADViewer
+                      meshId={selectedFile.meshId}
+                      fileName={selectedFile.file.name}
+                      onMeshLoaded={(meshData) => {
+                        console.log("✅ Mesh loaded:", meshData.triangle_count, "triangles");
+                        // Optionally update state with mesh info
+                        if (!selectedFile.meshData) {
+                          onUpdateFile(selectedFileIndex, { meshData });
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+                      <div className="text-muted-foreground">
+                        {selectedFile.isAnalyzing ? (
+                          <>
+                            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+                            <p className="text-sm font-medium">Analyzing CAD file...</p>
+                            <p className="text-xs mt-2">Generating 3D mesh and extracting features</p>
+                            <p className="text-xs text-gray-400 mt-1">This may take 30-60 seconds</p>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-6xl mb-4">📦</div>
+                            <p className="text-sm font-medium">3D preview not yet available</p>
+                            <p className="text-xs mt-2 text-gray-500">{selectedFile.file.name}</p>
+                            <p className="text-xs mt-1 text-gray-400">The file is being processed in the background</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
 
-              {/* Features Tab - UPDATED TO USE NEW PROPS */}
+              {/* Features Tab */}
               <TabsContent value="features" className="m-0 p-6">
-                <FeatureTree
-                  features={selectedFile.analysis?.manufacturing_features}
-                  featureSummary={selectedFile.analysis?.feature_summary}
-                />
+                {selectedFile.analysis?.manufacturing_features || selectedFile.analysis?.feature_summary ? (
+                  <FeatureTree
+                    features={selectedFile.analysis?.manufacturing_features}
+                    featureSummary={selectedFile.analysis?.feature_summary}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-12">
+                    <div className="text-4xl mb-2">🔍</div>
+                    <p className="text-sm font-medium text-muted-foreground">No features detected yet</p>
+                    <p className="text-xs text-gray-400 max-w-md">
+                      Features will appear here after the CAD file analysis is complete
+                    </p>
+                  </div>
+                )}
               </TabsContent>
             </div>
           </Tabs>
