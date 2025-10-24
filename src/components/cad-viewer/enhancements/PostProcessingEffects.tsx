@@ -1,29 +1,26 @@
-import React from 'react';
-import { EffectComposer, Bloom, FXAA } from '@react-three/postprocessing';
+import React from "react";
+import { EffectComposer, Bloom, FXAA } from "@react-three/postprocessing";
 
 interface PostProcessingEffectsProps {
-  enableSSAO?: boolean;
   enableBloom?: boolean;
   enableFXAA?: boolean;
-  ssaoIntensity?: number;
   bloomIntensity?: number;
-  quality?: 'low' | 'medium' | 'high';
+  quality?: "low" | "medium" | "high";
 }
 
 /**
  * Simplified Post-Processing Effects
- * 
- * Uses only Bloom and FXAA for now (SSAO disabled due to compatibility)
+ *
+ * Uses only Bloom and FXAA for professional visual quality
  */
 export function PostProcessingEffects({
   enableBloom = true,
   enableFXAA = true,
   bloomIntensity = 0.3,
-  quality = 'medium'
+  quality = "medium",
 }: PostProcessingEffectsProps) {
-
   return (
-    <EffectComposer multisampling={quality === 'high' ? 8 : quality === 'medium' ? 4 : 0}>
+    <EffectComposer multisampling={quality === "high" ? 8 : quality === "medium" ? 4 : 0}>
       {/* Bloom - Subtle highlights */}
       {enableBloom && (
         <Bloom
@@ -36,9 +33,7 @@ export function PostProcessingEffects({
       )}
 
       {/* FXAA - Fast Anti-Aliasing */}
-      {enableFXAA && (
-        <FXAA />
-      )}
+      {enableFXAA && <FXAA />}
     </EffectComposer>
   );
 }
