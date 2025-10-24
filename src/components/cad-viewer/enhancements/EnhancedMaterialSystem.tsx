@@ -37,11 +37,6 @@ export function EnhancedMaterialSystem({
           environmentIntensity={envIntensity}
         />
       )}
-
-      {/* Optional: Fog for depth perception (very subtle) */}
-      {enablePBR && (
-        <fog attach="fog" args={['#ffffff', 50, 200]} />
-      )}
     </>
   );
 }
