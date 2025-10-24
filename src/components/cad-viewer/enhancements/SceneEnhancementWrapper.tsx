@@ -1,12 +1,8 @@
-import React, { useState } from 'react';
-import { ProfessionalLighting } from './ProfessionalLighting';
-import { PostProcessingEffects } from './PostProcessingEffects';
-import { EnhancedMaterialSystem } from './EnhancedMaterialSystem';
-import { 
-  VisualQualityPanel, 
-  VisualQualitySettings,
-  DEFAULT_QUALITY_SETTINGS 
-} from './VisualQualityPanel';
+import React, { useState } from "react";
+import { ProfessionalLighting } from "./ProfessionalLighting";
+import { PostProcessingEffects } from "./PostProcessingEffects";
+import { EnhancedMaterialSystem } from "./EnhancedMaterialSystem";
+import { VisualQualityPanel, VisualQualitySettings, DEFAULT_QUALITY_SETTINGS } from "./VisualQualityPanel";
 
 interface SceneEnhancementWrapperProps {
   children: React.ReactNode;
@@ -17,13 +13,13 @@ interface SceneEnhancementWrapperProps {
 
 /**
  * Scene Enhancement Wrapper
- * 
+ *
  * Wraps the existing CAD viewer scene with Phase 1 visual quality enhancements:
  * - Professional 5-light PBR lighting
- * - Post-processing effects (SSAO, bloom, FXAA)
+ * - Post-processing effects (bloom, FXAA)
  * - Enhanced PBR materials with environment reflections
  * - User-adjustable settings panel
- * 
+ *
  * Usage:
  * ```tsx
  * <Canvas>
@@ -37,12 +33,11 @@ export function SceneEnhancementWrapper({
   children,
   showSettingsPanel = false,
   defaultSettings = {},
-  onSettingsChange
+  onSettingsChange,
 }: SceneEnhancementWrapperProps) {
-
   const [settings, setSettings] = useState<VisualQualitySettings>({
     ...DEFAULT_QUALITY_SETTINGS,
-    ...defaultSettings
+    ...defaultSettings,
   });
 
   const handleSettingsChange = (newSettings: VisualQualitySettings) => {
@@ -75,10 +70,8 @@ export function SceneEnhancementWrapper({
 
       {/* Post-Processing Effects */}
       <PostProcessingEffects
-        enableSSAO={settings.enableSSAO}
         enableBloom={settings.enableBloom}
         enableFXAA={settings.enableFXAA}
-        ssaoIntensity={settings.ssaoIntensity}
         bloomIntensity={settings.bloomIntensity}
         quality={settings.shadowQuality}
       />
@@ -91,7 +84,7 @@ export function SceneEnhancementWrapper({
  */
 export function useSceneEnhancement() {
   const [settings, setSettings] = useState<VisualQualitySettings>(DEFAULT_QUALITY_SETTINGS);
-  
+
   return {
     settings,
     updateSettings: setSettings,
@@ -102,5 +95,5 @@ export function useSceneEnhancement() {
 /**
  * Export settings panel as separate component for UI integration
  */
-export { VisualQualityPanel, DEFAULT_QUALITY_SETTINGS, QUALITY_PRESETS } from './VisualQualityPanel';
-export type { VisualQualitySettings } from './VisualQualityPanel';
+export { VisualQualityPanel, DEFAULT_QUALITY_SETTINGS, QUALITY_PRESETS } from "./VisualQualityPanel";
+export type { VisualQualitySettings } from "./VisualQualityPanel";
