@@ -68,14 +68,15 @@ export function SceneEnhancementWrapper({
       {/* Original scene content (MeshModel, etc.) */}
       {children}
 
-      {/* Post-Processing Effects */}
-      <PostProcessingEffects
-        enableBloom={settings.enableBloom}
-        enableFXAA={settings.enableFXAA}
-        bloomIntensity={settings.bloomIntensity}
-        quality={settings.shadowQuality}
-      />
-    </>
+      {/* Post-Processing Effects - TEMPORARILY DISABLED FOR DEBUGGING */}
+{/*
+<PostProcessingEffects
+  enableBloom={settings.enableBloom}
+  enableFXAA={settings.enableFXAA}
+  bloomIntensity={settings.bloomIntensity}
+  quality={settings.shadowQuality}
+/>
+*/}
   );
 }
 
