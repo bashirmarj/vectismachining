@@ -213,142 +213,157 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
           texture.needsUpdate = true;
 
           // Use PlaneGeometry instead of Sprite to fix orientation to face
-          const planeGeometry = new THREE.PlaneGeometry(1.8, 1.8);
+          const planeGeometry = new THREE.PlaneGeometry(0.8, 0.8);
           const planeMaterial = new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
-            side: THREE.FrontSide,
-            fog: false,
+            depthWrite: false,
+            side: THREE.DoubleSide,
           });
-          const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
 
-          // Position and rotate plane to match face
-          planeMesh.position.set(
+          const label = new THREE.Mesh(planeGeometry, planeMaterial);
+          label.position.set(
             face.position[0] * labelDistance,
             face.position[1] * labelDistance,
             face.position[2] * labelDistance,
           );
-          planeMesh.rotation.set(face.rotation[0], face.rotation[1], face.rotation[2]);
+          label.rotation.set(face.rotation[0], face.rotation[1], face.rotation[2]);
 
-          cube.add(planeMesh);
+          cube.add(label);
         });
-      });
 
-      // Setup camera
-      cubeCamera.position.set(5, 5, 5); // Isometric view
-      cubeCamera.lookAt(0, 0, 0);
+        // Setup camera
+        cubeCamera.position.set(5, 5, 5);
+        cubeCamera.lookAt(0, 0, 0);
 
-      // Animation loop
-      const animate = () => {
-        animationFrameRef.current = requestAnimationFrame(animate);
-        cubeRenderer.render(cubeScene, cubeCamera);
-      };
-      animate();
+        // Animation loop
+        const animate = () => {
+          animationFrameRef.current = requestAnimationFrame(animate);
+          cubeRenderer.render(cubeScene, cubeCamera);
+        };
+        animate();
 
-      // Mouse interaction
-      const handleMouseMove = (event: MouseEvent) => {
-        if (!cubeContainerRef.current || !cubeRef.current) return;
+        // ✅ FIXED: Type-safe click handling with proper type narrowing
+        const handleClick = (event: MouseEvent) => {
+          if (!cubeRef.current) return;
 
-        const rect = cubeContainerRef.current.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+          const rect = cubeRenderer.domElement.getBoundingClientRect();
+          const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+          const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(new THREE.Vector2(x, y), cubeCamera);
+          const raycaster = new THREE.Raycaster();
+          raycaster.setFromCamera(new THREE.Vector2(x, y), cubeCamera);
 
-        const intersects = raycaster.intersectObject(cubeRef.current, true);
+          const intersects = raycaster.intersectObject(cubeRef.current, true);
 
-        if (intersects.length > 0) {
-          const point = intersects[0].point;
-          const localPoint = cubeRef.current.worldToLocal(point.clone());
-          const region = classifyClickRegion(localPoint);
+          if (intersects.length > 0) {
+            const localPoint = cubeRef.current.worldToLocal(intersects[0].point.clone());
+            const region = classifyClickRegion(localPoint);
 
-          setHoveredRegion(region);
-          cubeContainerRef.current.style.cursor = "pointer";
-
-          // Highlight edges on hover
-          const highlightLine = cubeRef.current.children.find(
-            (child) =>
-              child instanceof THREE.LineSegments &&
-              (child.material as THREE.LineBasicMaterial).color.getHex() === 0x2563eb,
-          );
-          if (highlightLine) {
-            (highlightLine.material as THREE.LineBasicMaterial).opacity = 0.8;
-          }
-        } else {
-          setHoveredRegion(null);
-          cubeContainerRef.current.style.cursor = "default";
-
-          // Hide highlight
-          if (cubeRef.current) {
-            const highlightLine = cubeRef.current.children.find(
-              (child) =>
-                child instanceof THREE.LineSegments &&
-                (child.material as THREE.LineBasicMaterial).color.getHex() === 0x2563eb,
-            );
-            if (highlightLine) {
-              (highlightLine.material as THREE.LineBasicMaterial).opacity = 0;
+            if (onCubeClick) {
+              onCubeClick(region.direction);
             }
           }
-        }
-      };
+        };
 
-      const handleClick = (event: MouseEvent) => {
-        if (!cubeContainerRef.current || !cubeRef.current) return;
+        // ✅ FIXED: Type-safe hover handling
+        const handleMouseMove = (event: MouseEvent) => {
+          if (!cubeRef.current) return;
 
-        const rect = cubeContainerRef.current.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+          const rect = cubeRenderer.domElement.getBoundingClientRect();
+          const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+          const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(new THREE.Vector2(x, y), cubeCamera);
+          const raycaster = new THREE.Raycaster();
+          raycaster.setFromCamera(new THREE.Vector2(x, y), cubeCamera);
 
-        const intersects = raycaster.intersectObject(cubeRef.current, true);
+          const intersects = raycaster.intersectObject(cubeRef.current, true);
 
-        if (intersects.length > 0 && onCubeClick) {
-          const point = intersects[0].point;
-          const localPoint = cubeRef.current.worldToLocal(point.clone());
-          const region = classifyClickRegion(localPoint);
+          if (intersects.length > 0) {
+            const localPoint = cubeRef.current.worldToLocal(intersects[0].point.clone());
+            const region = classifyClickRegion(localPoint);
+            setHoveredRegion({ type: region.type, description: region.description });
 
-          onCubeClick(region.direction);
-        }
-      };
+            // ✅ FIXED: Proper type checking before accessing material properties
+            cubeRef.current.children.forEach((child) => {
+              if (child instanceof THREE.LineSegments) {
+                const material = child.material;
+                // Type guard to ensure we can access opacity
+                if (material instanceof THREE.LineBasicMaterial) {
+                  if (child === cubeRef.current?.children[1]) {
+                    // Highlight line (second child)
+                    material.opacity = 0.8;
+                    material.needsUpdate = true;
+                  }
+                }
+              }
+            });
 
-      const container = cubeContainerRef.current;
-      container.addEventListener("mousemove", handleMouseMove);
-      container.addEventListener("click", handleClick);
+            cubeRenderer.domElement.style.cursor = "pointer";
+          } else {
+            setHoveredRegion(null);
+
+            // ✅ FIXED: Reset highlight with proper type checking
+            if (cubeRef.current) {
+              cubeRef.current.children.forEach((child) => {
+                if (child instanceof THREE.LineSegments) {
+                  const material = child.material;
+                  if (material instanceof THREE.LineBasicMaterial) {
+                    if (child === cubeRef.current?.children[1]) {
+                      material.opacity = 0;
+                      material.needsUpdate = true;
+                    }
+                  }
+                }
+              });
+            }
+
+            cubeRenderer.domElement.style.cursor = "default";
+          }
+        };
+
+        cubeRenderer.domElement.addEventListener("click", handleClick);
+        cubeRenderer.domElement.addEventListener("mousemove", handleMouseMove);
+
+        return () => {
+          cubeRenderer.domElement.removeEventListener("click", handleClick);
+          cubeRenderer.domElement.removeEventListener("mousemove", handleMouseMove);
+        };
+      });
 
       return () => {
         if (animationFrameRef.current) {
           cancelAnimationFrame(animationFrameRef.current);
         }
-        container?.removeEventListener("mousemove", handleMouseMove);
-        container?.removeEventListener("click", handleClick);
         cubeRenderer.dispose();
       };
     }, [cubeScene, cubeCamera, cubeRenderer, onCubeClick]);
 
-    // Expose methods to parent via ref
+    // Imperative methods for parent component
     useImperativeHandle(ref, () => ({
       rotateCube: (direction: THREE.Vector3) => {
+        if (!cubeRef.current) return;
         const distance = 5;
         cubeCamera.position.copy(direction.clone().multiplyScalar(distance));
         cubeCamera.lookAt(0, 0, 0);
-        cubeCamera.updateProjectionMatrix();
       },
-      rotateClockwise: rotateCameraClockwise,
-      rotateCounterClockwise: rotateCameraCounterClockwise,
+      rotateClockwise: () => {
+        rotateCameraClockwise();
+      },
+      rotateCounterClockwise: () => {
+        rotateCameraCounterClockwise();
+      },
     }));
 
-    // Rotation functions
     const rotateCameraClockwise = () => {
-      const currentPos = cubeCamera.position.clone();
+      const currentPos = cubeCamera.position.clone().normalize();
       const currentUp = cubeCamera.up.clone();
 
-      // Rotate up vector 90° clockwise around view direction
-      const viewDir = currentPos.clone().normalize().negate();
-      const newUp = currentUp.clone().applyAxisAngle(viewDir, -Math.PI / 2);
+      // Rotate up vector 90 degrees clockwise around view direction
+      const axis = currentPos;
+      const angle = -Math.PI / 2; // Clockwise
 
+      const newUp = currentUp.clone().applyAxisAngle(axis, angle);
       cubeCamera.up.copy(newUp);
       cubeCamera.lookAt(0, 0, 0);
       cubeCamera.updateProjectionMatrix();
@@ -359,13 +374,14 @@ export const OrientationCubePreview = forwardRef<OrientationCubeHandle, Orientat
     };
 
     const rotateCameraCounterClockwise = () => {
-      const currentPos = cubeCamera.position.clone();
+      const currentPos = cubeCamera.position.clone().normalize();
       const currentUp = cubeCamera.up.clone();
 
-      // Rotate up vector 90° counter-clockwise around view direction
-      const viewDir = currentPos.clone().normalize().negate();
-      const newUp = currentUp.clone().applyAxisAngle(viewDir, Math.PI / 2);
+      // Rotate up vector 90 degrees counter-clockwise around view direction
+      const axis = currentPos;
+      const angle = Math.PI / 2; // Counter-clockwise
 
+      const newUp = currentUp.clone().applyAxisAngle(axis, angle);
       cubeCamera.up.copy(newUp);
       cubeCamera.lookAt(0, 0, 0);
       cubeCamera.updateProjectionMatrix();
