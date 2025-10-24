@@ -225,9 +225,7 @@ export function AdvancedMeasurementTool({
     const lineGeometry = new THREE.BufferGeometry().setFromPoints(linePoints);
     
     return (
-      <line geometry={lineGeometry}>
-        <lineBasicMaterial color="#2563EB" linewidth={2} />
-      </line>
+      <primitive object={new THREE.Line(lineGeometry, new THREE.LineBasicMaterial({ color: "#2563EB" }))} />
     );
   };
   
@@ -268,19 +266,12 @@ export function AdvancedMeasurementTool({
         ))}
         
         {/* Render measurement line */}
-        {measurement.points.length >= 2 && (
-          <line>
-            <bufferGeometry>
-              <bufferAttribute
-                attach="attributes-position"
-                count={measurement.points.length}
-                array={new Float32Array(measurement.points.flatMap(p => [p.position.x, p.position.y, p.position.z]))}
-                itemSize={3}
-              />
-            </bufferGeometry>
-            <lineBasicMaterial color={measurement.color} linewidth={1.5} />
-          </line>
-        )}
+        {measurement.points.length >= 2 && (() => {
+          const points = measurement.points.map(p => p.position);
+          const geometry = new THREE.BufferGeometry().setFromPoints(points);
+          const material = new THREE.LineBasicMaterial({ color: measurement.color });
+          return <primitive object={new THREE.Line(geometry, material)} />;
+        })()}
         
         {/* Render measurement label */}
         {renderMeasurementLabel(measurement)}
