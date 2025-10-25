@@ -50,10 +50,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       geo.setIndex(meshData.indices);
       geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
       
-      // Recalculate smooth vertex normals for proper lighting
-      geo.computeVertexNormals();
-      geo.normalizeNormals();
-      
       geo.computeBoundingSphere();
       return geo;
     }, [meshData]);
@@ -316,7 +312,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
             envMapIntensity={0.3}
             
             // Shading & Rendering
-            flatShading={false}
+            flatShading={true}
             toneMapped={false}
           />
         </mesh>
