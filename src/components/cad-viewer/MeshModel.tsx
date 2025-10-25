@@ -24,16 +24,6 @@ interface MeshModelProps {
 // Professional solid color for CAD rendering
 const SOLID_COLOR = "#CCCCCC"; // Light gray
 
-// Fusion 360 Analysis colors
-const TOPOLOGY_COLORS = {
-  internal: "#FF6B6B",
-  cylindrical: "#FF6B6B",
-  planar: "#FF6B6B",
-  external: "#FF6B6B",
-  through: "#FF6B6B",
-  default: "#FF6B6B",
-};
-
 export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
   (
     {
