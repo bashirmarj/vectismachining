@@ -184,14 +184,14 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     // Pre-compute edge connectivity for ALL edges (used by both modes)
     const edgeMap = useMemo(() => {
-      const map = new Map
-        string,
-        {
-          v1: THREE.Vector3;
-          v2: THREE.Vector3;
-          normals: THREE.Vector3[];
-        }
-      >();
+    const map = new Map<
+      string,
+      {
+        v1: THREE.Vector3;
+        v2: THREE.Vector3;
+        normals: THREE.Vector3[];
+      }
+    >();
 
       const triangleCount = meshData.indices.length / 3;
 
