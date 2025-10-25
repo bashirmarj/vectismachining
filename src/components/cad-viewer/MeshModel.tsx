@@ -43,7 +43,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       showEdges,
       showHiddenEdges = false,
       displayStyle = "solid",
-      topologyColors = false,  // ← Change true to false
+      topologyColors = true,  // ← Change true to false
     },
     ref,
   ) => {
