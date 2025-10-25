@@ -132,6 +132,13 @@ def generate_adaptive_mesh(step_file_path, quality='balanced'):
             # Generate 2D surface mesh
             gmsh.model.mesh.generate(2)
             
+            # Post-processing: Optimize mesh to reduce parametric bias
+            logger.info("🔧 Applying post-processing optimization...")
+            gmsh.option.setNumber("Mesh.OptimizeNetgen", 1)  # Enable Netgen optimizer
+            gmsh.model.mesh.optimize("Netgen")                # Relocate vertices for quality
+            gmsh.model.mesh.optimize("Laplace2D", niter=5)    # 5 iterations of Laplacian smoothing
+            logger.info("✅ Mesh optimization complete")
+            
             # Extract mesh data
             node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
             elem_types, elem_tags, elem_node_tags = gmsh.model.mesh.getElements(2)
