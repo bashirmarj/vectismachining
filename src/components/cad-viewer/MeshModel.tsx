@@ -32,26 +32,32 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
       geo.setIndex(meshData.indices);
-      
+
       // Use BREP normals directly from Python geometry service
       // The 8° angular deflection provides high-quality normals for both curved and flat surfaces
       geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
       geo.normalizeNormals();
-      
+
+      console.log("🔍 Geometry Debug:", {
+        vertexCount: meshData.vertices.length / 3,
+        normalCount: meshData.normals.length / 3,
+        normalSample: meshData.normals.slice(0, 9),
+        hasNormals: geometry.attributes.normal ? true : false,
+      });
       return geo;
     }, [meshData.vertices, meshData.indices, meshData.normals]);
 
     // Static feature edges from database (computed by Python geometry service)
     const featureEdges = useMemo(() => {
       if (!meshData.feature_edges || meshData.feature_edges.length === 0) return null;
-      
+
       const positions: number[] = [];
-      meshData.feature_edges.forEach(edge => {
+      meshData.feature_edges.forEach((edge) => {
         // Each edge is [[x1,y1,z1], [x2,y2,z2]]
         positions.push(edge[0][0], edge[0][1], edge[0][2]);
         positions.push(edge[1][0], edge[1][1], edge[1][2]);
       });
-      
+
       return positions;
     }, [meshData.feature_edges]);
 
@@ -122,13 +128,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
                 itemSize={3}
               />
             </bufferGeometry>
-            <lineBasicMaterial
-              color="#000000"
-              linewidth={1.5}
-              toneMapped={false}
-              depthTest={true}
-              depthWrite={false}
-            />
+            <lineBasicMaterial color="#000000" linewidth={1.5} toneMapped={false} depthTest={true} depthWrite={false} />
           </lineSegments>
         )}
       </group>
