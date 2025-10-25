@@ -263,11 +263,11 @@ def tessellate_shape(shape):
     linear_deflection = diagonal * 0.001  # 0.1% of diagonal
     
     # ============================================
-    # 🔥 CRITICAL FIX: 12° angular deflection
+    # 🔥 CRITICAL FIX: 8° angular deflection
     # ============================================
-    # BEFORE: angular_deflection = 0.5 (ultra-fine, excessive triangles)
-    # AFTER: angular_deflection = 12.0 (professional quality)
-    angular_deflection = 12.0  # degrees - matches SolidWorks/Fusion 360 High quality
+    # Reduced from 12° to 8° for smoother cylindrical surfaces
+    # This provides better tessellation quality for curved geometry
+    angular_deflection = 8.0  # degrees - enhanced quality for cylinders
     # ============================================
 
     logger.info(f"🎨 Tessellating with deflection={linear_deflection:.3f}mm, angle={angular_deflection}° (PROFESSIONAL QUALITY)")
@@ -889,7 +889,7 @@ def analyze_cad():
                 'triangle_count': mesh_data['triangle_count'],
                 'face_classification_method': 'mesh_based_with_propagation',
                 'edge_extraction_method': 'smart_filtering_20deg_30segments',
-                'tessellation_quality': 'professional_12deg_angular_deflection'
+                'tessellation_quality': 'professional_8deg_angular_deflection'
             },
             'volume_cm3': exact_props['volume'] / 1000,
             'surface_area_cm2': exact_props['surface_area'] / 100,

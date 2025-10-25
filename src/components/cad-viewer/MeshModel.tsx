@@ -33,57 +33,11 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
       geo.setIndex(meshData.indices);
       
-      // Intelligent normal handling: preserve BREP normals for curved surfaces,
-      // but apply smoothing to flat surface clusters
-      const normals = new Float32Array(meshData.normals);
-      const triangleCount = meshData.indices.length / 3;
-      
-      // Group triangles by normal similarity (flat vs curved)
-      const flatTriangles = new Set<number>();
-      for (let i = 0; i < triangleCount; i++) {
-        const i0 = meshData.indices[i * 3];
-        const i1 = meshData.indices[i * 3 + 1];
-        const i2 = meshData.indices[i * 3 + 2];
-        
-        const n0 = new THREE.Vector3(normals[i0 * 3], normals[i0 * 3 + 1], normals[i0 * 3 + 2]);
-        const n1 = new THREE.Vector3(normals[i1 * 3], normals[i1 * 3 + 1], normals[i1 * 3 + 2]);
-        const n2 = new THREE.Vector3(normals[i2 * 3], normals[i2 * 3 + 1], normals[i2 * 3 + 2]);
-        
-        // If all three normals are nearly parallel (dot product > 0.99), it's a flat surface
-        if (n0.dot(n1) > 0.99 && n1.dot(n2) > 0.99 && n0.dot(n2) > 0.99) {
-          flatTriangles.add(i);
-        }
-      }
-      
-      // For flat triangles, ensure uniform normals
-      flatTriangles.forEach(i => {
-        const i0 = meshData.indices[i * 3];
-        const i1 = meshData.indices[i * 3 + 1];
-        const i2 = meshData.indices[i * 3 + 2];
-        
-        // Calculate face normal
-        const v0 = new THREE.Vector3(meshData.vertices[i0 * 3], meshData.vertices[i0 * 3 + 1], meshData.vertices[i0 * 3 + 2]);
-        const v1 = new THREE.Vector3(meshData.vertices[i1 * 3], meshData.vertices[i1 * 3 + 1], meshData.vertices[i1 * 3 + 2]);
-        const v2 = new THREE.Vector3(meshData.vertices[i2 * 3], meshData.vertices[i2 * 3 + 1], meshData.vertices[i2 * 3 + 2]);
-        
-        const e1 = new THREE.Vector3().subVectors(v1, v0);
-        const e2 = new THREE.Vector3().subVectors(v2, v0);
-        const faceNormal = new THREE.Vector3().crossVectors(e1, e2).normalize();
-        
-        // Apply uniform normal to all three vertices
-        normals[i0 * 3] = faceNormal.x;
-        normals[i0 * 3 + 1] = faceNormal.y;
-        normals[i0 * 3 + 2] = faceNormal.z;
-        normals[i1 * 3] = faceNormal.x;
-        normals[i1 * 3 + 1] = faceNormal.y;
-        normals[i1 * 3 + 2] = faceNormal.z;
-        normals[i2 * 3] = faceNormal.x;
-        normals[i2 * 3 + 1] = faceNormal.y;
-        normals[i2 * 3 + 2] = faceNormal.z;
-      });
-      
-      geo.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+      // Use BREP normals directly from Python geometry service
+      // The 8° angular deflection provides high-quality normals for both curved and flat surfaces
+      geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
       geo.normalizeNormals();
+      
       return geo;
     }, [meshData.vertices, meshData.indices, meshData.normals]);
 
