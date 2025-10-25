@@ -284,9 +284,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
-        metalness: 0.0,
-        roughness: 1.0,
-        envMapIntensity: 0.0,
       };
 
       if (displayStyle === "wireframe") {
@@ -303,10 +300,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       <group>
         {/* Mesh surface (hidden in wireframe mode) */}
         <mesh ref={meshRef} geometry={geometry} castShadow receiveShadow>
-          <meshStandardMaterial
+          <meshBasicMaterial
             {...materialProps}
             color={SOLID_COLOR}
-            flatShading={true}
             toneMapped={false}
           />
         </mesh>
