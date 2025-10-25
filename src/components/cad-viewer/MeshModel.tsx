@@ -41,50 +41,18 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     const dynamicEdgesRef = useRef<THREE.Group>(null);
     const wireframeEdgesRef = useRef<THREE.Group>(null);
 
-    // Create non-indexed geometry with per-triangle normals
+    // Create indexed geometry with smooth normals
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
       
-      // Convert indexed geometry to non-indexed (flat) geometry
-      // Each triangle gets its own 3 vertices and 3 normals
-      const triangleCount = meshData.indices.length / 3;
-      const flatVertices = new Float32Array(triangleCount * 9); // 3 vertices × 3 components
-      const flatNormals = new Float32Array(triangleCount * 9);
+      // Use indexed geometry for proper normal calculation
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
+      geo.setIndex(meshData.indices);
+      geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
       
-      for (let i = 0; i < triangleCount; i++) {
-        const i0 = meshData.indices[i * 3];
-        const i1 = meshData.indices[i * 3 + 1];
-        const i2 = meshData.indices[i * 3 + 2];
-        
-        // Copy vertices for this triangle
-        flatVertices[i * 9 + 0] = meshData.vertices[i0 * 3];
-        flatVertices[i * 9 + 1] = meshData.vertices[i0 * 3 + 1];
-        flatVertices[i * 9 + 2] = meshData.vertices[i0 * 3 + 2];
-        
-        flatVertices[i * 9 + 3] = meshData.vertices[i1 * 3];
-        flatVertices[i * 9 + 4] = meshData.vertices[i1 * 3 + 1];
-        flatVertices[i * 9 + 5] = meshData.vertices[i1 * 3 + 2];
-        
-        flatVertices[i * 9 + 6] = meshData.vertices[i2 * 3];
-        flatVertices[i * 9 + 7] = meshData.vertices[i2 * 3 + 1];
-        flatVertices[i * 9 + 8] = meshData.vertices[i2 * 3 + 2];
-        
-        // Copy normals for this triangle using the same indices as vertices
-        flatNormals[i * 9 + 0] = meshData.normals[i0 * 3];
-        flatNormals[i * 9 + 1] = meshData.normals[i0 * 3 + 1];
-        flatNormals[i * 9 + 2] = meshData.normals[i0 * 3 + 2];
-        
-        flatNormals[i * 9 + 3] = meshData.normals[i1 * 3];
-        flatNormals[i * 9 + 4] = meshData.normals[i1 * 3 + 1];
-        flatNormals[i * 9 + 5] = meshData.normals[i1 * 3 + 2];
-        
-        flatNormals[i * 9 + 6] = meshData.normals[i2 * 3];
-        flatNormals[i * 9 + 7] = meshData.normals[i2 * 3 + 1];
-        flatNormals[i * 9 + 8] = meshData.normals[i2 * 3 + 2];
-      }
-      
-      geo.setAttribute("position", new THREE.BufferAttribute(flatVertices, 3));
-      geo.setAttribute("normal", new THREE.BufferAttribute(flatNormals, 3));
+      // Recalculate smooth vertex normals for proper lighting
+      geo.computeVertexNormals();
+      geo.normalizeNormals();
       
       geo.computeBoundingSphere();
       return geo;
@@ -318,7 +286,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         clipIntersection: false,
         metalness: 0.05,
         roughness: 0.75,
-        envMapIntensity: 0.2,
+        envMapIntensity: 0,
       };
 
       if (displayStyle === "wireframe") {
