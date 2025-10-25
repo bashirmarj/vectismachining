@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 COPY mesh_service.py .
 
-# Install system dependencies for Gmsh (OpenGL libraries)
+# Install system dependencies for Gmsh (OpenGL, X11, and font rendering libraries)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libglu1-mesa \
@@ -18,6 +18,9 @@ RUN apt-get update && \
     libxinerama1 \
     libxrandr2 \
     libxfixes3 \
+    libxft2 \
+    libfontconfig1 \
+    libfreetype6 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
