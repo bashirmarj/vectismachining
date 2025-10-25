@@ -45,21 +45,21 @@ gmsh_lock = threading.Lock()
 # === QUALITY PRESETS ===
 QUALITY_PRESETS = {
     'fast': {
-        'base_size_factor': 0.005,      # Coarse: 0.5% of diagonal
-        'planar_factor': 2.0,           # Maximum mesh size multiplier
-        'curvature_points': 8,          # Points per circle (lower = faster)
+        'base_size_factor': 0.01,       # 1% of diagonal (coarser flat surfaces)
+        'planar_factor': 3.0,           # 3x coarser on flat surfaces
+        'curvature_points': 32,         # 32 elements per 2π = ~11° between points
         'target_triangles': 5000
     },
     'balanced': {
-        'base_size_factor': 0.002,      # Medium: 0.2% of diagonal
-        'planar_factor': 2.0,           # Maximum mesh size multiplier
-        'curvature_points': 12,         # Standard quality (industry standard)
+        'base_size_factor': 0.005,      # 0.5% of diagonal
+        'planar_factor': 2.5,           # 2.5x coarser on flats
+        'curvature_points': 48,         # 48 elements per 2π = ~7.5° between points
         'target_triangles': 15000
     },
     'ultra': {
-        'base_size_factor': 0.0005,     # Fine: 0.05% of diagonal
-        'planar_factor': 1.5,           # Maximum mesh size multiplier
-        'curvature_points': 24,         # Ultra-smooth circles
+        'base_size_factor': 0.002,      # 0.2% of diagonal
+        'planar_factor': 2.0,           # Less coarsening
+        'curvature_points': 72,         # 72 elements per 2π = ~5° between points
         'target_triangles': 50000
     }
 }
