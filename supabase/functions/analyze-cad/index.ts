@@ -452,7 +452,7 @@ function detectRequiredProcesses(features: DetectedFeatures, complexity: number)
 async function fetchHighQualityMesh(
   fileData: ArrayBuffer,
   fileName: string,
-  quality: 'fast' | 'balanced' | 'ultra' = 'balanced'
+  quality: 'fast' | 'balanced' | 'ultra' = 'fast'
 ): Promise<{ vertices: number[]; indices: number[]; normals: number[]; triangle_count: number; quality_stats: any } | null> {
   const MESH_SERVICE_URL = Deno.env.get("MESH_SERVICE_URL");
   
