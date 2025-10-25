@@ -24,6 +24,16 @@ interface MeshModelProps {
 // Professional solid color for CAD rendering
 const SOLID_COLOR = "#CCCCCC"; // Light gray
 
+// Topology colors for manufacturing analysis (disabled by default)
+const TOPOLOGY_COLORS = {
+  internal: "#CCCCCC",
+  cylindrical: "#CCCCCC",
+  planar: "#CCCCCC",
+  external: "#CCCCCC",
+  through: "#CCCCCC",
+  default: "#CCCCCC",
+};
+
 export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
   (
     {
