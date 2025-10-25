@@ -260,10 +260,10 @@ def tessellate_shape(shape):
     """
     # Calculate adaptive linear deflection based on part size
     diagonal, bbox = calculate_bbox_diagonal(shape)
-    linear_deflection = diagonal * 0.0005  # 0.05% of diagonal (2x more detail)
-    angular_deflection = 8.0  # 8 degrees (1.5x more detail on curves)
+    linear_deflection = diagonal * 0.00025  # 0.025% of diagonal (3x more detail)
+    angular_deflection = 5.0  # 5 degrees (3x more detail on curves)
     
-    logger.info(f"🎨 Tessellating with deflection={linear_deflection:.3f}mm, angle={angular_deflection}° (ULTRA-HIGH QUALITY)")
+    logger.info(f"🎨 Tessellating with deflection={linear_deflection:.3f}mm, angle={angular_deflection}° (MAXIMUM QUALITY)")
     
     # Tessellate the shape
     mesher = BRepMesh_IncrementalMesh(shape, linear_deflection, False, angular_deflection, True)
