@@ -61,8 +61,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
         geo.setIndex(meshData.indices);
         geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
-        geo.computeVertexNormals();
-        geo.normalizeNormals();
+        // Use backend normals directly - they're already smooth and properly averaged
       } else {
         const triangleCount = meshData.indices.length / 3;
         const positions = new Float32Array(triangleCount * 9);
