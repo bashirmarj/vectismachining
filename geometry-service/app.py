@@ -253,137 +253,99 @@ def tessellate_shape(shape):
     """
     Create high-quality triangle mesh from BREP using OpenCascade tessellation.
     
-    CRITICAL FIX: Uses 12° angular deflection for professional quality (NOT 0.5°)
-    This matches SolidWorks/Fusion 360 "High" quality setting.
+    CRITICAL: Computes SMOOTH vertex normals by averaging adjacent face normals.
+    This eliminates the "different shades" problem on curved surfaces.
     
-    Returns mesh with accurate normals computed from BREP geometry.
+    Returns mesh with accurate smooth normals.
     """
     # Calculate adaptive linear deflection based on part size
     diagonal, bbox = calculate_bbox_diagonal(shape)
     linear_deflection = diagonal * 0.001  # 0.1% of diagonal
+    angular_deflection = 12.0  # Professional quality
     
-    # ============================================
-    # 🔥 CRITICAL FIX: 8° angular deflection
-    # ============================================
-    # Reduced from 12° to 8° for smoother cylindrical surfaces
-    # This provides better tessellation quality for curved geometry
-    angular_deflection = 8.0  # degrees - enhanced quality for cylinders
-    # ============================================
-
     logger.info(f"🎨 Tessellating with deflection={linear_deflection:.3f}mm, angle={angular_deflection}° (PROFESSIONAL QUALITY)")
-
+    
     # Tessellate the shape
     mesher = BRepMesh_IncrementalMesh(shape, linear_deflection, False, angular_deflection, True)
     mesher.Perform()
-
+    
     if not mesher.IsDone():
         logger.warning("⚠️ Tessellation not fully complete")
-
+    
     vertices = []
-    vertex_normals = []
     indices = []
-    vertex_map = {}
+    vertex_map = {}  # Maps (x,y,z) -> vertex_index
+    vertex_face_normals = {}  # Maps vertex_index -> [list of face normals]
     current_index = 0
-
-    # Process each face
+    
+    # PASS 1: Build vertex positions and collect face normals for each vertex
     face_exp = TopExp_Explorer(shape, TopAbs_FACE)
-
+    
     while face_exp.More():
         face = topods.Face(face_exp.Current())
         location = TopLoc_Location()
         triangulation = BRep_Tool.Triangulation(face, location)
-
+        
         if triangulation is None:
             face_exp.Next()
             continue
-
-        # Get transformation
+        
         trsf = location.Transformation()
-
-        # Get surface for normal computation
         surface = BRepAdaptor_Surface(face)
-
-        # Get face orientation
         face_orientation = face.Orientation()
-        normal_flip = 1.0 if face_orientation == 0 else -1.0  # TopAbs_FORWARD = 0
-
-        # Build local vertex map for this face
-        local_vertex_map = {}
+        normal_flip = 1.0 if face_orientation == 0 else -1.0
+        
+        # Compute face normal at center
+        try:
+            props = BRepGProp_Face(face)
+            u_mid = (surface.FirstUParameter() + surface.LastUParameter()) / 2
+            v_mid = (surface.FirstVParameter() + surface.LastVParameter()) / 2
+            normal_gp = gp_Vec()
+            point_gp = gp_Pnt()
+            props.Normal(u_mid, v_mid, point_gp, normal_gp)
+            
+            face_normal = np.array([
+                normal_gp.X() * normal_flip,
+                normal_gp.Y() * normal_flip,
+                normal_gp.Z() * normal_flip
+            ])
+            
+            # Normalize
+            length = np.linalg.norm(face_normal)
+            if length > 0:
+                face_normal = face_normal / length
+        except:
+            face_normal = np.array([0, 0, 1])
+        
+        # Process vertices for this face
         node_count = triangulation.NbNodes()
-
+        local_vertex_map = {}
+        
         for i in range(1, node_count + 1):
             pnt = triangulation.Node(i)
-            # Apply transformation
             pnt.Transform(trsf)
-
+            
             vertex_key = (round(pnt.X(), 6), round(pnt.Y(), 6), round(pnt.Z(), 6))
-
+            
             if vertex_key not in vertex_map:
                 vertices.extend([pnt.X(), pnt.Y(), pnt.Z()])
-
-                # Compute accurate normal from BREP surface
-                try:
-                    # Get UV parameters for this point on the surface
-                    uv_coords = triangulation.UVNode(i)
-                    u, v = uv_coords.X(), uv_coords.Y()
-
-                    # Compute normal at (u, v)
-                    props = BRepGProp_Face(face)
-                    normal_gp = gp_Vec()
-                    point_gp = gp_Pnt()
-                    props.Normal(u, v, point_gp, normal_gp)
-
-                    # Apply face orientation
-                    nx = normal_gp.X() * normal_flip
-                    ny = normal_gp.Y() * normal_flip
-                    nz = normal_gp.Z() * normal_flip
-
-                    # Normalize
-                    length = math.sqrt(nx*nx + ny*ny + nz*nz)
-                    if length > 0:
-                        nx /= length
-                        ny /= length
-                        nz /= length
-
-                    vertex_normals.extend([nx, ny, nz])
-                except:
-                    # Fallback to simple face normal
-                    try:
-                        props = BRepGProp_Face(face)
-                        point_gp = gp_Pnt()
-                        normal_gp = gp_Vec()
-                        u_mid = (surface.FirstUParameter() + surface.LastUParameter()) / 2
-                        v_mid = (surface.FirstVParameter() + surface.LastVParameter()) / 2
-                        props.Normal(u_mid, v_mid, point_gp, normal_gp)
-
-                        nx = normal_gp.X() * normal_flip
-                        ny = normal_gp.Y() * normal_flip
-                        nz = normal_gp.Z() * normal_flip
-
-                        length = math.sqrt(nx*nx + ny*ny + nz*nz)
-                        if length > 0:
-                            nx /= length
-                            ny /= length
-                            nz /= length
-
-                        vertex_normals.extend([nx, ny, nz])
-                    except:
-                        # Ultimate fallback
-                        vertex_normals.extend([0, 0, 1])
-
                 vertex_map[vertex_key] = current_index
+                vertex_face_normals[current_index] = []
                 local_vertex_map[i] = current_index
                 current_index += 1
             else:
                 local_vertex_map[i] = vertex_map[vertex_key]
-
+            
+            # Add this face's normal to the vertex's normal list
+            v_idx = vertex_map[vertex_key]
+            vertex_face_normals[v_idx].append(face_normal)
+        
         # Process triangles
         triangle_count = triangulation.NbTriangles()
         for i in range(1, triangle_count + 1):
             triangle = triangulation.Triangle(i)
             n1, n2, n3 = triangle.Get()
-
-            # Reverse winding order if needed based on face orientation
+            
             if face_orientation == 0:  # TopAbs_FORWARD
                 indices.extend([
                     local_vertex_map[n1],
@@ -396,17 +358,35 @@ def tessellate_shape(shape):
                     local_vertex_map[n3],
                     local_vertex_map[n2]
                 ])
-
+        
         face_exp.Next()
-
-    logger.info(f"✅ Tessellation complete: {len(vertices)//3} vertices, {len(indices)//3} triangles (12° angular deflection)")
-
+    
+    # PASS 2: Compute smooth vertex normals by averaging adjacent face normals
+    vertex_normals = []
+    num_vertices = len(vertices) // 3
+    
+    for v_idx in range(num_vertices):
+        if v_idx in vertex_face_normals and len(vertex_face_normals[v_idx]) > 0:
+            # Average all face normals for this vertex
+            avg_normal = np.mean(vertex_face_normals[v_idx], axis=0)
+            
+            # Normalize
+            length = np.linalg.norm(avg_normal)
+            if length > 0:
+                avg_normal = avg_normal / length
+            
+            vertex_normals.extend([avg_normal[0], avg_normal[1], avg_normal[2]])
+        else:
+            # Fallback
+            vertex_normals.extend([0, 0, 1])
+    
+    logger.info(f"✅ Tessellation complete: {num_vertices} vertices, {len(indices)//3} triangles (SMOOTH NORMALS)")
+    
     return {
         'vertices': vertices,
         'indices': indices,
         'normals': vertex_normals
     }
-
 
 def extract_feature_edges(shape, max_edges=500, angle_threshold_degrees=35):
     """
