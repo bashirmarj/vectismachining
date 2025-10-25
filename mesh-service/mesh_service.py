@@ -129,7 +129,7 @@ def generate_adaptive_mesh(step_file_path, quality='balanced'):
                         
                         # Estimate if surface is planar by checking normal variation
                         # (simplified: in production, use proper curvature analysis)
-                        is_planar = True  # Default assumption
+                        is_planar = False  # Treat all surfaces as curved for smooth results
                         
                         # Adaptive mesh sizing
                         if is_planar:
