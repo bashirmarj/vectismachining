@@ -21,6 +21,7 @@ import io
 import math
 import logging
 import tempfile
+import threading
 import numpy as np
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -37,6 +38,9 @@ app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mesh_service")
+
+# Global lock for Gmsh (ensures thread-safe execution)
+gmsh_lock = threading.Lock()
 
 # === QUALITY PRESETS ===
 QUALITY_PRESETS = {
@@ -107,99 +111,101 @@ def generate_adaptive_mesh(step_file_path, quality='balanced'):
     preset = QUALITY_PRESETS.get(quality, QUALITY_PRESETS['balanced'])
     logger.info(f"🎨 Generating {quality} quality mesh (target: {preset['target_triangles']} triangles)...")
     
-    try:
-        # Initialize Gmsh
-        gmsh.initialize()
-        gmsh.option.setNumber("General.Terminal", 0)
-        
-        # Import STEP file
-        gmsh.merge(step_file_path)
-        
-        # Calculate adaptive mesh sizing
-        diagonal = calculate_bbox_diagonal(step_file_path)
-        base_size = diagonal * preset['base_size_factor']
-        
-        logger.info(f"📏 Model diagonal: {diagonal:.2f}mm, base mesh size: {base_size:.4f}mm")
-        
-        # Get all surfaces and classify them
-        surfaces = gmsh.model.getEntities(2)  # 2D entities (surfaces)
-        surface_stats = {'planar': 0, 'curved': 0}
-        
-        for dim, tag in surfaces:
-            # Get surface type by checking curvature
-            try:
-                # Sample points on surface to estimate curvature
-                params = gmsh.model.getParametrizationBounds(dim, tag)
-                if params:
-                    u_mid = (params[0][0] + params[0][1]) / 2
-                    v_mid = (params[1][0] + params[1][1]) / 2
-                    
-                    # Get normal at center
-                    normal = gmsh.model.getNormal(tag, [u_mid, v_mid])
-                    
-                    # Estimate if surface is planar by checking normal variation
-                    # (simplified: in production, use proper curvature analysis)
-                    is_planar = True  # Default assumption
-                    
-                    # Adaptive mesh sizing
-                    if is_planar:
-                        mesh_size = base_size * preset['planar_factor']
-                        surface_stats['planar'] += 1
-                    else:
-                        mesh_size = base_size * preset['curved_factor']
-                        surface_stats['curved'] += 1
-                    
-                    # Set mesh size for this surface
-                    gmsh.model.mesh.setSize(gmsh.model.getBoundary([(dim, tag)], False, False, True), mesh_size)
-            except Exception as e:
-                logger.warning(f"Could not classify surface {tag}: {e}")
-                gmsh.model.mesh.setSize(gmsh.model.getBoundary([(dim, tag)], False, False, True), base_size)
-        
-        logger.info(f"📊 Surface classification: {surface_stats['planar']} planar, {surface_stats['curved']} curved")
-        
-        # Generate 2D surface mesh
-        gmsh.model.mesh.generate(2)
-        
-        # Extract mesh data
-        node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
-        elem_types, elem_tags, elem_node_tags = gmsh.model.mesh.getElements(2)
-        
-        # Process vertices
-        vertices = node_coords.tolist() if isinstance(node_coords, np.ndarray) else list(node_coords)
-        
-        # Process triangles (filter to only triangular elements)
-        indices = []
-        for elem_type, tags, node_tags_for_type in zip(elem_types, elem_tags, elem_node_tags):
-            if elem_type == 2:  # Triangle element type
-                # Convert 1-indexed to 0-indexed
-                indices.extend([int(tag) - 1 for tag in node_tags_for_type])
-        
-        triangle_count = len(indices) // 3
-        
-        # Calculate per-vertex normals
-        normals = calculate_vertex_normals(vertices, indices)
-        
-        gmsh.finalize()
-        
-        logger.info(f"✅ Generated {triangle_count} triangles ({len(vertices)//3} vertices)")
-        
-        return {
-            'vertices': vertices,
-            'indices': indices,
-            'normals': normals,
-            'triangle_count': triangle_count,
-            'quality_stats': {
-                'quality_preset': quality,
-                'surface_stats': surface_stats,
-                'base_mesh_size': base_size,
-                'diagonal': diagonal
+    # Acquire lock to ensure Gmsh runs in main thread safely
+    with gmsh_lock:
+        try:
+            # Initialize Gmsh
+            gmsh.initialize()
+            gmsh.option.setNumber("General.Terminal", 0)
+            
+            # Import STEP file
+            gmsh.merge(step_file_path)
+            
+            # Calculate adaptive mesh sizing
+            diagonal = calculate_bbox_diagonal(step_file_path)
+            base_size = diagonal * preset['base_size_factor']
+            
+            logger.info(f"📏 Model diagonal: {diagonal:.2f}mm, base mesh size: {base_size:.4f}mm")
+            
+            # Get all surfaces and classify them
+            surfaces = gmsh.model.getEntities(2)  # 2D entities (surfaces)
+            surface_stats = {'planar': 0, 'curved': 0}
+            
+            for dim, tag in surfaces:
+                # Get surface type by checking curvature
+                try:
+                    # Sample points on surface to estimate curvature
+                    params = gmsh.model.getParametrizationBounds(dim, tag)
+                    if params:
+                        u_mid = (params[0][0] + params[0][1]) / 2
+                        v_mid = (params[1][0] + params[1][1]) / 2
+                        
+                        # Get normal at center
+                        normal = gmsh.model.getNormal(tag, [u_mid, v_mid])
+                        
+                        # Estimate if surface is planar by checking normal variation
+                        # (simplified: in production, use proper curvature analysis)
+                        is_planar = True  # Default assumption
+                        
+                        # Adaptive mesh sizing
+                        if is_planar:
+                            mesh_size = base_size * preset['planar_factor']
+                            surface_stats['planar'] += 1
+                        else:
+                            mesh_size = base_size * preset['curved_factor']
+                            surface_stats['curved'] += 1
+                        
+                        # Set mesh size for this surface
+                        gmsh.model.mesh.setSize(gmsh.model.getBoundary([(dim, tag)], False, False, True), mesh_size)
+                except Exception as e:
+                    logger.warning(f"Could not classify surface {tag}: {e}")
+                    gmsh.model.mesh.setSize(gmsh.model.getBoundary([(dim, tag)], False, False, True), base_size)
+            
+            logger.info(f"📊 Surface classification: {surface_stats['planar']} planar, {surface_stats['curved']} curved")
+            
+            # Generate 2D surface mesh
+            gmsh.model.mesh.generate(2)
+            
+            # Extract mesh data
+            node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
+            elem_types, elem_tags, elem_node_tags = gmsh.model.mesh.getElements(2)
+            
+            # Process vertices
+            vertices = node_coords.tolist() if isinstance(node_coords, np.ndarray) else list(node_coords)
+            
+            # Process triangles (filter to only triangular elements)
+            indices = []
+            for elem_type, tags, node_tags_for_type in zip(elem_types, elem_tags, elem_node_tags):
+                if elem_type == 2:  # Triangle element type
+                    # Convert 1-indexed to 0-indexed
+                    indices.extend([int(tag) - 1 for tag in node_tags_for_type])
+            
+            triangle_count = len(indices) // 3
+            
+            # Calculate per-vertex normals
+            normals = calculate_vertex_normals(vertices, indices)
+            
+            gmsh.finalize()
+            
+            logger.info(f"✅ Generated {triangle_count} triangles ({len(vertices)//3} vertices)")
+            
+            return {
+                'vertices': vertices,
+                'indices': indices,
+                'normals': normals,
+                'triangle_count': triangle_count,
+                'quality_stats': {
+                    'quality_preset': quality,
+                    'surface_stats': surface_stats,
+                    'base_mesh_size': base_size,
+                    'diagonal': diagonal
+                }
             }
-        }
-    
-    except Exception as e:
-        logger.error(f"Mesh generation failed: {e}")
-        gmsh.finalize()
-        raise
+        
+        except Exception as e:
+            logger.error(f"Mesh generation failed: {e}")
+            gmsh.finalize()
+            raise
 
 
 def calculate_vertex_normals(vertices, indices):
