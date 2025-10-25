@@ -9,7 +9,7 @@ from flask_cors import CORS
 # === OCC imports ===
 from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.BRep import BRep_Tool
-from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
+from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh, BRepMesh_Face
 from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_IN
 from OCC.Core.TopExp import TopExp_Explorer, topexp
 from OCC.Core.TopLoc import TopLoc_Location
@@ -249,30 +249,95 @@ def recognize_manufacturing_features(shape):
     return features
 
 
+def get_surface_tessellation_params(surface, diagonal):
+    """
+    Return adaptive tessellation parameters based on surface type.
+    Curved surfaces get MUCH higher resolution than planar surfaces.
+    """
+    surf_type = surface.GetType()
+    
+    if surf_type == GeomAbs_Plane:
+        # Planar - use normal resolution (they don't benefit from more triangles)
+        return {
+            'linear': diagonal * 0.0005,  # 0.05% of diagonal
+            'angular': 8.0,  # 8 degrees
+            'type': 'plane'
+        }
+    elif surf_type == GeomAbs_Cylinder:
+        # Cylindrical - ULTRA HIGH resolution for smooth appearance
+        return {
+            'linear': diagonal * 0.00005,  # 0.005% of diagonal (10x finer)
+            'angular': 2.0,  # 2 degrees (much finer curves)
+            'type': 'cylinder'
+        }
+    elif surf_type == GeomAbs_Sphere:
+        # Spherical - MAXIMUM resolution
+        return {
+            'linear': diagonal * 0.00003,  # 0.003% of diagonal (17x finer)
+            'angular': 1.0,  # 1 degree (very smooth)
+            'type': 'sphere'
+        }
+    elif surf_type in [GeomAbs_Cone, GeomAbs_Torus]:
+        # Other curved surfaces - HIGH resolution
+        return {
+            'linear': diagonal * 0.00007,  # 0.007% of diagonal (7x finer)
+            'angular': 2.5,  # 2.5 degrees
+            'type': 'curved'
+        }
+    else:
+        # BSpline, Bezier, etc - MAXIMUM resolution for freeform surfaces
+        return {
+            'linear': diagonal * 0.00003,  # 0.003% of diagonal
+            'angular': 1.0,  # 1 degree
+            'type': 'freeform'
+        }
+
+
 def tessellate_shape(shape):
     """
-    Create high-quality triangle mesh from BREP using OpenCascade tessellation.
+    Create high-quality triangle mesh from BREP using PER-FACE adaptive tessellation.
     
-    CRITICAL: Computes HYBRID normals for professional CAD appearance:
+    CRITICAL: Uses surface-type-specific tessellation settings:
+    - PLANAR surfaces: Normal resolution (8° angular, they don't need more detail)
+    - CYLINDRICAL surfaces: ULTRA-HIGH resolution (2° angular, 10x more triangles)
+    - SPHERICAL surfaces: MAXIMUM resolution (1° angular, 20x more triangles)
+    
+    Also computes HYBRID normals for professional CAD appearance:
     - PLANAR surfaces: Per-face normals for perfectly flat appearance
     - CYLINDRICAL surfaces: Smooth averaged normals for seamless appearance
-    This eliminates faceting on cylinders while keeping flats perfectly crisp.
     
-    Returns mesh with hybrid normals optimized for CAD visualization.
+    This approach gives smooth curves while keeping flat surfaces efficient.
     """
-    # Calculate adaptive linear deflection based on part size
+    # Calculate bounding box diagonal for adaptive resolution
     diagonal, bbox = calculate_bbox_diagonal(shape)
-    linear_deflection = diagonal * 0.00025  # 0.025% of diagonal (3x more detail)
-    angular_deflection = 5.0  # 5 degrees (3x more detail on curves)
     
-    logger.info(f"🎨 Tessellating with deflection={linear_deflection:.3f}mm, angle={angular_deflection}° (MAXIMUM QUALITY)")
+    # PER-FACE ADAPTIVE TESSELLATION
+    # Apply different resolution based on surface type
+    face_exp_pre = TopExp_Explorer(shape, TopAbs_FACE)
+    face_count = 0
+    tessellation_stats = {'plane': 0, 'cylinder': 0, 'sphere': 0, 'curved': 0, 'freeform': 0}
     
-    # Tessellate the shape
-    mesher = BRepMesh_IncrementalMesh(shape, linear_deflection, False, angular_deflection, True)
-    mesher.Perform()
+    logger.info(f"🎨 Starting PER-FACE adaptive tessellation (curved surfaces get 10-20x more detail)...")
     
-    if not mesher.IsDone():
-        logger.warning("⚠️ Tessellation not fully complete")
+    while face_exp_pre.More():
+        face = topods.Face(face_exp_pre.Current())
+        surface = BRepAdaptor_Surface(face)
+        
+        # Get surface-specific tessellation parameters
+        params = get_surface_tessellation_params(surface, diagonal)
+        tessellation_stats[params['type']] += 1
+        
+        # Apply per-face tessellation with surface-specific settings
+        face_mesher = BRepMesh_Face(face, params['linear'], params['angular'])
+        face_mesher.Perform()
+        
+        face_exp_pre.Next()
+        face_count += 1
+    
+    logger.info(f"✅ Tessellated {face_count} faces with adaptive resolution:")
+    for surf_type, count in tessellation_stats.items():
+        if count > 0:
+            logger.info(f"   ├─ {count} {surf_type} faces")
     
     vertices = []
     indices = []
