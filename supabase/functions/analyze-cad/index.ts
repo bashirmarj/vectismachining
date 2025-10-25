@@ -1247,16 +1247,35 @@ const handler = async (req: Request): Promise<Response> => {
         if (featureResult && featureResult.mesh_id) {
           analysis = featureResult;
           
-          // If high-quality mesh is available, override the mesh data
+          // If high-quality mesh is available, STORE IT and override mesh_id
           if (meshResult && meshResult.vertices) {
-            console.log(`✅ Using high-quality mesh: ${meshResult.triangle_count} triangles`);
-            analysis.mesh_data = {
-              vertices: meshResult.vertices,
-              indices: meshResult.indices,
-              normals: meshResult.normals,
-              triangle_count: meshResult.triangle_count
-            };
-            analysis.mesh_quality = meshResult.quality_stats;
+            console.log(`✅ Received high-quality mesh: ${meshResult.triangle_count} triangles`);
+            
+            // Store the high-quality mesh to database
+            const hq_mesh_id = await storeMeshData(
+              {
+                vertices: meshResult.vertices,
+                indices: meshResult.indices,
+                normals: meshResult.normals,
+                triangle_count: meshResult.triangle_count,
+                feature_edges: featureResult.mesh_data?.feature_edges || []
+              },
+              file_name
+            );
+            
+            if (hq_mesh_id) {
+              console.log(`✅ Stored high-quality mesh with mesh_id: ${hq_mesh_id}`);
+              analysis.mesh_id = hq_mesh_id;  // Override with new mesh_id
+              analysis.mesh_data = {
+                vertices: meshResult.vertices,
+                indices: meshResult.indices,
+                normals: meshResult.normals,
+                triangle_count: meshResult.triangle_count
+              };
+              analysis.mesh_quality = meshResult.quality_stats;
+            } else {
+              console.log(`⚠️ Failed to store high-quality mesh, keeping original mesh_id`);
+            }
           }
           
           console.log(`✅ Dual-service analysis complete`);
