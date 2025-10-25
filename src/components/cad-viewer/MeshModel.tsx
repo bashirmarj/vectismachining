@@ -21,7 +21,7 @@ interface MeshModelProps {
 }
 
 // Professional solid color for CAD rendering
-const SOLID_COLOR = "#FF6B6B"; // Professional red
+const SOLID_COLOR = "#CCCCCC"; // Light gray
 
 
 export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
@@ -42,13 +42,15 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     const dynamicEdgesRef = useRef<THREE.Group>(null);
     const wireframeEdgesRef = useRef<THREE.Group>(null);
 
-    // Create geometry with backend normals
+    // Create single unified geometry for professional solid rendering
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
       
       geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
       geo.setIndex(meshData.indices);
       geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
+      geo.computeVertexNormals();
+      geo.normalizeNormals();
       
       geo.computeBoundingSphere();
       return geo;
@@ -267,13 +269,13 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     const materialProps = useMemo(() => {
       const base = {
-        color: SOLID_COLOR,
+        color: "#5b9bd5",
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
-        metalness: 0.2,
-        roughness: 0.5,
-        envMapIntensity: 0.6,
+        metalness: 0,
+        roughness: 0.8,
+        envMapIntensity: 0,
       };
 
       if (displayStyle === "wireframe") {
