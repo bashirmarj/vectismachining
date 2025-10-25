@@ -43,7 +43,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       showEdges,
       showHiddenEdges = false,
       displayStyle = "solid",
-      topologyColors = false,
+      topologyColors = true,
     },
     ref,
   ) => {
@@ -53,35 +53,25 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     const dynamicEdgesRef = useRef<THREE.Group>(null);
     const wireframeEdgesRef = useRef<THREE.Group>(null);
 
-    // Create geometry with proper normals for both modes
+    // Create single unified geometry for professional solid rendering
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
 
       if (!topologyColors) {
-        // Smooth shading mode - use indexed geometry with shared vertices
         geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
         geo.setIndex(meshData.indices);
-        
-        // Use backend-computed smooth normals if available, otherwise compute
-        if (meshData.normals && meshData.normals.length === meshData.vertices.length) {
-          geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
-        } else {
-          geo.computeVertexNormals();
-        }
-        
+        geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
+        geo.computeVertexNormals();
         geo.normalizeNormals();
       } else {
-        // Topology colors mode - use non-indexed geometry with flat normals
         const triangleCount = meshData.indices.length / 3;
         const positions = new Float32Array(triangleCount * 9);
-        const normals = new Float32Array(triangleCount * 9);
 
         for (let i = 0; i < triangleCount; i++) {
           const idx0 = meshData.indices[i * 3];
           const idx1 = meshData.indices[i * 3 + 1];
           const idx2 = meshData.indices[i * 3 + 2];
 
-          // Set positions
           positions[i * 9 + 0] = meshData.vertices[idx0 * 3];
           positions[i * 9 + 1] = meshData.vertices[idx0 * 3 + 1];
           positions[i * 9 + 2] = meshData.vertices[idx0 * 3 + 2];
@@ -93,38 +83,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           positions[i * 9 + 6] = meshData.vertices[idx2 * 3];
           positions[i * 9 + 7] = meshData.vertices[idx2 * 3 + 1];
           positions[i * 9 + 8] = meshData.vertices[idx2 * 3 + 2];
-
-          // Compute flat normal for this triangle
-          const v0 = new THREE.Vector3(
-            meshData.vertices[idx0 * 3],
-            meshData.vertices[idx0 * 3 + 1],
-            meshData.vertices[idx0 * 3 + 2]
-          );
-          const v1 = new THREE.Vector3(
-            meshData.vertices[idx1 * 3],
-            meshData.vertices[idx1 * 3 + 1],
-            meshData.vertices[idx1 * 3 + 2]
-          );
-          const v2 = new THREE.Vector3(
-            meshData.vertices[idx2 * 3],
-            meshData.vertices[idx2 * 3 + 1],
-            meshData.vertices[idx2 * 3 + 2]
-          );
-
-          const edge1 = new THREE.Vector3().subVectors(v1, v0);
-          const edge2 = new THREE.Vector3().subVectors(v2, v0);
-          const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
-
-          // Set same flat normal for all 3 vertices of this triangle
-          for (let v = 0; v < 3; v++) {
-            normals[i * 9 + v * 3 + 0] = normal.x;
-            normals[i * 9 + v * 3 + 1] = normal.y;
-            normals[i * 9 + v * 3 + 2] = normal.z;
-          }
         }
 
         geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-        geo.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
       }
 
       geo.computeBoundingSphere();
@@ -139,12 +100,6 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         if (meshData.vertex_colors && meshData.vertex_colors.length > 0) {
           const triangleCount = meshData.indices.length / 3;
           const colors = new Float32Array(triangleCount * 9);
-
-          console.log("🔍 RAW vertex_colors:", {
-            length: meshData.vertex_colors?.length,
-            first10: meshData.vertex_colors?.slice(0, 10),
-            uniqueValues: [...new Set(meshData.vertex_colors)],
-          });
 
           for (let triIdx = 0; triIdx < triangleCount; triIdx++) {
             const vertexIdx = meshData.indices[triIdx * 3];
@@ -184,14 +139,14 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     // Pre-compute edge connectivity for ALL edges (used by both modes)
     const edgeMap = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        v1: THREE.Vector3;
-        v2: THREE.Vector3;
-        normals: THREE.Vector3[];
-      }
-    >();
+      const map = new Map<
+        string,
+        {
+          v1: THREE.Vector3;
+          v2: THREE.Vector3;
+          normals: THREE.Vector3[];
+        }
+      >();
 
       const triangleCount = meshData.indices.length / 3;
 
@@ -246,7 +201,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     // Dynamic edge rendering for BOTH solid and wireframe modes
     useFrame(() => {
-      if (!showEdges || !edgeMap || !meshRef.current) return;
+      if (!edgeMap || !meshRef.current) return;
 
       const mesh = meshRef.current;
       const cameraWorldPos = new THREE.Vector3();
@@ -296,7 +251,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       });
 
       // Update visible edges (solid lines)
-      if (displayStyle === "solid" && dynamicEdgesRef.current) {
+      if (displayStyle === "solid" && showEdges && dynamicEdgesRef.current) {
         // Clear existing
         while (dynamicEdgesRef.current.children.length > 0) {
           const child = dynamicEdgesRef.current.children[0];
@@ -394,13 +349,13 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     const materialProps = useMemo(() => {
       const base = {
-        color: SOLID_COLOR,
+        color: "#5b9bd5",
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
-        metalness: 0,         // ← FIXED: No metallic reflection
-        roughness: 0.8,       // ← FIXED: Matte finish
-        envMapIntensity: 0,   // ← FIXED: No environment reflections
+        metalness: 0,
+        roughness: 0.8,
+        envMapIntensity: 0,
       };
 
       if (displayStyle === "wireframe") {
