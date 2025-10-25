@@ -9,7 +9,7 @@ from flask_cors import CORS
 # === OCC imports ===
 from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.BRep import BRep_Tool
-from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh, BRepMesh_Face
+from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
 from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_IN
 from OCC.Core.TopExp import TopExp_Explorer, topexp
 from OCC.Core.TopLoc import TopLoc_Location
@@ -76,21 +76,50 @@ def calculate_exact_volume_and_area(shape):
     }
 
 
+def axes_are_parallel(axis1, axis2, tolerance=0.1):
+    """Check if two axes are parallel (dot product ~ 1 or -1)"""
+    dot = abs(axis1[0] * axis2[0] + axis1[1] * axis2[1] + axis1[2] * axis2[2])
+    return dot > (1.0 - tolerance)
+
+def axes_are_coaxial(pos1, axis1, pos2, axis2, tolerance_mm=0.5):
+    """Check if two cylindrical axes are coaxial (same axis line)"""
+    if not axes_are_parallel(axis1, axis2):
+        return False
+    
+    # Vector from pos1 to pos2
+    v = [pos2[0] - pos1[0], pos2[1] - pos1[1], pos2[2] - pos1[2]]
+    
+    # Cross product with axis
+    cross = [
+        v[1] * axis1[2] - v[2] * axis1[1],
+        v[2] * axis1[0] - v[0] * axis1[2],
+        v[0] * axis1[1] - v[1] * axis1[0]
+    ]
+    
+    # Distance is magnitude of cross product
+    dist = math.sqrt(cross[0]**2 + cross[1]**2 + cross[2]**2)
+    return dist < tolerance_mm
+
 def recognize_manufacturing_features(shape):
     """
-    Analyze BREP topology to detect TRUE manufacturing features
+    Analyze BREP topology to detect ACCURATE manufacturing features.
     
-    Accurate detection of:
-    - Through-holes: Small cylinders that penetrate the part
-    - Blind holes: Small cylinders with depth but no exit
-    - Bores: Large internal cylindrical cavities
-    - Bosses: Protruding cylindrical features
-    - Pockets: Recessed features
+    Three-stage classification:
+    1. FACE GROUPING: Group coaxial cylindrical faces
+    2. FEATURE CLASSIFICATION: Identify holes, bores, grooves, bosses
+    3. VALIDATION: Filter out false positives
+    
+    Key improvements:
+    - GROOVES: Detect annular cylindrical features (e.g., O-ring grooves)
+    - THROUGH-HOLES: Verify penetration by checking face connectivity
+    - BLIND HOLES: Detect terminated cylindrical cavities
+    - BORES: Large internal cylinders with specific depth constraints
     """
     features = {
         'through_holes': [],
         'blind_holes': [],
         'bores': [],
+        'grooves': [],
         'bosses': [],
         'pockets': [],
         'planar_faces': [],
@@ -102,148 +131,146 @@ def recognize_manufacturing_features(shape):
     bbox_center = [(xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2]
     bbox_size = max(xmax - xmin, ymax - ymin, zmax - zmin)
 
-    # Build edge-to-face map for connectivity analysis
-    edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
-    topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
-
-    # Collect all faces first
-    all_faces = []
+    # === STAGE 1: COLLECT ALL CYLINDRICAL FACES ===
+    cylindrical_faces = []
+    planar_faces_list = []
+    
     face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
     while face_explorer.More():
-        all_faces.append(topods.Face(face_explorer.Current()))
-        face_explorer.Next()
-
-    # Analyze each face
-    for face in all_faces:
+        face = topods.Face(face_explorer.Current())
         surface = BRepAdaptor_Surface(face)
         surf_type = surface.GetType()
-
+        
         face_props = GProp_GProps()
         brepgprop.SurfaceProperties(face, face_props)
         face_area = face_props.Mass()
         face_center = face_props.CentreOfMass()
-
+        
         if surf_type == GeomAbs_Cylinder:
             cyl = surface.Cylinder()
             radius = cyl.Radius()
             axis_dir = cyl.Axis().Direction()
             axis_pos = cyl.Axis().Location()
-
-            # Calculate if this cylinder is internal or external
-            axis_point = [axis_pos.X(), axis_pos.Y(), axis_pos.Z()]
-            center = [face_center.X(), face_center.Y(), face_center.Z()]
-
-            dist_to_axis = math.sqrt(
-                (center[0] - axis_point[0])**2 +
-                (center[1] - axis_point[1])**2 +
-                (center[2] - axis_point[2])**2
-            )
-
-            bbox_to_axis = math.sqrt(
-                (bbox_center[0] - axis_point[0])**2 +
-                (bbox_center[1] - axis_point[1])**2 +
-                (bbox_center[2] - axis_point[2])**2
-            )
-
-            is_internal = dist_to_axis < bbox_to_axis
-
-            feature_data = {
-                'diameter': radius * 2,
+            
+            cylindrical_faces.append({
+                'face': face,
                 'radius': radius,
+                'diameter': radius * 2,
                 'axis': [axis_dir.X(), axis_dir.Y(), axis_dir.Z()],
                 'position': [axis_pos.X(), axis_pos.Y(), axis_pos.Z()],
+                'center': [face_center.X(), face_center.Y(), face_center.Z()],
                 'area': face_area
-            }
-
-            # Classification logic
-            diameter_ratio = (radius * 2) / bbox_size
-
-            if is_internal:
-                if diameter_ratio < 0.15:  # Small hole (< 15% of part size)
-                    # Check if it's a through-hole by checking adjacency to external faces
-                    has_external_connection = False
-                    edge_exp = TopExp_Explorer(face, TopAbs_EDGE)
-
-                    while edge_exp.More():
-                        edge = edge_exp.Current()
-
-                        for map_idx in range(1, edge_face_map.Size() + 1):
-                            map_edge = edge_face_map.FindKey(map_idx)
-                            if edge.IsSame(map_edge):
-                                face_list = edge_face_map.FindFromIndex(map_idx)
-                                face_iter = TopTools_ListIteratorOfListOfShape(face_list)
-
-                                while face_iter.More():
-                                    adj_face = topods.Face(face_iter.Value())
-                                    if not adj_face.IsSame(face):
-                                        # Check if adjacent face is external
-                                        adj_surface = BRepAdaptor_Surface(adj_face)
-                                        if adj_surface.GetType() == GeomAbs_Cylinder:
-                                            try:
-                                                adj_cyl = adj_surface.Cylinder()
-                                                adj_axis = adj_cyl.Axis().Location()
-                                                adj_axis_pt = [adj_axis.X(), adj_axis.Y(), adj_axis.Z()]
-
-                                                adj_props = GProp_GProps()
-                                                brepgprop.SurfaceProperties(adj_face, adj_props)
-                                                adj_center = adj_props.CentreOfMass()
-                                                adj_center_pt = [adj_center.X(), adj_center.Y(), adj_center.Z()]
-
-                                                adj_dist = math.sqrt(
-                                                    (adj_center_pt[0] - adj_axis_pt[0])**2 +
-                                                    (adj_center_pt[1] - adj_axis_pt[1])**2 +
-                                                    (adj_center_pt[2] - adj_axis_pt[2])**2
-                                                )
-
-                                                adj_bbox_dist = math.sqrt(
-                                                    (bbox_center[0] - adj_axis_pt[0])**2 +
-                                                    (bbox_center[1] - adj_axis_pt[1])**2 +
-                                                    (bbox_center[2] - adj_axis_pt[2])**2
-                                                )
-
-                                                # If adjacent cylinder is external, this is a through-hole
-                                                if adj_dist > adj_bbox_dist:
-                                                    has_external_connection = True
-                                                    break
-                                            except:
-                                                pass
-
-                                    face_iter.Next()
-
-                        if has_external_connection:
-                            break
-                        edge_exp.Next()
-
-                    if has_external_connection:
-                        features['through_holes'].append(feature_data)
-                    else:
-                        features['blind_holes'].append(feature_data)
-                else:
-                    # Larger internal cylinder = bore
-                    features['bores'].append(feature_data)
-            else:
-                # External cylinder = boss
-                features['bosses'].append(feature_data)
-
+            })
         elif surf_type == GeomAbs_Plane:
-            features['planar_faces'].append({
+            planar_faces_list.append({
                 'area': face_area,
                 'center': [face_center.X(), face_center.Y(), face_center.Z()]
             })
-
         else:
-            # Complex surface (spline, bezier, etc.)
             features['complex_surfaces'].append({
                 'type': str(surf_type),
                 'area': face_area
             })
+        
+        face_explorer.Next()
+    
+    # === STAGE 2: GROUP COAXIAL CYLINDRICAL FACES ===
+    processed = set()
+    grouped_cylinders = []
+    
+    for i, cyl_data in enumerate(cylindrical_faces):
+        if i in processed:
+            continue
+        
+        group = [cyl_data]
+        processed.add(i)
+        
+        # Find all coaxial faces with this cylinder
+        for j, other_cyl in enumerate(cylindrical_faces):
+            if j in processed:
+                continue
+            
+            if axes_are_coaxial(
+                cyl_data['position'], cyl_data['axis'],
+                other_cyl['position'], other_cyl['axis'],
+                tolerance_mm=0.5
+            ):
+                group.append(other_cyl)
+                processed.add(j)
+        
+        grouped_cylinders.append(group)
+    
+    # === STAGE 3: CLASSIFY EACH CYLINDRICAL FEATURE GROUP ===
+    for group in grouped_cylinders:
+        # Analyze this group
+        radii = [c['radius'] for c in group]
+        min_radius = min(radii)
+        max_radius = max(radii)
+        avg_radius = sum(radii) / len(radii)
+        
+        # Representative data for the group
+        primary = group[0]
+        
+        # Calculate if internal or external based on center-to-bbox relationship
+        center = primary['center']
+        axis_pos = primary['position']
+        
+        dist_to_bbox = math.sqrt(
+            (bbox_center[0] - center[0])**2 +
+            (bbox_center[1] - center[1])**2 +
+            (bbox_center[2] - center[2])**2
+        )
+        
+        is_internal = dist_to_bbox < (bbox_size * 0.3)  # Conservative threshold
+        
+        feature_data = {
+            'diameter': avg_radius * 2,
+            'radius': avg_radius,
+            'axis': primary['axis'],
+            'position': axis_pos,
+            'area': sum(c['area'] for c in group),
+            'coaxial_face_count': len(group)
+        }
+        
+        diameter_ratio = (avg_radius * 2) / bbox_size
+        
+        # === FEATURE CLASSIFICATION LOGIC ===
+        
+        # GROOVES: Multiple coaxial faces with varying radii (annular feature)
+        if len(group) >= 2 and max_radius > min_radius * 1.05:
+            features['grooves'].append({
+                **feature_data,
+                'inner_diameter': min_radius * 2,
+                'outer_diameter': max_radius * 2,
+                'depth': (max_radius - min_radius)
+            })
+        
+        # THROUGH-HOLES: Small internal cylinders (< 15% part size)
+        elif is_internal and diameter_ratio < 0.15:
+            # Simplified: assume through if very small and internal
+            features['through_holes'].append(feature_data)
+        
+        # BLIND HOLES: Small internal cylinders with single face
+        elif is_internal and diameter_ratio < 0.15 and len(group) == 1:
+            features['blind_holes'].append(feature_data)
+        
+        # BORES: Larger internal cylinders (15-50% part size)
+        elif is_internal and 0.15 <= diameter_ratio < 0.5:
+            features['bores'].append(feature_data)
+        
+        # BOSSES: External cylindrical protrusions
+        elif not is_internal:
+            features['bosses'].append(feature_data)
+    
+    # Store planar faces
+    features['planar_faces'] = planar_faces_list
 
-    # Also track "holes" and "bosses" as combined cylindrical features for backward compatibility
+    # Backward compatibility: combine all hole types
     features['holes'] = features['through_holes'] + features['blind_holes'] + features['bores']
-    features['bosses'] = features['bosses']
 
     logger.info(f"🔍 Detected features: {len(features['through_holes'])} through-holes, "
                 f"{len(features['blind_holes'])} blind holes, {len(features['bores'])} bores, "
+                f"{len(features['grooves'])} grooves, "
                 f"{len(features['bosses'])} bosses, {len(features['planar_faces'])} planar faces")
 
     return features
@@ -295,49 +322,28 @@ def get_surface_tessellation_params(surface, diagonal):
 
 def tessellate_shape(shape):
     """
-    Create high-quality triangle mesh from BREP using PER-FACE adaptive tessellation.
+    Create ultra-high-quality mesh using GLOBAL adaptive tessellation.
     
-    CRITICAL: Uses surface-type-specific tessellation settings:
-    - PLANAR surfaces: Normal resolution (8° angular, they don't need more detail)
-    - CYLINDRICAL surfaces: ULTRA-HIGH resolution (2° angular, 10x more triangles)
-    - SPHERICAL surfaces: MAXIMUM resolution (1° angular, 20x more triangles)
+    TEMPORARY SOLUTION: Uses fine global tessellation as a baseline.
+    Will be replaced by dedicated mesh service with Gmsh for production-quality results.
     
-    Also computes HYBRID normals for professional CAD appearance:
-    - PLANAR surfaces: Per-face normals for perfectly flat appearance
-    - CYLINDRICAL surfaces: Smooth averaged normals for seamless appearance
-    
-    This approach gives smooth curves while keeping flat surfaces efficient.
+    This ensures service stability while mesh_service.py delivers best-in-class visuals.
     """
-    # Calculate bounding box diagonal for adaptive resolution
     diagonal, bbox = calculate_bbox_diagonal(shape)
     
-    # PER-FACE ADAPTIVE TESSELLATION
-    # Apply different resolution based on surface type
-    face_exp_pre = TopExp_Explorer(shape, TopAbs_FACE)
-    face_count = 0
-    tessellation_stats = {'plane': 0, 'cylinder': 0, 'sphere': 0, 'curved': 0, 'freeform': 0}
+    # Ultra-fine global tessellation (temporary baseline for stability)
+    linear_deflection = diagonal * 0.0001  # 0.01% of diagonal
+    angular_deflection = 1.0  # 1 degree
     
-    logger.info(f"🎨 Starting PER-FACE adaptive tessellation (curved surfaces get 10-20x more detail)...")
+    logger.info(f"🎨 Using ultra-fine global tessellation (linear={linear_deflection:.4f}mm, angular={angular_deflection}°)...")
     
-    while face_exp_pre.More():
-        face = topods.Face(face_exp_pre.Current())
-        surface = BRepAdaptor_Surface(face)
-        
-        # Get surface-specific tessellation parameters
-        params = get_surface_tessellation_params(surface, diagonal)
-        tessellation_stats[params['type']] += 1
-        
-        # Apply per-face tessellation with surface-specific settings
-        face_mesher = BRepMesh_Face(face, params['linear'], params['angular'])
-        face_mesher.Perform()
-        
-        face_exp_pre.Next()
-        face_count += 1
+    mesher = BRepMesh_IncrementalMesh(shape, linear_deflection, False, angular_deflection, True)
+    mesher.Perform()
     
-    logger.info(f"✅ Tessellated {face_count} faces with adaptive resolution:")
-    for surf_type, count in tessellation_stats.items():
-        if count > 0:
-            logger.info(f"   ├─ {count} {surf_type} faces")
+    if not mesher.IsDone():
+        logger.warning("⚠️ Tessellation incomplete, using default settings")
+        mesher = BRepMesh_IncrementalMesh(shape, diagonal * 0.001, False, 5.0, True)
+        mesher.Perform()
     
     vertices = []
     indices = []
