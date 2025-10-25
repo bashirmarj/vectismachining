@@ -125,7 +125,6 @@ export const PartUploadForm = () => {
           file_data: base64File,
           file_size: fileWithQty.file.size,
           material: fileWithQty.material,
-          force_reanalyze: true,
         },
       });
 

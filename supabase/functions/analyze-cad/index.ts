@@ -608,11 +608,11 @@ async function analyzeSTEPViaService(
       },
     });
 
-    // 💾 Store mesh data in database (Render service no longer does this)
+    // 💾 Store mesh data in database (fresh analysis every time)
     let mesh_id: string | undefined;
     if (data.mesh_data && data.mesh_data.vertices && data.mesh_data.vertices.length > 0) {
       console.log(`💾 Storing mesh data from Flask response: ${data.mesh_data.triangle_count} triangles`);
-      mesh_id = await storeMeshData(data.mesh_data, fileName, fileData, forceReanalyze);
+      mesh_id = await storeMeshData(data.mesh_data, fileName);
       if (mesh_id) {
         console.log(`✅ Geometry service analysis successful with mesh_id: ${mesh_id}`);
         console.log(`📐 Mesh includes ${(data.mesh_data.feature_edges || []).length} feature edges`);
@@ -697,50 +697,26 @@ async function analyzeSTEPViaService(
   }
 }
 
-// Calculate SHA-256 hash of file data for caching
-async function calculateFileHash(fileData: ArrayBuffer): Promise<string> {
-  const hashBuffer = await crypto.subtle.digest("SHA-256", fileData);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-// Store mesh data in database with caching
+// Store mesh data in database (no caching)
 async function storeMeshData(
   meshData: MeshData,
   fileName: string,
-  fileData: ArrayBuffer,
-  forceReanalyze?: boolean,
 ): Promise<string | undefined> {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Calculate file hash for caching
-    const fileHash = await calculateFileHash(fileData);
+    // Generate a unique hash for this upload (timestamp-based)
+    const uniqueHash = crypto.randomUUID();
 
-    // Check if mesh already exists (unless force reanalyze is enabled)
-    if (!forceReanalyze) {
-      console.log(`🔍 Checking cache for file hash: ${fileHash}`);
-      const { data: existingMesh } = await supabase
-        .from("cad_meshes")
-        .select("id")
-        .eq("file_hash", fileHash)
-        .maybeSingle();
-
-      if (existingMesh) {
-        console.log(`Mesh already cached for ${fileName} (hash: ${fileHash})`);
-        return existingMesh.id;
-      }
-    } else {
-      console.log(`🔄 Force reanalyze enabled - bypassing cache for ${fileName}`);
-    }
+    console.log(`💾 Storing fresh mesh data for ${fileName}`);
 
     // Store new mesh
     const { data: newMesh, error } = await supabase
       .from("cad_meshes")
       .insert({
-        file_hash: fileHash,
+        file_hash: uniqueHash,
         file_name: fileName,
         vertices: meshData.vertices,
         indices: meshData.indices,
@@ -754,26 +730,10 @@ async function storeMeshData(
 
     if (error) {
       console.error("Error storing mesh data:", error);
-
-      // ✅ FIX: If duplicate key error, fetch existing mesh ID instead of returning undefined
-      if (error.code === "23505") {
-        console.log(`🔄 Duplicate file_hash detected, fetching existing mesh ID for hash: ${fileHash}`);
-        const { data: existingMesh } = await supabase
-          .from("cad_meshes")
-          .select("id")
-          .eq("file_hash", fileHash)
-          .maybeSingle();
-
-        if (existingMesh) {
-          console.log(`✅ Reusing existing mesh ID: ${existingMesh.id}`);
-          return existingMesh.id;
-        }
-      }
-
       return undefined;
     }
 
-    console.log(`Stored mesh data for ${fileName}: ${meshData.triangle_count} triangles, mesh_id: ${newMesh.id}`);
+    console.log(`✅ Stored mesh data for ${fileName}: ${meshData.triangle_count} triangles, mesh_id: ${newMesh.id}`);
     return newMesh.id;
   } catch (error) {
     console.error("Error in storeMeshData:", error);
