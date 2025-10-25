@@ -69,10 +69,18 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         flatVertices[i * 9 + 7] = meshData.vertices[i2 * 3 + 1];
         flatVertices[i * 9 + 8] = meshData.vertices[i2 * 3 + 2];
         
-        // Copy normals for this triangle (already in correct order)
-        for (let j = 0; j < 9; j++) {
-          flatNormals[i * 9 + j] = meshData.normals[i * 9 + j];
-        }
+        // Copy normals for this triangle using the same indices as vertices
+        flatNormals[i * 9 + 0] = meshData.normals[i0 * 3];
+        flatNormals[i * 9 + 1] = meshData.normals[i0 * 3 + 1];
+        flatNormals[i * 9 + 2] = meshData.normals[i0 * 3 + 2];
+        
+        flatNormals[i * 9 + 3] = meshData.normals[i1 * 3];
+        flatNormals[i * 9 + 4] = meshData.normals[i1 * 3 + 1];
+        flatNormals[i * 9 + 5] = meshData.normals[i1 * 3 + 2];
+        
+        flatNormals[i * 9 + 6] = meshData.normals[i2 * 3];
+        flatNormals[i * 9 + 7] = meshData.normals[i2 * 3 + 1];
+        flatNormals[i * 9 + 8] = meshData.normals[i2 * 3 + 2];
       }
       
       geo.setAttribute("position", new THREE.BufferAttribute(flatVertices, 3));
