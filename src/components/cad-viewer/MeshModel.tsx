@@ -184,7 +184,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     // Pre-compute edge connectivity for ALL edges (used by both modes)
     const edgeMap = useMemo(() => {
-      const map = new Map
+      const map = new Map<
         string,
         {
           v1: THREE.Vector3;
