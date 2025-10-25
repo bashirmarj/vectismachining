@@ -48,7 +48,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       // Use indexed geometry for proper normal calculation
       geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
       geo.setIndex(meshData.indices);
-      geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
+      geo.computeVertexNormals(); // Let Three.js calculate fresh normals
       
       geo.computeBoundingSphere();
       return geo;
@@ -302,17 +302,18 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
             
             // PBR Properties
             metalness={0.0}
-            roughness={0.85}
+            roughness={1.0}
             
             // Physical Properties (unique to meshPhysicalMaterial)
             clearcoat={0.0}
-            clearcoatRoughness={0.3}
+            clearcoatRoughness={1.0}
             
             // Environment & Lighting
-            envMapIntensity={0.3}
+            envMapIntensity={0.0}
             
             // Shading & Rendering
-            flatShading={true}
+            flatShading={false}
+            side={THREE.DoubleSide}
             toneMapped={false}
           />
         </mesh>
