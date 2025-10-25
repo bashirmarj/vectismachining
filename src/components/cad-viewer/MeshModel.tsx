@@ -106,7 +106,11 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
             const faceType = meshData.vertex_colors[vertexIdx] || "default";
             const colorHex = TOPOLOGY_COLORS[faceType as keyof typeof TOPOLOGY_COLORS] || TOPOLOGY_COLORS.default;
             const color = new THREE.Color(colorHex);
-
+console.log("🔍 RAW vertex_colors:", {
+  length: meshData.vertex_colors?.length,
+  first10: meshData.vertex_colors?.slice(0, 10),
+  uniqueValues: [...new Set(meshData.vertex_colors)],
+});
             for (let v = 0; v < 3; v++) {
               colors[triIdx * 9 + v * 3 + 0] = color.r;
               colors[triIdx * 9 + v * 3 + 1] = color.g;
