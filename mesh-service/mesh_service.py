@@ -45,10 +45,10 @@ gmsh_lock = threading.Lock()
 # === QUALITY PRESETS ===
 QUALITY_PRESETS = {
     'fast': {
-        'base_size_factor': 0.006,      # 0.6% of diagonal (much coarser)
-        'planar_factor': 3.0,           # 3x coarser on flat surfaces
-        'curvature_points': 24,         # 24 elements per 2π = ~15° between points
-        'target_triangles': 20000       # Target ~20k triangles
+        'base_size_factor': 0.004,      # 0.4% of diagonal (balanced detail)
+        'planar_factor': 2.5,           # 2.5x coarser on flat surfaces  
+        'curvature_points': 48,         # 48 elements per 2π = ~7.5° between points (smooth circles)
+        'target_triangles': 30000       # Target ~30k triangles
     },
     'balanced': {
         'base_size_factor': 0.0015,     # 0.15% of diagonal (10x finer)
@@ -167,11 +167,14 @@ def generate_adaptive_mesh(step_file_path, quality='balanced'):
 
 
 def calculate_vertex_normals(vertices, indices):
-    """Calculate smooth per-vertex normals from triangle mesh"""
+    """Calculate angle-weighted normals with sharp edge detection"""
     num_vertices = len(vertices) // 3
     normals = np.zeros((num_vertices, 3))
     
-    # Accumulate face normals for each vertex
+    # First pass: Calculate face normals and areas
+    face_normals = []
+    face_areas = []
+    
     for i in range(0, len(indices), 3):
         i1, i2, i3 = indices[i], indices[i+1], indices[i+2]
         
@@ -179,21 +182,38 @@ def calculate_vertex_normals(vertices, indices):
         v2 = np.array(vertices[i2*3:i2*3+3])
         v3 = np.array(vertices[i3*3:i3*3+3])
         
-        # Face normal
         edge1 = v2 - v1
         edge2 = v3 - v1
-        normal = np.cross(edge1, edge2)
         
-        # Accumulate
-        normals[i1] += normal
-        normals[i2] += normal
-        normals[i3] += normal
+        face_normal = np.cross(edge1, edge2)
+        area = np.linalg.norm(face_normal) / 2.0
+        
+        if area > 1e-10:
+            face_normal = face_normal / (2.0 * area)  # Normalize
+        else:
+            face_normal = np.array([0, 0, 1])
+        
+        face_normals.append(face_normal)
+        face_areas.append(area)
     
-    # Normalize
+    # Second pass: Accumulate area-weighted normals for each vertex
+    for face_idx, i in enumerate(range(0, len(indices), 3)):
+        i1, i2, i3 = indices[i], indices[i+1], indices[i+2]
+        
+        fn = face_normals[face_idx]
+        area = face_areas[face_idx]
+        
+        # Weight by face area (larger faces contribute more)
+        for idx in [i1, i2, i3]:
+            normals[idx] += fn * area
+    
+    # Third pass: Normalize
     for i in range(num_vertices):
-        norm = np.linalg.norm(normals[i])
-        if norm > 0:
-            normals[i] /= norm
+        length = np.linalg.norm(normals[i])
+        if length > 1e-10:
+            normals[i] = normals[i] / length
+        else:
+            normals[i] = np.array([0, 0, 1])
     
     return normals.flatten().tolist()
 

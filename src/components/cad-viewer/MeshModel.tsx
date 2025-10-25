@@ -48,7 +48,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       // Use indexed geometry for proper normal calculation
       geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
       geo.setIndex(meshData.indices);
-      geo.computeVertexNormals(); // Let Three.js calculate fresh normals
+      geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
       
       geo.computeBoundingSphere();
       return geo;
