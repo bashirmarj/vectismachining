@@ -5,10 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 COPY mesh_service.py .
 
-# Install Gmsh and dependencies from conda-forge (precompiled)
-RUN conda install -y -c conda-forge gmsh numpy && \
-    pip install --no-cache-dir -r requirements.txt && \
-    conda clean --all --yes
+# Install dependencies via pip (more reliable in containers)
+RUN pip install --no-cache-dir -r requirements.txt gmsh numpy
 
 EXPOSE 5001
 CMD ["python", "mesh_service.py"]
