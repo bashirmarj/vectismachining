@@ -41,16 +41,42 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     const dynamicEdgesRef = useRef<THREE.Group>(null);
     const wireframeEdgesRef = useRef<THREE.Group>(null);
 
-    // Create indexed geometry for efficient rendering
+    // Create non-indexed geometry with per-triangle normals
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
       
-      // Use indexed geometry with shared vertices
-      geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
-      geo.setIndex(meshData.indices);
+      // Convert indexed geometry to non-indexed (flat) geometry
+      // Each triangle gets its own 3 vertices and 3 normals
+      const triangleCount = meshData.indices.length / 3;
+      const flatVertices = new Float32Array(triangleCount * 9); // 3 vertices × 3 components
+      const flatNormals = new Float32Array(triangleCount * 9);
       
-      // Compute smooth vertex normals for proper lighting
-      geo.computeVertexNormals();
+      for (let i = 0; i < triangleCount; i++) {
+        const i0 = meshData.indices[i * 3];
+        const i1 = meshData.indices[i * 3 + 1];
+        const i2 = meshData.indices[i * 3 + 2];
+        
+        // Copy vertices for this triangle
+        flatVertices[i * 9 + 0] = meshData.vertices[i0 * 3];
+        flatVertices[i * 9 + 1] = meshData.vertices[i0 * 3 + 1];
+        flatVertices[i * 9 + 2] = meshData.vertices[i0 * 3 + 2];
+        
+        flatVertices[i * 9 + 3] = meshData.vertices[i1 * 3];
+        flatVertices[i * 9 + 4] = meshData.vertices[i1 * 3 + 1];
+        flatVertices[i * 9 + 5] = meshData.vertices[i1 * 3 + 2];
+        
+        flatVertices[i * 9 + 6] = meshData.vertices[i2 * 3];
+        flatVertices[i * 9 + 7] = meshData.vertices[i2 * 3 + 1];
+        flatVertices[i * 9 + 8] = meshData.vertices[i2 * 3 + 2];
+        
+        // Copy normals for this triangle (already in correct order)
+        for (let j = 0; j < 9; j++) {
+          flatNormals[i * 9 + j] = meshData.normals[i * 9 + j];
+        }
+      }
+      
+      geo.setAttribute("position", new THREE.BufferAttribute(flatVertices, 3));
+      geo.setAttribute("normal", new THREE.BufferAttribute(flatNormals, 3));
       
       geo.computeBoundingSphere();
       return geo;
