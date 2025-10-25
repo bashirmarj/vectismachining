@@ -167,13 +167,13 @@ def generate_adaptive_mesh(step_file_path, quality='balanced'):
 
 
 def calculate_vertex_normals(vertices, indices):
-    """Calculate angle-weighted normals with sharp edge detection"""
+    """Calculate normals with angle-based sharp edge detection (30° threshold)"""
     num_vertices = len(vertices) // 3
     normals = np.zeros((num_vertices, 3))
     
-    # First pass: Calculate face normals and areas
+    # Step 1: Calculate face normals
     face_normals = []
-    face_areas = []
+    num_faces = len(indices) // 3
     
     for i in range(0, len(indices), 3):
         i1, i2, i3 = indices[i], indices[i+1], indices[i+2]
@@ -186,34 +186,70 @@ def calculate_vertex_normals(vertices, indices):
         edge2 = v3 - v1
         
         face_normal = np.cross(edge1, edge2)
-        area = np.linalg.norm(face_normal) / 2.0
+        length = np.linalg.norm(face_normal)
         
-        if area > 1e-10:
-            face_normal = face_normal / (2.0 * area)  # Normalize
+        if length > 1e-10:
+            face_normal = face_normal / length  # Normalize
         else:
             face_normal = np.array([0, 0, 1])
         
         face_normals.append(face_normal)
-        face_areas.append(area)
     
-    # Second pass: Accumulate area-weighted normals for each vertex
-    for face_idx, i in enumerate(range(0, len(indices), 3)):
+    # Step 2: Build vertex-to-faces adjacency map
+    vertex_faces = [[] for _ in range(num_vertices)]
+    
+    for face_idx in range(num_faces):
+        i = face_idx * 3
         i1, i2, i3 = indices[i], indices[i+1], indices[i+2]
         
-        fn = face_normals[face_idx]
-        area = face_areas[face_idx]
-        
-        # Weight by face area (larger faces contribute more)
-        for idx in [i1, i2, i3]:
-            normals[idx] += fn * area
+        vertex_faces[i1].append(face_idx)
+        vertex_faces[i2].append(face_idx)
+        vertex_faces[i3].append(face_idx)
     
-    # Third pass: Normalize
-    for i in range(num_vertices):
-        length = np.linalg.norm(normals[i])
+    # Step 3: Calculate vertex normals with angle-based smoothing
+    SMOOTH_THRESHOLD = np.cos(np.radians(30))  # 30° threshold
+    
+    for vertex_idx in range(num_vertices):
+        adjacent_faces = vertex_faces[vertex_idx]
+        
+        if not adjacent_faces:
+            normals[vertex_idx] = np.array([0, 0, 1])
+            continue
+        
+        # For each face adjacent to this vertex
+        accumulated_normal = np.zeros(3)
+        
+        for face_idx in adjacent_faces:
+            face_normal = face_normals[face_idx]
+            
+            # Check angle with all other adjacent faces
+            should_smooth = True
+            
+            for other_face_idx in adjacent_faces:
+                if face_idx == other_face_idx:
+                    continue
+                
+                other_normal = face_normals[other_face_idx]
+                
+                # Calculate angle using dot product
+                dot = np.dot(face_normal, other_normal)
+                dot = np.clip(dot, -1.0, 1.0)  # Clamp for numerical stability
+                
+                # If angle >= 30°, don't smooth
+                if dot < SMOOTH_THRESHOLD:
+                    should_smooth = False
+                    break
+            
+            if should_smooth:
+                accumulated_normal += face_normal
+        
+        # Normalize the result
+        length = np.linalg.norm(accumulated_normal)
         if length > 1e-10:
-            normals[i] = normals[i] / length
+            normals[vertex_idx] = accumulated_normal / length
         else:
-            normals[i] = np.array([0, 0, 1])
+            # Fallback: use first adjacent face normal
+            normals[vertex_idx] = face_normals[adjacent_faces[0]]
     
     return normals.flatten().tolist()
 
