@@ -13,6 +13,11 @@ RUN apt-get update && \
     libxrender1 \
     libxext6 \
     libsm6 \
+    libxcursor1 \
+    libxi6 \
+    libxinerama1 \
+    libxrandr2 \
+    libxfixes3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
