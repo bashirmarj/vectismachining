@@ -21,7 +21,7 @@ export function EnhancedMaterialSystem({
   enablePBR = true,
   metalness = 0.15,
   roughness = 0.6,
-  envIntensity = 0.5
+  envIntensity = 0.3
 }: EnhancedMaterialProps) {
 
   // Create a neutral studio environment map

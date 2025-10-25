@@ -150,7 +150,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           return;
         }
 
-        // Silhouette edges (2 adjacent faces with opposite facing)
+        // Sharp feature edges & silhouette edges (2 adjacent faces)
         if (edgeData.normals.length === 2) {
           const n1 = edgeData.normals[0];
           const n2 = edgeData.normals[1];
@@ -161,8 +161,18 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           const dot1 = n1.dot(viewDir);
           const dot2 = n2.dot(viewDir);
 
-          // Silhouette: one face visible, one hidden
-          if ((dot1 > 0.01 && dot2 < -0.01) || (dot1 < -0.01 && dot2 > 0.01)) {
+          // Calculate angle between normals for sharp features
+          const dotProduct = n1.dot(n2);
+          const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct))) * (180 / Math.PI);
+
+          // Show sharp feature edges (angle > 30°)
+          const isSharpFeature = angle > 30;
+          
+          // Show silhouette edges (one face visible, one hidden)
+          const isSilhouette = (dot1 > 0.01 && dot2 < -0.01) || (dot1 < -0.01 && dot2 > 0.01);
+
+          // Render edge if it's sharp AND at least one face is visible, OR if it's a silhouette
+          if ((isSharpFeature && (dot1 > 0 || dot2 > 0)) || isSilhouette) {
             visibleEdges.push(v1World.x, v1World.y, v1World.z, v2World.x, v2World.y, v2World.z);
           }
         }
@@ -270,9 +280,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
-        metalness: 0.3,
-        roughness: 0.5,
-        envMapIntensity: 0.6,
+        metalness: 0.1,
+        roughness: 0.7,
+        envMapIntensity: 0.3,
       };
 
       if (displayStyle === "wireframe") {
