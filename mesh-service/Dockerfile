@@ -5,7 +5,17 @@ WORKDIR /app
 COPY requirements.txt .
 COPY mesh_service.py .
 
-# Install dependencies via pip (more reliable in containers)
+# Install system dependencies for Gmsh (OpenGL libraries)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libglu1-mesa \
+    libgl1-mesa-glx \
+    libxrender1 \
+    libxext6 \
+    libsm6 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt gmsh numpy
 
 EXPOSE 5001
