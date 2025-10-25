@@ -306,7 +306,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
           <meshStandardMaterial
             {...materialProps}
             color={SOLID_COLOR}
-            flatShading={false}
+            flatShading={true}
             toneMapped={false}
           />
         </mesh>
