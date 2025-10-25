@@ -253,17 +253,17 @@ def tessellate_shape(shape):
     """
     Create high-quality triangle mesh from BREP using OpenCascade tessellation.
     
-    CRITICAL: Computes SMOOTH vertex normals by averaging adjacent face normals.
-    This eliminates the "different shades" problem on curved surfaces.
+    CRITICAL: Computes PER-FACE normals for clean CAD appearance with flat shading.
+    Each triangle gets its own perpendicular normal for crisp, technical look.
     
-    Returns mesh with accurate smooth normals.
+    Returns mesh with per-face normals optimized for CAD visualization.
     """
     # Calculate adaptive linear deflection based on part size
     diagonal, bbox = calculate_bbox_diagonal(shape)
-    linear_deflection = diagonal * 0.001  # 0.1% of diagonal
-    angular_deflection = 12.0  # Professional quality
+    linear_deflection = diagonal * 0.0005  # 0.05% of diagonal (2x more detail)
+    angular_deflection = 8.0  # 8 degrees (1.5x more detail on curves)
     
-    logger.info(f"🎨 Tessellating with deflection={linear_deflection:.3f}mm, angle={angular_deflection}° (PROFESSIONAL QUALITY)")
+    logger.info(f"🎨 Tessellating with deflection={linear_deflection:.3f}mm, angle={angular_deflection}° (ULTRA-HIGH QUALITY)")
     
     # Tessellate the shape
     mesher = BRepMesh_IncrementalMesh(shape, linear_deflection, False, angular_deflection, True)
@@ -361,26 +361,37 @@ def tessellate_shape(shape):
         
         face_exp.Next()
     
-    # PASS 2: Compute smooth vertex normals by averaging adjacent face normals
-    vertex_normals = []
+    # PASS 2: Compute per-face normals (flat shading at data level)
+    vertex_normals = [0.0] * len(vertices)
     num_vertices = len(vertices) // 3
     
-    for v_idx in range(num_vertices):
-        if v_idx in vertex_face_normals and len(vertex_face_normals[v_idx]) > 0:
-            # Average all face normals for this vertex
-            avg_normal = np.mean(vertex_face_normals[v_idx], axis=0)
-            
-            # Normalize
-            length = np.linalg.norm(avg_normal)
-            if length > 0:
-                avg_normal = avg_normal / length
-            
-            vertex_normals.extend([avg_normal[0], avg_normal[1], avg_normal[2]])
+    for i in range(0, len(indices), 3):
+        # Get the 3 vertices of this triangle
+        idx0, idx1, idx2 = indices[i], indices[i+1], indices[i+2]
+        
+        v0 = np.array([vertices[idx0*3], vertices[idx0*3+1], vertices[idx0*3+2]])
+        v1 = np.array([vertices[idx1*3], vertices[idx1*3+1], vertices[idx1*3+2]])
+        v2 = np.array([vertices[idx2*3], vertices[idx2*3+1], vertices[idx2*3+2]])
+        
+        # Calculate face normal using cross product
+        edge1 = v1 - v0
+        edge2 = v2 - v0
+        face_normal = np.cross(edge1, edge2)
+        
+        # Normalize
+        length = np.linalg.norm(face_normal)
+        if length > 0:
+            face_normal = face_normal / length
         else:
-            # Fallback
-            vertex_normals.extend([0, 0, 1])
+            face_normal = np.array([0, 0, 1])
+        
+        # Assign this face normal to all 3 vertices of this triangle
+        for idx in [idx0, idx1, idx2]:
+            vertex_normals[idx*3] = face_normal[0]
+            vertex_normals[idx*3+1] = face_normal[1]
+            vertex_normals[idx*3+2] = face_normal[2]
     
-    logger.info(f"✅ Tessellation complete: {num_vertices} vertices, {len(indices)//3} triangles (SMOOTH NORMALS)")
+    logger.info(f"✅ Tessellation complete: {num_vertices} vertices, {len(indices)//3} triangles (PER-FACE NORMALS)")
     
     return {
         'vertices': vertices,
