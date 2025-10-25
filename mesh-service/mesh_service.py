@@ -46,20 +46,20 @@ gmsh_lock = threading.Lock()
 QUALITY_PRESETS = {
     'fast': {
         'base_size_factor': 0.005,      # Coarse: 0.5% of diagonal
-        'curved_factor': 0.5,           # 2x finer for curves
-        'planar_factor': 2.0,           # 2x coarser for planes
+        'planar_factor': 2.0,           # Maximum mesh size multiplier
+        'curvature_points': 8,          # Points per circle (lower = faster)
         'target_triangles': 5000
     },
     'balanced': {
-        'base_size_factor': 0.001,      # Medium: 0.1% of diagonal
-        'curved_factor': 0.2,           # 5x finer for curves
-        'planar_factor': 2.0,           # 2x coarser for planes
+        'base_size_factor': 0.002,      # Medium: 0.2% of diagonal
+        'planar_factor': 2.0,           # Maximum mesh size multiplier
+        'curvature_points': 12,         # Standard quality (industry standard)
         'target_triangles': 15000
     },
     'ultra': {
-        'base_size_factor': 0.0002,     # Fine: 0.02% of diagonal
-        'curved_factor': 0.1,           # 10x finer for curves
-        'planar_factor': 1.5,           # 1.5x coarser for planes
+        'base_size_factor': 0.0005,     # Fine: 0.05% of diagonal
+        'planar_factor': 1.5,           # Maximum mesh size multiplier
+        'curvature_points': 24,         # Ultra-smooth circles
         'target_triangles': 50000
     }
 }
@@ -111,41 +111,15 @@ def generate_adaptive_mesh(step_file_path, quality='balanced'):
             
             logger.info(f"📏 Model diagonal: {diagonal:.2f}mm, base mesh size: {base_size:.4f}mm")
             
-            # Get all surfaces and classify them
-            surfaces = gmsh.model.getEntities(2)  # 2D entities (surfaces)
-            surface_stats = {'planar': 0, 'curved': 0}
+            # Use Gmsh's built-in curvature-adaptive meshing (industry standard)
+            gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", preset['curvature_points'])
+            gmsh.option.setNumber("Mesh.MeshSizeMin", base_size * 0.1)
+            gmsh.option.setNumber("Mesh.MeshSizeMax", base_size * preset['planar_factor'])
+            gmsh.option.setNumber("Mesh.CharacteristicLengthMin", base_size * 0.1)
+            gmsh.option.setNumber("Mesh.CharacteristicLengthMax", base_size * preset['planar_factor'])
+            gmsh.option.setNumber("Mesh.CharacteristicLengthFromCurvature", 1)
             
-            for dim, tag in surfaces:
-                # Get surface type by checking curvature
-                try:
-                    # Sample points on surface to estimate curvature
-                    params = gmsh.model.getParametrizationBounds(dim, tag)
-                    if params:
-                        u_mid = (params[0][0] + params[0][1]) / 2
-                        v_mid = (params[1][0] + params[1][1]) / 2
-                        
-                        # Get normal at center
-                        normal = gmsh.model.getNormal(tag, [u_mid, v_mid])
-                        
-                        # Estimate if surface is planar by checking normal variation
-                        # (simplified: in production, use proper curvature analysis)
-                        is_planar = False  # Treat all surfaces as curved for smooth results
-                        
-                        # Adaptive mesh sizing
-                        if is_planar:
-                            mesh_size = base_size * preset['planar_factor']
-                            surface_stats['planar'] += 1
-                        else:
-                            mesh_size = base_size * preset['curved_factor']
-                            surface_stats['curved'] += 1
-                        
-                        # Set mesh size for this surface
-                        gmsh.model.mesh.setSize(gmsh.model.getBoundary([(dim, tag)], False, False, True), mesh_size)
-                except Exception as e:
-                    logger.warning(f"Could not classify surface {tag}: {e}")
-                    gmsh.model.mesh.setSize(gmsh.model.getBoundary([(dim, tag)], False, False, True), base_size)
-            
-            logger.info(f"📊 Surface classification: {surface_stats['planar']} planar, {surface_stats['curved']} curved")
+            logger.info(f"📊 Using global adaptive meshing (base: {base_size:.4f}mm, curvature points: {preset['curvature_points']})")
             
             # Generate 2D surface mesh
             gmsh.model.mesh.generate(2)
@@ -180,7 +154,7 @@ def generate_adaptive_mesh(step_file_path, quality='balanced'):
                 'triangle_count': triangle_count,
                 'quality_stats': {
                     'quality_preset': quality,
-                    'surface_stats': surface_stats,
+                    'curvature_points': preset['curvature_points'],
                     'base_mesh_size': base_size,
                     'diagonal': diagonal
                 }
