@@ -47,8 +47,8 @@ QUALITY_PRESETS = {
     'fast': {
         'base_size_factor': 0.003,      # 0.3% of diagonal (10x finer mesh)
         'planar_factor': 2.5,           # 2.5x coarser on flat surfaces
-        'curvature_points': 32,         # 32 elements per 2π = ~11° between points
-        'target_triangles': 50000       # Target ~50k-70k triangles
+        'curvature_points': 64,         # 64 elements per 2π = ~5.6° between points
+        'target_triangles': 50000       # Target ~50k-70k triangles (may go to ~120k)
     },
     'balanced': {
         'base_size_factor': 0.0015,     # 0.15% of diagonal (10x finer)
@@ -118,6 +118,14 @@ def generate_adaptive_mesh(step_file_path, quality='balanced'):
             gmsh.option.setNumber("Mesh.CharacteristicLengthMin", base_size * 0.1)
             gmsh.option.setNumber("Mesh.CharacteristicLengthMax", base_size * preset['planar_factor'])
             gmsh.option.setNumber("Mesh.CharacteristicLengthFromCurvature", 1)
+            
+            # Enable anisotropic meshing for cylindrical surfaces
+            gmsh.option.setNumber("Mesh.AnisoMax", 10.0)              # Allow 10:1 aspect ratio (long thin triangles)
+            gmsh.option.setNumber("Mesh.AllowSwapAngle", 10)          # Allow aggressive triangle swapping
+            gmsh.option.setNumber("Mesh.SmoothRatio", 1.8)            # Smooth size transitions
+            gmsh.option.setNumber("Mesh.Algorithm", 6)                # Frontal-Delaunay for anisotropy
+            gmsh.option.setNumber("Mesh.RecombinationAlgorithm", 1)   # Simple recombination
+            gmsh.option.setNumber("Mesh.Smoothing", 10)               # 10 iterations of smoothing
             
             logger.info(f"📊 Using global adaptive meshing (base: {base_size:.4f}mm, curvature points: {preset['curvature_points']})")
             
