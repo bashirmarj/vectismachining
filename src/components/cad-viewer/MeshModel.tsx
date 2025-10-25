@@ -21,7 +21,7 @@ interface MeshModelProps {
 }
 
 // Professional solid color for CAD rendering
-const SOLID_COLOR = "#F5E6D3"; // Warm beige/tan - similar to SolidWorks default
+const SOLID_COLOR = "#E74C3C"; // Solid red - classic CAD color
 
 export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
   (
