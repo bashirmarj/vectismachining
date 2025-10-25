@@ -19,32 +19,26 @@ export function ProfessionalLighting({
   
   return (
     <>
-      {/* Hemisphere Light - Ambient base */}
+      {/* Strong Hemisphere Light for even ambient illumination */}
       <hemisphereLight
-        args={['#ffffff', '#444444', 0.3 * intensity]}
+        args={['#ffffff', '#ffffff', 0.8 * intensity]}
       />
 
-      {/* Key Light - Main illumination */}
+      {/* Very soft key light - minimal directionality */}
       <directionalLight
-        position={[5, 8, 5]}
-        intensity={1.2 * intensity}
-        castShadow={enableShadows}
+        position={[3, 5, 4]}
+        intensity={0.3 * intensity}
+        castShadow={false}
       />
 
-      {/* Fill Light - Softens shadows */}
+      {/* Soft fill from opposite side */}
       <directionalLight
-        position={[-4, 4, 4]}
-        intensity={0.5 * intensity}
+        position={[-3, 3, -4]}
+        intensity={0.25 * intensity}
       />
 
-      {/* Rim Light - Edge definition */}
-      <directionalLight
-        position={[-5, 6, -5]}
-        intensity={0.6 * intensity}
-      />
-
-      {/* Ambient light to prevent pure black shadows */}
-      <ambientLight intensity={0.15 * intensity} />
+      {/* Strong ambient to fill all shadows completely */}
+      <ambientLight intensity={0.6 * intensity} />
     </>
   );
 }
