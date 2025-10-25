@@ -184,9 +184,8 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     // Pre-compute edge connectivity for ALL edges (used by both modes)
     const edgeMap = useMemo(() => {
-      const map = new Map<
-  string,
-
+      const map = new Map
+        string,
         {
           v1: THREE.Vector3;
           v2: THREE.Vector3;
@@ -247,7 +246,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
 
     // Dynamic edge rendering for BOTH solid and wireframe modes
     useFrame(() => {
-      if (!edgeMap || !meshRef.current) return;
+      if (!showEdges || !edgeMap || !meshRef.current) return;
 
       const mesh = meshRef.current;
       const cameraWorldPos = new THREE.Vector3();
@@ -297,7 +296,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       });
 
       // Update visible edges (solid lines)
-      if (displayStyle === "solid" && showEdges && dynamicEdgesRef.current) {
+      if (displayStyle === "solid" && dynamicEdgesRef.current) {
         // Clear existing
         while (dynamicEdgesRef.current.children.length > 0) {
           const child = dynamicEdgesRef.current.children[0];
@@ -399,9 +398,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
-        metalness: 0.1,
-        roughness: 0.6,
-        envMapIntensity: 0.3,
+        metalness: 0,         // ← FIXED: No metallic reflection
+        roughness: 0.8,       // ← FIXED: Matte finish
+        envMapIntensity: 0,   // ← FIXED: No environment reflections
       };
 
       if (displayStyle === "wireframe") {
