@@ -38,12 +38,12 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
       geo.normalizeNormals();
 
-      console.log("🔍 Geometry Debug:", {
-        vertexCount: meshData.vertices.length / 3,
-        normalCount: meshData.normals.length / 3,
-        normalSample: meshData.normals.slice(0, 9),
-        hasNormals: geometry.attributes.normal ? true : false,
-      });
+  console.log("🔍 Geometry Debug:", {
+    vertexCount: meshData.vertices.length / 3,
+    normalCount: meshData.normals.length / 3,
+    normalSample: meshData.normals.slice(0, 9),
+    hasNormals: geo.attributes.normal ? true : false,
+  });
       return geo;
     }, [meshData.vertices, meshData.indices, meshData.normals]);
 
