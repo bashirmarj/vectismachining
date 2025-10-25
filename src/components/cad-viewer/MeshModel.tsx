@@ -380,7 +380,7 @@ console.log("🔍 RAW vertex_colors:", {
             {...materialProps}
             color={topologyColors ? "#ffffff" : SOLID_COLOR}
             vertexColors={topologyColors}
-            flatShading={topologyColors}
+            flatShading={false}
             toneMapped={false}
           />
         </mesh>
