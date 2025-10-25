@@ -48,7 +48,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
       // Use indexed geometry with shared vertices
       geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
       geo.setIndex(meshData.indices);
-      geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
+      
+      // Compute smooth vertex normals for proper lighting
+      geo.computeVertexNormals();
       
       geo.computeBoundingSphere();
       return geo;
