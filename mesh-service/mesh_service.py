@@ -48,7 +48,7 @@ QUALITY_PRESETS = {
         'base_size_factor': 0.004,      # 0.4% of diagonal (balanced detail)
         'planar_factor': 2.5,           # 2.5x coarser on flat surfaces  
         'curvature_points': 48,         # 48 elements per 2π = ~7.5° between points (smooth circles)
-        'target_triangles': 30000       # Target ~30k triangles
+        'target_triangles': 10000       # Target ~10k triangles (reduced for memory)
     },
     'balanced': {
         'base_size_factor': 0.0015,     # 0.15% of diagonal (10x finer)
