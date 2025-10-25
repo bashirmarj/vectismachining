@@ -253,10 +253,12 @@ def tessellate_shape(shape):
     """
     Create high-quality triangle mesh from BREP using OpenCascade tessellation.
     
-    CRITICAL: Computes PER-FACE normals for clean CAD appearance with flat shading.
-    Each triangle gets its own perpendicular normal for crisp, technical look.
+    CRITICAL: Computes HYBRID normals for professional CAD appearance:
+    - PLANAR surfaces: Per-face normals for perfectly flat appearance
+    - CYLINDRICAL surfaces: Smooth averaged normals for seamless appearance
+    This eliminates faceting on cylinders while keeping flats perfectly crisp.
     
-    Returns mesh with per-face normals optimized for CAD visualization.
+    Returns mesh with hybrid normals optimized for CAD visualization.
     """
     # Calculate adaptive linear deflection based on part size
     diagonal, bbox = calculate_bbox_diagonal(shape)
@@ -276,7 +278,9 @@ def tessellate_shape(shape):
     indices = []
     vertex_map = {}  # Maps (x,y,z) -> vertex_index
     vertex_face_normals = {}  # Maps vertex_index -> [list of face normals]
+    face_surface_types = {}  # Maps triangle_index -> surface_type ("plane" or "cylinder")
     current_index = 0
+    triangle_index = 0
     
     # PASS 1: Build vertex positions and collect face normals for each vertex
     face_exp = TopExp_Explorer(shape, TopAbs_FACE)
@@ -292,6 +296,8 @@ def tessellate_shape(shape):
         
         trsf = location.Transformation()
         surface = BRepAdaptor_Surface(face)
+        surf_type = surface.GetType()
+        surface_type_str = "plane" if surf_type == GeomAbs_Plane else "cylinder"
         face_orientation = face.Orientation()
         normal_flip = 1.0 if face_orientation == 0 else -1.0
         
@@ -358,40 +364,76 @@ def tessellate_shape(shape):
                     local_vertex_map[n3],
                     local_vertex_map[n2]
                 ])
+            
+            # Store surface type for this triangle
+            face_surface_types[triangle_index] = surface_type_str
+            triangle_index += 1
         
         face_exp.Next()
     
-    # PASS 2: Compute per-face normals (flat shading at data level)
+    # PASS 2: Hybrid normal generation (flat for planes, smooth for cylinders)
     vertex_normals = [0.0] * len(vertices)
+    vertex_normal_counts = [0] * (len(vertices) // 3)  # Track how many normals averaged per vertex
     num_vertices = len(vertices) // 3
     
-    for i in range(0, len(indices), 3):
-        # Get the 3 vertices of this triangle
-        idx0, idx1, idx2 = indices[i], indices[i+1], indices[i+2]
+    # First pass: Accumulate normals for each vertex
+    for tri_idx in range(len(indices) // 3):
+        idx0, idx1, idx2 = indices[tri_idx*3], indices[tri_idx*3+1], indices[tri_idx*3+2]
         
         v0 = np.array([vertices[idx0*3], vertices[idx0*3+1], vertices[idx0*3+2]])
         v1 = np.array([vertices[idx1*3], vertices[idx1*3+1], vertices[idx1*3+2]])
         v2 = np.array([vertices[idx2*3], vertices[idx2*3+1], vertices[idx2*3+2]])
         
-        # Calculate face normal using cross product
+        # Calculate triangle face normal
         edge1 = v1 - v0
         edge2 = v2 - v0
         face_normal = np.cross(edge1, edge2)
         
-        # Normalize
         length = np.linalg.norm(face_normal)
         if length > 0:
             face_normal = face_normal / length
         else:
             face_normal = np.array([0, 0, 1])
         
-        # Assign this face normal to all 3 vertices of this triangle
-        for idx in [idx0, idx1, idx2]:
-            vertex_normals[idx*3] = face_normal[0]
-            vertex_normals[idx*3+1] = face_normal[1]
-            vertex_normals[idx*3+2] = face_normal[2]
+        # Get surface type for this triangle
+        surface_type = face_surface_types.get(tri_idx, "cylinder")
+        
+        if surface_type == "plane":
+            # FLAT SHADING: Assign face normal directly (no averaging)
+            for idx in [idx0, idx1, idx2]:
+                vertex_normals[idx*3] = face_normal[0]
+                vertex_normals[idx*3+1] = face_normal[1]
+                vertex_normals[idx*3+2] = face_normal[2]
+                vertex_normal_counts[idx] = -1  # Mark as "locked" - don't average
+        else:
+            # SMOOTH SHADING: Accumulate normals for averaging
+            for idx in [idx0, idx1, idx2]:
+                # Only accumulate if not locked by planar surface
+                if vertex_normal_counts[idx] != -1:
+                    vertex_normals[idx*3] += face_normal[0]
+                    vertex_normals[idx*3+1] += face_normal[1]
+                    vertex_normals[idx*3+2] += face_normal[2]
+                    vertex_normal_counts[idx] += 1
     
-    logger.info(f"✅ Tessellation complete: {num_vertices} vertices, {len(indices)//3} triangles (PER-FACE NORMALS)")
+    # Second pass: Normalize accumulated normals for cylindrical surfaces
+    for v_idx in range(num_vertices):
+        if vertex_normal_counts[v_idx] > 0:  # Cylindrical vertex - needs normalization
+            nx = vertex_normals[v_idx*3]
+            ny = vertex_normals[v_idx*3+1]
+            nz = vertex_normals[v_idx*3+2]
+            
+            length = math.sqrt(nx*nx + ny*ny + nz*nz)
+            if length > 0:
+                vertex_normals[v_idx*3] = nx / length
+                vertex_normals[v_idx*3+1] = ny / length
+                vertex_normals[v_idx*3+2] = nz / length
+    
+    # Count how many vertices got each treatment
+    planar_vertices = sum(1 for c in vertex_normal_counts if c == -1)
+    cylindrical_vertices = sum(1 for c in vertex_normal_counts if c > 0)
+    
+    logger.info(f"✅ Tessellation complete: {num_vertices} vertices, {len(indices)//3} triangles")
+    logger.info(f"   ├─ HYBRID NORMALS: {planar_vertices} planar (flat), {cylindrical_vertices} cylindrical (smooth)")
     
     return {
         'vertices': vertices,
