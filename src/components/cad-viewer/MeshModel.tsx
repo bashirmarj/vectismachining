@@ -21,7 +21,7 @@ interface MeshModelProps {
 }
 
 // Professional solid color for CAD rendering
-const SOLID_COLOR = "#CCCCCC"; // Light gray
+const SOLID_COLOR = "#F5E6D3"; // Warm beige/tan - similar to SolidWorks default
 
 export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
   (
@@ -280,9 +280,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
-        metalness: 0.1,
-        roughness: 0.7,
-        envMapIntensity: 0.3,
+        metalness: 0,
+        roughness: 1.0,
+        envMapIntensity: 0,
       };
 
       if (displayStyle === "wireframe") {
