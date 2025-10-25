@@ -388,13 +388,15 @@ def tessellate_shape(shape):
         'normals': vertex_normals
     }
 
-def extract_feature_edges(shape, max_edges=500, angle_threshold_degrees=35):
+def extract_feature_edges(shape, max_edges=2000, angle_threshold_degrees=20):
     """
-    Extract significant BREP edges using professional smart filtering.
+    Extract significant BREP edges using professional smart filtering with enhanced circular edge detection.
     
     Strategy:
     - Use dihedral angle between adjacent faces to identify feature edges
     - Edges with angle > threshold are considered "significant"
+    - ALWAYS include circular/cylindrical edges regardless of angle (prevents segmentation)
+    - Boundary edges (silhouettes) are always included
     - This mimics SolidWorks/Fusion 360 edge display behavior
     - Circles use 30 segments per full circle (professional quality)
     
@@ -407,11 +409,13 @@ def extract_feature_edges(shape, max_edges=500, angle_threshold_degrees=35):
     edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
     topexp.MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edge_face_map)
 
-    logger.info(f"🔍 Analyzing {edge_face_map.Size()} edges with {angle_threshold_degrees}° threshold...")
+    logger.info(f"🔍 Analyzing {edge_face_map.Size()} edges with {angle_threshold_degrees}° threshold (enhanced circular detection)...")
 
     edge_exp = TopExp_Explorer(shape, TopAbs_EDGE)
     edge_count = 0
     significant_count = 0
+    circular_count = 0
+    boundary_count = 0
 
     while edge_exp.More() and significant_count < max_edges:
         edge = topods.Edge(edge_exp.Current())
@@ -428,56 +432,75 @@ def extract_feature_edges(shape, max_edges=500, angle_threshold_degrees=35):
                     face_iter.Next()
                 break
 
-        # Check if this is a feature edge (dihedral angle test)
+        # Check if this is a feature edge
         is_feature = False
+        edge_type = "unknown"
 
-        if len(adjacent_faces) == 1:
-            # Boundary edge - always a feature
-            is_feature = True
-        elif len(adjacent_faces) == 2:
-            # Internal edge - check dihedral angle
-            try:
-                face1 = adjacent_faces[0]
-                face2 = adjacent_faces[1]
-
-                # Get normals at edge midpoint
-                curve_adaptor = BRepAdaptor_Curve(edge)
-                u_mid = (curve_adaptor.FirstParameter() + curve_adaptor.LastParameter()) / 2
-                mid_point = curve_adaptor.Value(u_mid)
-
-                # Compute normals for both faces at the midpoint
-                surface1 = BRepAdaptor_Surface(face1)
-                surface2 = BRepAdaptor_Surface(face2)
-
-                # Project point onto surfaces to get UV coordinates
-                props1 = BRepGProp_Face(face1)
-                props2 = BRepGProp_Face(face2)
-
-                # Use mid-UV for normal computation
-                u1_mid = (surface1.FirstUParameter() + surface1.LastUParameter()) / 2
-                v1_mid = (surface1.FirstVParameter() + surface1.LastVParameter()) / 2
-                u2_mid = (surface2.FirstUParameter() + surface2.LastUParameter()) / 2
-                v2_mid = (surface2.FirstVParameter() + surface2.LastVParameter()) / 2
-
-                normal1 = gp_Vec()
-                normal2 = gp_Vec()
-                point1 = gp_Pnt()
-                point2 = gp_Pnt()
-
-                props1.Normal(u1_mid, v1_mid, point1, normal1)
-                props2.Normal(u2_mid, v2_mid, point2, normal2)
-
-                # Calculate dihedral angle
-                dot_product = normal1.Dot(normal2)
-                dot_product = max(-1.0, min(1.0, dot_product))  # Clamp to [-1, 1]
-                angle = math.acos(abs(dot_product))
-
-                # Feature if angle exceeds threshold
-                if angle > angle_threshold_rad:
-                    is_feature = True
-            except:
-                # If we can't compute angle, assume it's a feature to be safe
+        # CRITICAL: Check if this is a circular edge first
+        try:
+            curve_adaptor = BRepAdaptor_Curve(edge)
+            curve_type = curve_adaptor.GetType()
+            
+            if curve_type == GeomAbs_Circle:
+                # ALWAYS include circular edges - they define cylindrical/spherical boundaries
                 is_feature = True
+                edge_type = "circular"
+                circular_count += 1
+        except:
+            pass
+
+        if not is_feature:
+            if len(adjacent_faces) == 1:
+                # Boundary edge (silhouette) - always a feature
+                is_feature = True
+                edge_type = "boundary"
+                boundary_count += 1
+            elif len(adjacent_faces) == 2:
+                # Internal edge - check dihedral angle
+                try:
+                    face1 = adjacent_faces[0]
+                    face2 = adjacent_faces[1]
+
+                    # Get normals at edge midpoint
+                    curve_adaptor = BRepAdaptor_Curve(edge)
+                    u_mid = (curve_adaptor.FirstParameter() + curve_adaptor.LastParameter()) / 2
+                    mid_point = curve_adaptor.Value(u_mid)
+
+                    # Compute normals for both faces at the midpoint
+                    surface1 = BRepAdaptor_Surface(face1)
+                    surface2 = BRepAdaptor_Surface(face2)
+
+                    # Project point onto surfaces to get UV coordinates
+                    props1 = BRepGProp_Face(face1)
+                    props2 = BRepGProp_Face(face2)
+
+                    # Use mid-UV for normal computation
+                    u1_mid = (surface1.FirstUParameter() + surface1.LastUParameter()) / 2
+                    v1_mid = (surface1.FirstVParameter() + surface1.LastVParameter()) / 2
+                    u2_mid = (surface2.FirstUParameter() + surface2.LastUParameter()) / 2
+                    v2_mid = (surface2.FirstVParameter() + surface2.LastVParameter()) / 2
+
+                    normal1 = gp_Vec()
+                    normal2 = gp_Vec()
+                    point1 = gp_Pnt()
+                    point2 = gp_Pnt()
+
+                    props1.Normal(u1_mid, v1_mid, point1, normal1)
+                    props2.Normal(u2_mid, v2_mid, point2, normal2)
+
+                    # Calculate dihedral angle
+                    dot_product = normal1.Dot(normal2)
+                    dot_product = max(-1.0, min(1.0, dot_product))  # Clamp to [-1, 1]
+                    angle = math.acos(abs(dot_product))
+
+                    # Feature if angle exceeds threshold
+                    if angle > angle_threshold_rad:
+                        is_feature = True
+                        edge_type = "angular"
+                except:
+                    # If we can't compute angle, assume it's a feature to be safe
+                    is_feature = True
+                    edge_type = "fallback"
 
         if is_feature:
             # Tessellate the edge with professional quality
@@ -522,6 +545,9 @@ def extract_feature_edges(shape, max_edges=500, angle_threshold_degrees=35):
         edge_exp.Next()
 
     logger.info(f"✅ Found {significant_count} significant edges out of {edge_count} total edges")
+    logger.info(f"   ├─ {circular_count} circular edges (always included)")
+    logger.info(f"   ├─ {boundary_count} boundary/silhouette edges")
+    logger.info(f"   └─ {significant_count - circular_count - boundary_count} angular feature edges")
 
     return feature_edges
 
