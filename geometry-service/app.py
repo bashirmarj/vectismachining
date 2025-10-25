@@ -408,7 +408,7 @@ def tessellate_shape(shape):
     }
 
 
-def extract_feature_edges(shape, max_edges=500, angle_threshold_degrees=20):
+def extract_feature_edges(shape, max_edges=500, angle_threshold_degrees=35):
     """
     Extract significant BREP edges using professional smart filtering.
     
