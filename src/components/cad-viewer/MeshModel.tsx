@@ -280,9 +280,9 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         side: THREE.DoubleSide,
         clippingPlanes: clippingPlane,
         clipIntersection: false,
-        metalness: 0,
-        roughness: 1.0,
-        envMapIntensity: 0,
+        metalness: 0.05,
+        roughness: 0.75,
+        envMapIntensity: 0.2,
       };
 
       if (displayStyle === "wireframe") {
