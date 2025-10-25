@@ -42,15 +42,13 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
     const dynamicEdgesRef = useRef<THREE.Group>(null);
     const wireframeEdgesRef = useRef<THREE.Group>(null);
 
-    // Create geometry with smooth shading
+    // Create geometry with backend normals
     const geometry = useMemo(() => {
       const geo = new THREE.BufferGeometry();
       
       geo.setAttribute("position", new THREE.Float32BufferAttribute(meshData.vertices, 3));
       geo.setIndex(meshData.indices);
       geo.setAttribute("normal", new THREE.Float32BufferAttribute(meshData.normals, 3));
-      geo.computeVertexNormals();
-      geo.normalizeNormals();
       
       geo.computeBoundingSphere();
       return geo;
@@ -293,6 +291,7 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
         <mesh ref={meshRef} geometry={geometry} castShadow receiveShadow>
           <meshStandardMaterial
             {...materialProps}
+            color={SOLID_COLOR}
             toneMapped={false}
           />
         </mesh>
