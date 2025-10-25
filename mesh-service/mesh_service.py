@@ -65,27 +65,6 @@ QUALITY_PRESETS = {
 }
 
 
-def calculate_bbox_diagonal(step_file_path):
-    """Calculate bounding box diagonal from STEP file"""
-    try:
-        gmsh.initialize()
-        gmsh.option.setNumber("General.Terminal", 0)
-        gmsh.merge(step_file_path)
-        
-        # Get bounding box
-        bbox = gmsh.model.getBoundingBox(-1, -1)
-        xmin, ymin, zmin, xmax, ymax, zmax = bbox
-        
-        dx = xmax - xmin
-        dy = ymax - ymin
-        dz = zmax - zmin
-        diagonal = math.sqrt(dx*dx + dy*dy + dz*dz)
-        
-        gmsh.finalize()
-        return diagonal
-    except Exception as e:
-        logger.error(f"Failed to calculate bbox: {e}")
-        return 100.0  # Default fallback
 
 
 def generate_adaptive_mesh(step_file_path, quality='balanced'):
@@ -121,8 +100,13 @@ def generate_adaptive_mesh(step_file_path, quality='balanced'):
             # Import STEP file
             gmsh.merge(step_file_path)
             
-            # Calculate adaptive mesh sizing
-            diagonal = calculate_bbox_diagonal(step_file_path)
+            # Calculate adaptive mesh sizing (inline to avoid re-initialization)
+            bbox = gmsh.model.getBoundingBox(-1, -1)
+            xmin, ymin, zmin, xmax, ymax, zmax = bbox
+            dx = xmax - xmin
+            dy = ymax - ymin
+            dz = zmax - zmin
+            diagonal = math.sqrt(dx*dx + dy*dy + dz*dz)
             base_size = diagonal * preset['base_size_factor']
             
             logger.info(f"📏 Model diagonal: {diagonal:.2f}mm, base mesh size: {base_size:.4f}mm")
