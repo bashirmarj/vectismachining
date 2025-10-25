@@ -309,14 +309,14 @@ export const MeshModel = forwardRef<THREE.Mesh, MeshModelProps>(
             roughness={0.85}
             
             // Physical Properties (unique to meshPhysicalMaterial)
-            clearcoat={0.1}
+            clearcoat={0.0}
             clearcoatRoughness={0.3}
             
             // Environment & Lighting
-            envMapIntensity={0.5}
+            envMapIntensity={0.3}
             
             // Shading & Rendering
-            flatShading={true}
+            flatShading={false}
             toneMapped={false}
           />
         </mesh>
